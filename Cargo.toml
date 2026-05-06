@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/librime-sys",
+    "crates/winxime-core",
+    "crates/winxime-tsf",
+    "crates/winxime-rime",
+    "crates/winxime-ui",
+    "crates/winxime",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["winxime team"]
+license = "MIT"
+repository = "https://github.com/winxime/winxime"
+
+[workspace.dependencies]
+librime-sys = { path = "crates/librime-sys" }
+winxime-core = { path = "crates/winxime-core" }
+winxime-tsf = { path = "crates/winxime-tsf" }
+winxime-rime = { path = "crates/winxime-rime" }
+winxime-ui = { path = "crates/winxime-ui" }
+
+windows = { version = "0.58", features = [
+    "implement",
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Ole",
+    "Win32_UI_TextServices",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+] }

@@ -1,0 +1,14 @@
+[package]
+name = "librime-sys"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "librime_sys"
+
+[build-dependencies]
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }

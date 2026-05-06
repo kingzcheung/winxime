@@ -1,0 +1,12 @@
+[package]
+name = "winxime"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+winxime-core.workspace = true
+winxime-tsf.workspace = true
+winxime-rime.workspace = true
+winxime-ui.workspace = true
