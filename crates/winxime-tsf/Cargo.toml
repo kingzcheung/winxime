@@ -10,6 +10,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 winxime-core.workspace = true
+winxime-rime.workspace = true
+librime-sys.workspace = true
 windows-core = "0.58"
 windows = { version = "0.58", features = [
     "implement",
@@ -22,3 +24,4 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
 ] }
+winreg = "0.52"

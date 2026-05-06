@@ -1,33 +1,12 @@
-use winxime_core::InputContext;
+mod win32_ui;
 
-pub struct CandidateWindow {
-    visible: bool,
-}
+use std::sync::Arc;
+use winxime_core::SharedInputContext;
 
-impl CandidateWindow {
-    pub fn new() -> Self {
-        Self { visible: false }
-    }
-    
-    pub fn show(&mut self) {
-        self.visible = true;
-    }
-    
-    pub fn hide(&mut self) {
-        self.visible = false;
-    }
-    
-    pub fn update(&mut self, _context: &InputContext) {
-    }
-    
-    pub fn render(&self) {
-        if self.visible {
-        }
-    }
-}
+pub use win32_ui::CandidateWindowInner;
 
-impl Default for CandidateWindow {
-    fn default() -> Self {
-        Self::new()
+impl CandidateWindowInner {
+    pub fn new(context: &'static SharedInputContext) -> Arc<Self> {
+        Self::start(context)
     }
 }

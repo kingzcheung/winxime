@@ -13,14 +13,15 @@ fn main() {
     
     let librime_dir = workspace_dir.join("librime");
     let dist_dir = librime_dir.join("dist");
-    let rime_dll = dist_dir.join("rime.dll");
+    let dist_lib_dir = dist_dir.join("lib");
+    let rime_dll = dist_lib_dir.join("rime.dll");
     
     if !rime_dll.exists() {
         build_librime(&librime_dir, workspace_dir);
     }
     
     if rime_dll.exists() {
-        println!("cargo:rustc-link-search=native={}", dist_dir.display());
+        println!("cargo:rustc-link-search=native={}", dist_lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=rime");
     } else {
         panic!("librime build failed");

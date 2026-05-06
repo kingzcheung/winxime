@@ -1,148 +1,362 @@
 use windows::Win32::UI::TextServices::*;
 use windows::Win32::Foundation::*;
+use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::core::*;
-use std::cell::RefCell;
+use std::sync::Arc;
 
-const VK_A: u16 = 0x41;
-const VK_Z: u16 = 0x5A;
-const VK_0: u16 = 0x30;
-const VK_9: u16 = 0x39;
-const VK_SPACE: u16 = 0x20;
-const VK_RETURN: u16 = 0x0D;
-const VK_BACK: u16 = 0x08;
-const VK_ESCAPE: u16 = 0x1B;
+const VK_X_A: u16 = 0x41;
+const VK_X_Z: u16 = 0x5A;
+const VK_X_0: u16 = 0x30;
+const VK_X_9: u16 = 0x39;
 
-fn is_letter_key(vk: u16) -> bool {
-    (VK_A..=VK_Z).contains(&vk)
+// ── Shared Rime engine ──────────────────────────────────────────
+
+pub struct RimeEngineHandle {
+    engine: Arc<std::sync::Mutex<winxime_rime::RimeEngine>>,
 }
 
-fn is_digit_key(vk: u16) -> bool {
-    (VK_0..=VK_9).contains(&vk)
-}
-
-fn get_vk_char(vk: u16) -> char {
-    if is_letter_key(vk) {
-        ((vk - VK_A) as u8 + b'a') as char
-    } else if is_digit_key(vk) {
-        ((vk - VK_0) as u8 + b'0') as char
-    } else {
-        '\0'
-    }
-}
-
-#[implement(ITfTextInputProcessor)]
-pub struct TextInputProcessor {
-    thread_mgr: RefCell<Option<ITfThreadMgr>>,
-    key_event_sink_cookie: RefCell<u32>,
-}
-
-impl TextInputProcessor {
-    pub fn new() -> Self {
+impl RimeEngineHandle {
+    pub fn new(engine: winxime_rime::RimeEngine) -> Self {
         Self {
-            thread_mgr: RefCell::new(None),
-            key_event_sink_cookie: RefCell::new(0),
+            engine: Arc::new(std::sync::Mutex::new(engine)),
+        }
+    }
+
+    pub fn lock(&self) -> std::sync::MutexGuard<'_, winxime_rime::RimeEngine> {
+        self.engine.lock().unwrap()
+    }
+}
+
+impl Clone for RimeEngineHandle {
+    fn clone(&self) -> Self {
+        Self {
+            engine: self.engine.clone(),
         }
     }
 }
 
-impl Default for TextInputProcessor {
-    fn default() -> Self {
-        Self::new()
-    }
+// ── Captured Rime output for edit session ───────────────────────
+
+#[allow(dead_code)]
+struct RimeOutput {
+    commit: Option<String>,
+    composing: bool,
+    preedit: Option<String>,
+    candidate_count: usize,
+    page_no: usize,
+    page_size: usize,
 }
 
-impl ITfTextInputProcessor_Impl for TextInputProcessor_Impl {
-    fn Activate(&self, ptim: Option<&ITfThreadMgr>, _tid: u32) -> Result<()> {
-        *self.thread_mgr.borrow_mut() = ptim.cloned();
-        
-        if let Some(thread_mgr) = &*self.thread_mgr.borrow() {
-            let source: ITfSource = thread_mgr.cast()?;
-            unsafe {
-                let sink = KeyEventSink::new();
-                let sink_unknown: IUnknown = sink.into();
-                let cookie = source.AdviseSink(&ITfKeyEventSink::IID, &sink_unknown)?;
-                *self.key_event_sink_cookie.borrow_mut() = cookie;
-            }
-        }
-        Ok(())
-    }
+// ── Main edit session: commit + composition in one callback ─────
 
-    fn Deactivate(&self) -> Result<()> {
-        let cookie = *self.key_event_sink_cookie.borrow();
-        if cookie != 0 {
-            if let Some(thread_mgr) = &*self.thread_mgr.borrow() {
-                let source: ITfSource = thread_mgr.cast()?;
-                unsafe {
-                    source.UnadviseSink(cookie)?;
+#[implement(ITfEditSession)]
+struct XimeEditSession {
+    output: RimeOutput,
+    thread_mgr: Option<ITfThreadMgr>,
+    composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
+}
+
+impl ITfEditSession_Impl for XimeEditSession_Impl {
+    fn DoEditSession(&self, ec: u32) -> Result<()> {
+        let doc_mgr = match self.thread_mgr.as_ref() {
+            Some(t) => unsafe { t.GetFocus() }?,
+            None => return Ok(()),
+        };
+        let context = unsafe { doc_mgr.GetBase() }?;
+
+        // 1. Commit text if present
+        if let Some(ref commit) = self.output.commit {
+            if !commit.is_empty() {
+                // End existing composition first
+                self.end_composition(ec);
+
+                let text_store: ITextStoreACP = context.cast()?;
+                let mut fetched: u32 = 0;
+                let mut selection = vec![TS_SELECTION_ACP::default(); 1];
+                unsafe { text_store.GetSelection(0, &mut selection, &mut fetched)?; }
+
+                if fetched > 0 {
+                    let sel = selection[0];
+                    let wide: Vec<u16> = commit.encode_utf16().collect();
+                    unsafe {
+                        text_store.SetText(0, sel.acpStart, sel.acpEnd, &wide)?;
+                    }
+                    let end = sel.acpStart + wide.len() as i32;
+                    unsafe {
+                        text_store.SetSelection(&[TS_SELECTION_ACP {
+                            acpStart: end,
+                            acpEnd: end,
+                            style: TS_SELECTIONSTYLE {
+                                ase: TsActiveSelEnd::default(),
+                                fInterimChar: BOOL(0),
+                            },
+                        }])?;
+                    }
                 }
+                return Ok(());
             }
         }
-        *self.thread_mgr.borrow_mut() = None;
+
+        // 2. Check for composition state change
+        if self.output.composing {
+            let preedit = self.output.preedit.as_deref().unwrap_or("");
+            let comp = self.composition.lock().unwrap().take();
+
+            if comp.is_some() {
+                // Update existing composition text
+                self.update_composition_text(&context, ec, preedit);
+            } else {
+                // Start new composition
+                self.start_composition(&context, ec, preedit);
+            }
+        } else {
+            // Not composing: end any existing composition
+            self.end_composition(ec);
+        }
+
         Ok(())
     }
 }
+
+impl XimeEditSession_Impl {
+    fn start_composition(&self, context: &ITfContext, ec: u32, preedit: &str) {
+        let text_store: ITextStoreACP = match context.cast() {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+
+        // Get selection position
+        let mut fetched: u32 = 0;
+        let mut selection = vec![TS_SELECTION_ACP::default(); 1];
+        if unsafe { text_store.GetSelection(0, &mut selection, &mut fetched) }.is_err() || fetched == 0 {
+            return;
+        }
+        let sel = selection[0];
+
+        // Get ITfContextComposition from context
+        let ctx_comp: ITfContextComposition = match context.cast() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+
+        // Create a range for the composition
+        let range_acp: ITfRangeACP = match text_store.cast() {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+
+        // Get ITfRange from ITfRangeACP
+        let range: ITfRange = match range_acp.cast() {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+
+        // Start composition at cursor position
+        let none_sink: Option<&ITfCompositionSink> = None;
+        match unsafe { ctx_comp.StartComposition(ec, &range, none_sink) } {
+            Ok(comp) => {
+                // Set preedit text on the composition range
+                let wide: Vec<u16> = preedit.encode_utf16().collect();
+                unsafe { text_store.SetText(0, sel.acpStart, sel.acpStart, &wide).ok(); }
+                *self.composition.lock().unwrap() = Some(comp);
+            }
+            Err(_) => {}
+        }
+    }
+
+    fn update_composition_text(&self, _context: &ITfContext, _ec: u32, preedit: &str) {
+        // For now, end and restart composition to update text
+        // A more efficient approach would use ITfCompositionView::GetRange + ITfRange::SetText
+        let text_store: ITextStoreACP = match _context.cast() {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+
+        let mut fetched: u32 = 0;
+        let mut selection = vec![TS_SELECTION_ACP::default(); 1];
+        if unsafe { text_store.GetSelection(0, &mut selection, &mut fetched) }.is_err() || fetched == 0 {
+            return;
+        }
+        let sel = selection[0];
+
+        let wide: Vec<u16> = preedit.encode_utf16().collect();
+        unsafe { text_store.SetText(0, sel.acpStart, sel.acpStart, &wide).ok(); }
+    }
+
+    fn end_composition(&self, ec: u32) {
+        if let Some(comp) = self.composition.lock().unwrap().take() {
+            unsafe { comp.EndComposition(ec).ok(); }
+        }
+    }
+}
+
+// ── Key event sink ──────────────────────────────────────────────
 
 #[implement(ITfKeyEventSink)]
 pub struct KeyEventSink {
-    composing: RefCell<bool>,
-    input_buffer: RefCell<String>,
+    rime: std::sync::Mutex<Option<RimeEngineHandle>>,
+    composing: std::sync::atomic::AtomicBool,
+    thread_mgr: std::sync::Mutex<Option<ITfThreadMgr>>,
+    client_id: std::sync::atomic::AtomicU32,
+    composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
 }
 
 impl KeyEventSink {
     pub fn new() -> Self {
         Self {
-            composing: RefCell::new(false),
-            input_buffer: RefCell::new(String::new()),
+            rime: std::sync::Mutex::new(None),
+            composing: std::sync::atomic::AtomicBool::new(false),
+            thread_mgr: std::sync::Mutex::new(None),
+            client_id: std::sync::atomic::AtomicU32::new(0),
+            composition: Arc::new(std::sync::Mutex::new(None)),
         }
+    }
+
+    pub fn set_rime(&self, rime: RimeEngineHandle) {
+        *self.rime.lock().unwrap() = Some(rime);
+    }
+
+    pub fn set_thread_mgr(&self, mgr: Option<ITfThreadMgr>) {
+        *self.thread_mgr.lock().unwrap() = mgr;
+    }
+
+    pub fn set_client_id(&self, id: u32) {
+        self.client_id.store(id, std::sync::atomic::Ordering::Release);
     }
 
     fn is_composing(&self) -> bool {
-        *self.composing.borrow()
+        self.composing.load(std::sync::atomic::Ordering::Acquire)
     }
 
-    fn start_composing(&self) {
-        *self.composing.borrow_mut() = true;
-        self.input_buffer.borrow_mut().clear();
+    fn set_composing(&self, val: bool) {
+        self.composing.store(val, std::sync::atomic::Ordering::Release);
     }
 
-    fn end_composing(&self) {
-        *self.composing.borrow_mut() = false;
-        self.input_buffer.borrow_mut().clear();
-    }
-
-    fn append_char(&self, ch: char) {
-        self.input_buffer.borrow_mut().push(ch);
-    }
-
-    fn remove_last_char(&self) {
-        self.input_buffer.borrow_mut().pop();
-    }
-
-    fn get_buffer(&self) -> String {
-        self.input_buffer.borrow().clone()
-    }
-
-    fn should_handle_key(vk: u16, composing: bool) -> bool {
-        if is_letter_key(vk) {
+    fn should_handle_key(&self, vk: VIRTUAL_KEY) -> bool {
+        let code = vk.0;
+        if (VK_X_A..=VK_X_Z).contains(&code) {
             return true;
         }
-        
-        if composing {
-            if is_digit_key(vk) {
+        if code == VK_SPACE.0 || code == VK_RETURN.0 || code == VK_BACK.0 || code == VK_ESCAPE.0 {
+            return true;
+        }
+        if self.is_composing() {
+            if (VK_X_0..=VK_X_9).contains(&code) {
                 return true;
             }
-            if vk == VK_SPACE || vk == VK_RETURN || vk == VK_BACK || vk == VK_ESCAPE {
+            if code == VK_UP.0 || code == VK_DOWN.0 || code == VK_PRIOR.0 || code == VK_NEXT.0 {
                 return true;
             }
         }
-        
         false
     }
-}
 
-impl Default for KeyEventSink {
-    fn default() -> Self {
-        Self::new()
+    fn capture_output(&self) -> Option<RimeOutput> {
+        let guard = self.rime.lock().ok()?;
+        let handle = guard.as_ref()?;
+        let engine = handle.lock();
+
+        let commit = engine.get_commit();
+        let composing = engine.is_composing();
+        let preedit = engine.get_composition().and_then(|c| c.preedit);
+
+        let candidates = engine.get_candidates();
+        let candidate_count = candidates.len();
+        // Get page info from first candidate if available
+        let page_no = engine.get_composition().map(|c| c.sel_start).unwrap_or(0);
+        let page_size = candidates.len();
+
+        Some(RimeOutput {
+            commit,
+            composing,
+            preedit,
+            candidate_count,
+            page_no: page_no / 5,
+            page_size,
+        })
+    }
+
+    fn schedule_edit_session(&self, context: &ITfContext, output: RimeOutput) {
+        let tid = self.client_id.load(std::sync::atomic::Ordering::Acquire);
+        let mgr = self.thread_mgr.lock().unwrap().clone();
+
+        let session = XimeEditSession {
+            output,
+            thread_mgr: mgr,
+            composition: self.composition.clone(),
+        };
+        let session_itf: ITfEditSession = session.into();
+        unsafe {
+            let _ = context.RequestEditSession(tid, &session_itf, TF_ES_READWRITE);
+        }
+    }
+
+    fn handle_key_event(&self, context: Option<&ITfContext>, vk: VIRTUAL_KEY) {
+        let guard = match self.rime.lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        let handle = match guard.as_ref() {
+            Some(h) => h,
+            None => return,
+        };
+        let code = vk.0;
+        let is_composing = self.is_composing();
+
+        if is_composing && code >= 0x31 && code <= 0x39 {
+            let index = (code - 0x31) as usize;
+            let mut engine = handle.lock();
+            engine.select_candidate(index);
+            drop(engine);
+            if let Some(output) = self.capture_output() {
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+            }
+            return;
+        }
+
+        if is_composing && code == VK_PRIOR.0 {
+            let mut engine = handle.lock();
+            engine.change_page(true);
+            drop(engine);
+            if let Some(output) = self.capture_output() {
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+            }
+            return;
+        }
+        if is_composing && code == VK_NEXT.0 {
+            let mut engine = handle.lock();
+            engine.change_page(false);
+            drop(engine);
+            if let Some(output) = self.capture_output() {
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+            }
+            return;
+        }
+
+        let xk = librime_sys::vk_to_xk(code);
+        let mods = librime_sys::get_key_modifiers();
+        let mut engine = handle.lock();
+        let handled = engine.process_key(xk, mods);
+        drop(engine);
+        drop(guard);
+
+        if handled {
+            if let Some(output) = self.capture_output() {
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+            }
+        }
     }
 }
 
@@ -152,50 +366,17 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
     }
 
     fn OnTestKeyDown(&self, _pic: Option<&ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
-        let vk = wparam.0 as u16;
-        let composing = self.is_composing();
-        let handled = KeyEventSink::should_handle_key(vk, composing);
-        Ok(BOOL(if handled { 1 } else { 0 }))
+        let vk = VIRTUAL_KEY(wparam.0 as u16);
+        Ok(BOOL(if self.should_handle_key(vk) { 1 } else { 0 }))
     }
 
-    fn OnKeyDown(&self, _pic: Option<&ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
-        let vk = wparam.0 as u16;
-        
-        if is_letter_key(vk) {
-            if !self.is_composing() {
-                self.start_composing();
-            }
-            let ch = get_vk_char(vk);
-            self.append_char(ch);
-            return Ok(BOOL(1));
+    fn OnKeyDown(&self, pic: Option<&ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
+        let vk = VIRTUAL_KEY(wparam.0 as u16);
+        let handled = self.should_handle_key(vk);
+        if handled {
+            self.handle_key_event(pic, vk);
         }
-        
-        if self.is_composing() {
-            if is_digit_key(vk) {
-                return Ok(BOOL(1));
-            }
-            
-            if vk == VK_SPACE || vk == VK_RETURN {
-                let _buffer = self.get_buffer();
-                self.end_composing();
-                return Ok(BOOL(1));
-            }
-            
-            if vk == VK_ESCAPE {
-                self.end_composing();
-                return Ok(BOOL(1));
-            }
-            
-            if vk == VK_BACK {
-                self.remove_last_char();
-                if self.get_buffer().is_empty() {
-                    self.end_composing();
-                }
-                return Ok(BOOL(1));
-            }
-        }
-        
-        Ok(BOOL(0))
+        Ok(BOOL(if handled { 1 } else { 0 }))
     }
 
     fn OnTestKeyUp(&self, _pic: Option<&ITfContext>, _wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
@@ -208,5 +389,95 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
 
     fn OnPreservedKey(&self, _pic: Option<&ITfContext>, _rguid: *const GUID) -> Result<BOOL> {
         Ok(BOOL(0))
+    }
+}
+
+// ── Text input processor ────────────────────────────────────────
+
+#[implement(ITfTextInputProcessor)]
+pub struct XimeTextService {
+    thread_mgr: std::cell::RefCell<Option<ITfThreadMgr>>,
+    client_id: std::cell::Cell<u32>,
+    cookie: std::cell::Cell<u32>,
+    rime: std::sync::Mutex<Option<RimeEngineHandle>>,
+    key_sink: std::cell::RefCell<Option<ITfKeyEventSink>>,
+    shared_data: String,
+    user_data: String,
+}
+
+impl XimeTextService {
+    pub fn new(shared_data: String, user_data: String) -> Self {
+        Self {
+            thread_mgr: std::cell::RefCell::new(None),
+            client_id: std::cell::Cell::new(0),
+            cookie: std::cell::Cell::new(0),
+            rime: std::sync::Mutex::new(None),
+            key_sink: std::cell::RefCell::new(None),
+            shared_data,
+            user_data,
+        }
+    }
+
+    fn ensure_rime(&self) {
+        let mut guard = self.rime.lock().unwrap();
+        if guard.is_some() {
+            return;
+        }
+        let shared = std::path::Path::new(&self.shared_data);
+        let user = std::path::Path::new(&self.user_data);
+        match winxime_rime::RimeEngine::new(shared, user, "Xime") {
+            Ok(engine) => {
+                *guard = Some(RimeEngineHandle::new(engine));
+            }
+            Err(e) => {
+                eprintln!("Xime: failed to init Rime: {}", e);
+            }
+        }
+    }
+}
+
+impl ITfTextInputProcessor_Impl for XimeTextService_Impl {
+    fn Activate(&self, ptim: Option<&ITfThreadMgr>, tid: u32) -> Result<()> {
+        *self.thread_mgr.borrow_mut() = ptim.cloned();
+        self.client_id.set(tid);
+
+        self.ensure_rime();
+
+        let sink = KeyEventSink::new();
+        sink.set_client_id(tid);
+        sink.set_thread_mgr(ptim.cloned());
+        if let Some(handle) = self.rime.lock().unwrap().as_ref() {
+            sink.set_rime(handle.clone());
+        }
+
+        let key_sink_itf: ITfKeyEventSink = sink.into();
+
+        if let Some(thread_mgr) = ptim {
+            if let Ok(source) = thread_mgr.cast::<ITfSource>() {
+                let cookie = unsafe {
+                    source.AdviseSink(&ITfKeyEventSink::IID, &key_sink_itf)?
+                };
+                self.cookie.set(cookie);
+                *self.key_sink.borrow_mut() = Some(key_sink_itf);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn Deactivate(&self) -> Result<()> {
+        let cookie = self.cookie.get();
+        if cookie != 0 {
+            if let Some(thread_mgr) = self.thread_mgr.borrow().as_ref() {
+                if let Ok(source) = thread_mgr.cast::<ITfSource>() {
+                    unsafe { let _ = source.UnadviseSink(cookie); }
+                }
+            }
+        }
+
+        self.cookie.set(0);
+        *self.key_sink.borrow_mut() = None;
+        *self.thread_mgr.borrow_mut() = None;
+        Ok(())
     }
 }
