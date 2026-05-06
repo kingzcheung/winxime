@@ -46,11 +46,19 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
     
     println!("cargo:warning=VS: {}", vs_install);
     
-    // Copy env.bat.template
-    let env_template = librime_dir.join("env.bat.template");
+    // Copy env.bat.template to env.bat with x64/VS2022 settings
+    let _env_template = librime_dir.join("env.bat.template");
     let env_bat = librime_dir.join("env.bat");
-    if !env_bat.exists() && env_template.exists() {
-        std::fs::copy(&env_template, &env_bat).unwrap();
+    // Always overwrite env.bat to ensure correct settings
+    {
+        let mut file = std::fs::File::create(&env_bat).unwrap();
+        writeln!(file, "@echo off").unwrap();
+        writeln!(file, "set RIME_ROOT={}", librime_dir.display()).unwrap();
+        writeln!(file, "if not defined BOOST_ROOT set BOOST_ROOT={}\\deps\\boost-1.89.0", librime_dir.display()).unwrap();
+        writeln!(file, "set ARCH=x64").unwrap();
+        writeln!(file, "set BJAM_TOOLSET=msvc-14.3").unwrap();
+        writeln!(file, "set CMAKE_GENERATOR=\"Visual Studio 17 2022\"").unwrap();
+        writeln!(file, "set PLATFORM_TOOLSET=v143").unwrap();
     }
     
     // Create temp build script
@@ -58,13 +66,11 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
     let mut file = std::fs::File::create(&temp_bat).unwrap();
     
     writeln!(file, "@echo off").unwrap();
-    writeln!(file, "set PATH=C:\\Program Files\\CMake\\bin;%PATH%").unwrap();
-    writeln!(file, "set PATH=C:\\Program Files\\7-Zip;%PATH%").unwrap();
-    writeln!(file, "set PATH=C:\\Users\\ibuddy\\AppData\\Local\\Microsoft\\WinGet\\Links;%PATH%").unwrap();
     writeln!(file, "call \"{}\\VC\\Auxiliary\\Build\\vcvars64.bat\"", vs_install).unwrap();
     writeln!(file, "cd /d \"{}\"", librime_dir.display()).unwrap();
-    writeln!(file, "if not exist env.bat copy env.bat.template env.bat").unwrap();
-    writeln!(file, "if not defined BOOST_ROOT call install-boost.bat").unwrap();
+    writeln!(file, "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat", librime_dir.display()).unwrap();
+    // install-boost.bat uses setlocal so BOOST_ROOT doesn't persist; set it explicitly
+    writeln!(file, "if not defined BOOST_ROOT set BOOST_ROOT={}\\deps\\boost-1.89.0", librime_dir.display()).unwrap();
     writeln!(file, "build.bat deps").unwrap();
     writeln!(file, "build.bat librime").unwrap();
     
