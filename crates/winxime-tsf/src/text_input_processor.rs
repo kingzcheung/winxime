@@ -200,14 +200,22 @@ struct XimeEditSession {
 
 impl ITfEditSession_Impl for XimeEditSession_Impl {
     fn DoEditSession(&self, ec: u32) -> Result<()> {
+        crate::log::log(&format!("DoEditSession: ec={}, commit={}, composing={}, preedit='{}'", 
+            ec, self.output.commit.is_some(), self.output.composing, self.output.preedit));
+        
         let doc_mgr = match self.thread_mgr.as_ref() {
             Some(t) => unsafe { t.GetFocus() }?,
-            None => return Ok(()),
+            None => {
+                crate::log::log("DoEditSession: no thread_mgr");
+                return Ok(());
+            },
         };
         let context = unsafe { doc_mgr.GetBase() }?;
+        crate::log::log("DoEditSession: got context");
 
         if let Some(ref commit) = self.output.commit {
             if !commit.is_empty() {
+                crate::log::log(&format!("DoEditSession: committing text '{}'", commit));
                 self.end_composition(ec);
 
                 let text_store: ITextStoreACP = context.cast()?;
@@ -217,10 +225,12 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
 
                 if fetched > 0 {
                     let sel = selection[0];
+                    crate::log::log(&format!("DoEditSession: selection start={}, end={}", sel.acpStart, sel.acpEnd));
                     let wide: Vec<u16> = commit.encode_utf16().collect();
                     unsafe {
                         text_store.SetText(0, sel.acpStart, sel.acpEnd, &wide)?;
                     }
+                    crate::log::log(&format!("DoEditSession: SetText succeeded, {} chars", wide.len()));
                     let end = sel.acpStart + wide.len() as i32;
                     unsafe {
                         text_store.SetSelection(&[TS_SELECTION_ACP {
@@ -233,20 +243,25 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
                         }])?;
                     }
                 }
+                crate::log::log("DoEditSession: commit done");
                 return Ok(());
             }
         }
 
         if self.output.composing {
+            crate::log::log("DoEditSession: composing mode");
             let preedit = self.output.preedit.as_str();
             let comp = self.composition.lock().unwrap().take();
 
             if comp.is_some() {
+                crate::log::log("DoEditSession: update composition");
                 self.update_composition_text(&context, ec, preedit);
             } else {
+                crate::log::log("DoEditSession: start composition");
                 self.start_composition(&context, ec, preedit);
             }
         } else {
+            crate::log::log("DoEditSession: end composition");
             self.end_composition(ec);
         }
 
@@ -359,10 +374,13 @@ impl KeyEventSink {
         if (VK_X_A..=VK_X_Z).contains(&code) {
             return true;
         }
-        if code == VK_SPACE.0 || code == VK_RETURN.0 || code == VK_BACK.0 || code == VK_ESCAPE.0 {
+        if code == VK_RETURN.0 || code == VK_BACK.0 || code == VK_ESCAPE.0 {
             return true;
         }
         if self.is_composing() {
+            if code == VK_SPACE.0 {
+                return true;
+            }
             if (VK_X_0..=VK_X_9).contains(&code) {
                 return true;
             }
@@ -374,6 +392,7 @@ impl KeyEventSink {
     }
 
     fn schedule_edit_session(&self, context: &ITfContext, output: RimeOutput) {
+        log("schedule_edit_session: called");
         let tid = self.client_id.load(std::sync::atomic::Ordering::Acquire);
         let mgr = self.thread_mgr.lock().unwrap().clone();
 
@@ -383,8 +402,10 @@ impl KeyEventSink {
             composition: self.composition.clone(),
         };
         let session_itf: ITfEditSession = session.into();
+        log(&format!("schedule_edit_session: tid={}, calling RequestEditSession", tid));
         unsafe {
-            let _ = context.RequestEditSession(tid, &session_itf, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE);
+            let result = context.RequestEditSession(tid, &session_itf, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE);
+            log(&format!("schedule_edit_session: RequestEditSession result: {:?}", result));
         }
     }
 
@@ -453,8 +474,11 @@ impl KeyEventSink {
             if response.success {
                 let output = RimeOutput::from_response(&response);
                 self.set_composing(output.composing);
+                log(&format!("  -> context is {}", if context.is_some() { "Some" } else { "None" }));
                 if let Some(ctx) = context {
+                    log("  -> calling schedule_edit_session");
                     self.schedule_edit_session(ctx, output);
+                    log("  -> schedule_edit_session returned");
                 }
                 return true;
             }

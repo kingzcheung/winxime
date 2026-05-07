@@ -116,17 +116,17 @@ fn process_request(request: &IpcRequest, engine: &Arc<std::sync::Mutex<RimeEngin
                     println!("  -> handled={}", result);
                     if result {
                         println!("  input: {:?}", eng.get_input());
-                        println!("  commit: {:?}", eng.get_commit());
                     }
                     result
                 },
                 _ => false,
             };
             
-            let ipc_ctx = get_ipc_context(&eng);
+            let commit = eng.get_commit();
+            let ipc_ctx = get_ipc_context(&eng, &commit);
             if handled {
                 update_context(&mut eng, context);
-                if eng.get_commit().is_some() {
+                if commit.is_some() {
                     window.hide();
                 } else if let Some(ctx) = &ipc_ctx {
                     if ctx.candidates.candies.is_empty() && ctx.preedit.str.is_empty() {
@@ -143,7 +143,7 @@ fn process_request(request: &IpcRequest, engine: &Arc<std::sync::Mutex<RimeEngin
                 success: handled,
                 session_id: request.session_id,
                 context: ipc_ctx,
-                status: None,
+                status: Some(get_ipc_status(&eng)),
             }
         }
         
@@ -172,9 +172,19 @@ fn update_context(eng: &mut RimeEngine, context: &Arc<SharedInputContext>) {
     });
 }
 
-fn get_ipc_context(eng: &RimeEngine) -> Option<winxime_ipc::Context> {
+fn get_ipc_status(eng: &RimeEngine) -> winxime_ipc::Status {
+    winxime_ipc::Status {
+        composing: eng.is_composing(),
+        ascii_mode: false,
+        schema_id: String::new(),
+        schema_name: String::new(),
+    }
+}
+
+fn get_ipc_context(eng: &RimeEngine, commit: &Option<String>) -> Option<winxime_ipc::Context> {
     let composing = eng.is_composing();
-    if !composing {
+    
+    if !composing && commit.is_none() {
         return None;
     }
     
@@ -182,7 +192,7 @@ fn get_ipc_context(eng: &RimeEngine) -> Option<winxime_ipc::Context> {
         preedit: winxime_ipc::Text {
             str: eng.get_input().unwrap_or_default(),
         },
-        commit: eng.get_commit(),
+        commit: commit.clone(),
         candidates: winxime_ipc::CandidateInfo {
             current_page: 0,
             total_pages: 1,
