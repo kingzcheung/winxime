@@ -1,0 +1,26 @@
+[package]
+name = "winxime-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "winxime-server"
+path = "src/main.rs"
+
+[dependencies]
+winxime-ipc = { path = "../winxime-ipc" }
+winxime-rime = { path = "../winxime-rime" }
+winxime-core = { path = "../winxime-core" }
+serde_json.workspace = true
+log = "0.4"
+interprocess = "2.4"
+widestring = "1.0"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_HiDpi",
+    "Win32_UI_WindowsAndMessaging",
+] }

@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 winxime-core.workspace = true
-winxime-rime.workspace = true
+winxime-ipc.workspace = true
 librime-sys.workspace = true
 windows-core = "0.58"
 windows = { version = "0.58", features = [

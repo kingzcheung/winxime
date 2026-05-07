@@ -3,51 +3,193 @@ use windows::Win32::Foundation::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::core::*;
 use std::sync::Arc;
+use winxime_ipc::{IpcClient, IpcRequest, IpcResponse, IpcCommand, IpcRequestData, KeyEventData, Position};
+use crate::log::{init_log, log};
 
 const VK_X_A: u16 = 0x41;
 const VK_X_Z: u16 = 0x5A;
 const VK_X_0: u16 = 0x30;
 const VK_X_9: u16 = 0x39;
 
-// ── Shared Rime engine ──────────────────────────────────────────
-
-pub struct RimeEngineHandle {
-    engine: Arc<std::sync::Mutex<winxime_rime::RimeEngine>>,
+struct IpcState {
+    client: Option<IpcClient>,
+    session_id: u32,
 }
 
-impl RimeEngineHandle {
-    pub fn new(engine: winxime_rime::RimeEngine) -> Self {
+pub struct IpcClientHandle {
+    state: Arc<std::sync::Mutex<IpcState>>,
+}
+
+impl IpcClientHandle {
+    pub fn debug_ptr(&self) -> *const () {
+        Arc::as_ptr(&self.state) as *const ()
+    }
+
+    pub fn new() -> std::result::Result<Self, winxime_ipc::IpcError> {
+        let client = IpcClient::connect()?;
+        Ok(Self {
+            state: Arc::new(std::sync::Mutex::new(IpcState {
+                client: Some(client),
+                session_id: 0,
+            })),
+        })
+    }
+    
+    pub fn empty() -> Self {
         Self {
-            engine: Arc::new(std::sync::Mutex::new(engine)),
+            state: Arc::new(std::sync::Mutex::new(IpcState {
+                client: None,
+                session_id: 0,
+            })),
         }
     }
-
-    pub fn lock(&self) -> std::sync::MutexGuard<'_, winxime_rime::RimeEngine> {
-        self.engine.lock().unwrap()
+    
+    pub fn connect(&self) -> std::result::Result<(), winxime_ipc::IpcError> {
+        log("IpcClientHandle::connect() called");
+        let mut guard = self.state.lock().unwrap();
+        if guard.client.is_some() {
+            log("  -> already connected");
+            return Ok(());
+        }
+        log("  -> calling IpcClient::connect()");
+        let client = IpcClient::connect()?;
+        log("  -> IpcClient::connect() succeeded");
+        guard.client = Some(client);
+        Ok(())
+    }
+    
+    pub fn is_connected(&self) -> bool {
+        let r = self.state.lock().unwrap().client.is_some();
+        r
+    }
+    
+    pub fn start_session(&self) -> u32 {
+        let mut guard = self.state.lock().unwrap();
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::StartSession,
+                session_id: 0,
+                data: IpcRequestData::None,
+            };
+            if let Ok(response) = client.send_request(&request) {
+                guard.session_id = response.session_id;
+            }
+        }
+        guard.session_id
+    }
+    
+    pub fn process_key(&self, keycode: i32, modifiers: i32) -> Option<IpcResponse> {
+        let mut guard = self.state.lock().unwrap();
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::ProcessKeyEvent,
+                session_id,
+                data: IpcRequestData::KeyEvent(KeyEventData { keycode, modifiers }),
+            };
+            client.send_request(&request).ok()
+        } else {
+            None
+        }
+    }
+    
+    pub fn select_candidate(&self, index: usize) -> Option<IpcResponse> {
+        let mut guard = self.state.lock().unwrap();
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::SelectCandidate,
+                session_id,
+                data: IpcRequestData::SelectIndex(index),
+            };
+            client.send_request(&request).ok()
+        } else {
+            None
+        }
+    }
+    
+    pub fn change_page(&self, backward: bool) -> Option<IpcResponse> {
+        let mut guard = self.state.lock().unwrap();
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::ChangePage,
+                session_id,
+                data: IpcRequestData::ChangePage(backward),
+            };
+            client.send_request(&request).ok()
+        } else {
+            None
+        }
+    }
+    
+    pub fn update_position(&self, x: i32, y: i32) {
+        let mut guard = self.state.lock().unwrap();
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::UpdateInputPosition,
+                session_id,
+                data: IpcRequestData::Position(Position { x, y }),
+            };
+            let _ = client.send_oneway(&request);
+        }
+    }
+    
+    pub fn focus_in(&self) {
+        let mut guard = self.state.lock().unwrap();
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::FocusIn,
+                session_id,
+                data: IpcRequestData::None,
+            };
+            let _ = client.send_oneway(&request);
+        }
+    }
+    
+    pub fn focus_out(&self) {
+        let mut guard = self.state.lock().unwrap();
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::FocusOut,
+                session_id,
+                data: IpcRequestData::None,
+            };
+            let _ = client.send_oneway(&request);
+        }
     }
 }
 
-impl Clone for RimeEngineHandle {
+impl Clone for IpcClientHandle {
     fn clone(&self) -> Self {
         Self {
-            engine: self.engine.clone(),
+            state: self.state.clone(),
         }
     }
 }
 
-// ── Captured Rime output for edit session ───────────────────────
-
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 struct RimeOutput {
     commit: Option<String>,
+    preedit: String,
+    candidates: Vec<String>,
     composing: bool,
-    preedit: Option<String>,
-    candidate_count: usize,
-    page_no: usize,
-    page_size: usize,
 }
 
-// ── Main edit session: commit + composition in one callback ─────
+impl RimeOutput {
+    fn from_response(response: &IpcResponse) -> Self {
+        let ctx = response.context.as_ref();
+        Self {
+            commit: ctx.and_then(|c| c.commit.clone()),
+            preedit: ctx.map(|c| c.preedit.str.clone()).unwrap_or_default(),
+            candidates: ctx.map(|c| c.candidates.candies.iter().map(|t| t.str.clone()).collect()).unwrap_or_default(),
+            composing: response.status.as_ref().map(|s| s.composing).unwrap_or(false),
+        }
+    }
+}
 
 #[implement(ITfEditSession)]
 struct XimeEditSession {
@@ -64,10 +206,8 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
         };
         let context = unsafe { doc_mgr.GetBase() }?;
 
-        // 1. Commit text if present
         if let Some(ref commit) = self.output.commit {
             if !commit.is_empty() {
-                // End existing composition first
                 self.end_composition(ec);
 
                 let text_store: ITextStoreACP = context.cast()?;
@@ -97,20 +237,16 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
             }
         }
 
-        // 2. Check for composition state change
         if self.output.composing {
-            let preedit = self.output.preedit.as_deref().unwrap_or("");
+            let preedit = self.output.preedit.as_str();
             let comp = self.composition.lock().unwrap().take();
 
             if comp.is_some() {
-                // Update existing composition text
                 self.update_composition_text(&context, ec, preedit);
             } else {
-                // Start new composition
                 self.start_composition(&context, ec, preedit);
             }
         } else {
-            // Not composing: end any existing composition
             self.end_composition(ec);
         }
 
@@ -125,7 +261,6 @@ impl XimeEditSession_Impl {
             Err(_) => return,
         };
 
-        // Get selection position
         let mut fetched: u32 = 0;
         let mut selection = vec![TS_SELECTION_ACP::default(); 1];
         if unsafe { text_store.GetSelection(0, &mut selection, &mut fetched) }.is_err() || fetched == 0 {
@@ -133,29 +268,24 @@ impl XimeEditSession_Impl {
         }
         let sel = selection[0];
 
-        // Get ITfContextComposition from context
         let ctx_comp: ITfContextComposition = match context.cast() {
             Ok(c) => c,
             Err(_) => return,
         };
 
-        // Create a range for the composition
         let range_acp: ITfRangeACP = match text_store.cast() {
             Ok(r) => r,
             Err(_) => return,
         };
 
-        // Get ITfRange from ITfRangeACP
         let range: ITfRange = match range_acp.cast() {
             Ok(r) => r,
             Err(_) => return,
         };
 
-        // Start composition at cursor position
         let none_sink: Option<&ITfCompositionSink> = None;
         match unsafe { ctx_comp.StartComposition(ec, &range, none_sink) } {
             Ok(comp) => {
-                // Set preedit text on the composition range
                 let wide: Vec<u16> = preedit.encode_utf16().collect();
                 unsafe { text_store.SetText(0, sel.acpStart, sel.acpStart, &wide).ok(); }
                 *self.composition.lock().unwrap() = Some(comp);
@@ -165,8 +295,6 @@ impl XimeEditSession_Impl {
     }
 
     fn update_composition_text(&self, _context: &ITfContext, _ec: u32, preedit: &str) {
-        // For now, end and restart composition to update text
-        // A more efficient approach would use ITfCompositionView::GetRange + ITfRange::SetText
         let text_store: ITextStoreACP = match _context.cast() {
             Ok(s) => s,
             Err(_) => return,
@@ -190,11 +318,9 @@ impl XimeEditSession_Impl {
     }
 }
 
-// ── Key event sink ──────────────────────────────────────────────
-
 #[implement(ITfKeyEventSink)]
 pub struct KeyEventSink {
-    rime: std::sync::Mutex<Option<RimeEngineHandle>>,
+    ipc: IpcClientHandle,
     composing: std::sync::atomic::AtomicBool,
     thread_mgr: std::sync::Mutex<Option<ITfThreadMgr>>,
     client_id: std::sync::atomic::AtomicU32,
@@ -202,18 +328,14 @@ pub struct KeyEventSink {
 }
 
 impl KeyEventSink {
-    pub fn new() -> Self {
+    pub fn new(ipc: IpcClientHandle) -> Self {
         Self {
-            rime: std::sync::Mutex::new(None),
+            ipc,
             composing: std::sync::atomic::AtomicBool::new(false),
             thread_mgr: std::sync::Mutex::new(None),
             client_id: std::sync::atomic::AtomicU32::new(0),
             composition: Arc::new(std::sync::Mutex::new(None)),
         }
-    }
-
-    pub fn set_rime(&self, rime: RimeEngineHandle) {
-        *self.rime.lock().unwrap() = Some(rime);
     }
 
     pub fn set_thread_mgr(&self, mgr: Option<ITfThreadMgr>) {
@@ -251,31 +373,6 @@ impl KeyEventSink {
         false
     }
 
-    fn capture_output(&self) -> Option<RimeOutput> {
-        let guard = self.rime.lock().ok()?;
-        let handle = guard.as_ref()?;
-        let engine = handle.lock();
-
-        let commit = engine.get_commit();
-        let composing = engine.is_composing();
-        let preedit = engine.get_composition().and_then(|c| c.preedit);
-
-        let candidates = engine.get_candidates();
-        let candidate_count = candidates.len();
-        // Get page info from first candidate if available
-        let page_no = engine.get_composition().map(|c| c.sel_start).unwrap_or(0);
-        let page_size = candidates.len();
-
-        Some(RimeOutput {
-            commit,
-            composing,
-            preedit,
-            candidate_count,
-            page_no: page_no / 5,
-            page_size,
-        })
-    }
-
     fn schedule_edit_session(&self, context: &ITfContext, output: RimeOutput) {
         let tid = self.client_id.load(std::sync::atomic::Ordering::Acquire);
         let mgr = self.thread_mgr.lock().unwrap().clone();
@@ -287,76 +384,83 @@ impl KeyEventSink {
         };
         let session_itf: ITfEditSession = session.into();
         unsafe {
-            let _ = context.RequestEditSession(tid, &session_itf, TF_ES_READWRITE);
+            let _ = context.RequestEditSession(tid, &session_itf, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE);
         }
     }
 
-    fn handle_key_event(&self, context: Option<&ITfContext>, vk: VIRTUAL_KEY) {
-        let guard = match self.rime.lock() {
-            Ok(g) => g,
-            Err(_) => return,
-        };
-        let handle = match guard.as_ref() {
-            Some(h) => h,
-            None => return,
-        };
+    fn handle_key_event(&self, context: Option<&ITfContext>, vk: VIRTUAL_KEY) -> bool {
+        log(&format!("handle_key_event: vk={}", vk.0));
+        
+        // Ensure IPC is connected
+        if !self.ipc.is_connected() {
+            log("  -> IPC not connected, attempting reconnect...");
+            if self.ipc.connect().is_ok() {
+                self.ipc.start_session();
+                log("  -> Reconnected!");
+            } else {
+                log("  -> Reconnect failed");
+                return false;
+            }
+        }
+        
+        log("  -> IPC connected");
         let code = vk.0;
         let is_composing = self.is_composing();
 
         if is_composing && code >= 0x31 && code <= 0x39 {
             let index = (code - 0x31) as usize;
-            let mut engine = handle.lock();
-            engine.select_candidate(index);
-            drop(engine);
-            if let Some(output) = self.capture_output() {
+            if let Some(response) = self.ipc.select_candidate(index) {
+                let output = RimeOutput::from_response(&response);
                 self.set_composing(output.composing);
                 if let Some(ctx) = context {
                     self.schedule_edit_session(ctx, output);
                 }
+                return true;
             }
-            return;
+            return false;
         }
 
         if is_composing && code == VK_PRIOR.0 {
-            let mut engine = handle.lock();
-            engine.change_page(true);
-            drop(engine);
-            if let Some(output) = self.capture_output() {
+            if let Some(response) = self.ipc.change_page(true) {
+                let output = RimeOutput::from_response(&response);
                 self.set_composing(output.composing);
                 if let Some(ctx) = context {
                     self.schedule_edit_session(ctx, output);
                 }
+                return true;
             }
-            return;
+            return false;
         }
         if is_composing && code == VK_NEXT.0 {
-            let mut engine = handle.lock();
-            engine.change_page(false);
-            drop(engine);
-            if let Some(output) = self.capture_output() {
+            if let Some(response) = self.ipc.change_page(false) {
+                let output = RimeOutput::from_response(&response);
                 self.set_composing(output.composing);
                 if let Some(ctx) = context {
                     self.schedule_edit_session(ctx, output);
                 }
+                return true;
             }
-            return;
+            return false;
         }
 
         let xk = librime_sys::vk_to_xk(code);
         let mods = librime_sys::get_key_modifiers();
-        let mut engine = handle.lock();
-        let handled = engine.process_key(xk, mods);
-        drop(engine);
-        drop(guard);
-
-        if handled {
-            if let Some(output) = self.capture_output() {
+        log(&format!("  -> calling process_key({}, {})", xk, mods));
+        let response = self.ipc.process_key(xk, mods);
+        log(&format!("  -> response: {:?}", response));
+        if let Some(response) = response {
+            log(&format!("  -> success={}", response.success));
+            if response.success {
+                let output = RimeOutput::from_response(&response);
                 self.set_composing(output.composing);
                 if let Some(ctx) = context {
                     self.schedule_edit_session(ctx, output);
                 }
+                return true;
             }
         }
+        log("  -> returning false");
+        false
     }
 }
 
@@ -367,15 +471,38 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
 
     fn OnTestKeyDown(&self, _pic: Option<&ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = VIRTUAL_KEY(wparam.0 as u16);
-        Ok(BOOL(if self.should_handle_key(vk) { 1 } else { 0 }))
+        log(&format!("OnTestKeyDown: vk={}", vk.0));
+        if !self.should_handle_key(vk) {
+            log("  -> not handling");
+            return Ok(BOOL(0));
+        }
+        
+        if !self.ipc.is_connected() {
+            log("  -> IPC not connected");
+            return Ok(BOOL(0));
+        }
+        
+        let xk = librime_sys::vk_to_xk(vk.0);
+        let mods = librime_sys::get_key_modifiers();
+        log(&format!("  -> process_key({}, {})", xk, mods));
+        let handled = self.ipc.process_key(xk, mods)
+            .map(|r| r.success)
+            .unwrap_or(false);
+        log(&format!("  -> result: {}", handled));
+        
+        Ok(BOOL(if handled { 1 } else { 0 }))
     }
 
     fn OnKeyDown(&self, pic: Option<&ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = VIRTUAL_KEY(wparam.0 as u16);
-        let handled = self.should_handle_key(vk);
-        if handled {
-            self.handle_key_event(pic, vk);
+        log(&format!("OnKeyDown: vk={}", vk.0));
+        if !self.should_handle_key(vk) {
+            log("  -> not handling");
+            return Ok(BOOL(0));
         }
+        
+        let handled = self.handle_key_event(pic, vk);
+        log(&format!("  -> result: {}", handled));
         Ok(BOOL(if handled { 1 } else { 0 }))
     }
 
@@ -392,92 +519,110 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
     }
 }
 
-// ── Text input processor ────────────────────────────────────────
-
 #[implement(ITfTextInputProcessor)]
 pub struct XimeTextService {
     thread_mgr: std::cell::RefCell<Option<ITfThreadMgr>>,
     client_id: std::cell::Cell<u32>,
-    cookie: std::cell::Cell<u32>,
-    rime: std::sync::Mutex<Option<RimeEngineHandle>>,
+    ipc: IpcClientHandle,
     key_sink: std::cell::RefCell<Option<ITfKeyEventSink>>,
-    shared_data: String,
-    user_data: String,
+    keystroke_mgr: std::cell::RefCell<Option<ITfKeystrokeMgr>>,
 }
 
 impl XimeTextService {
-    pub fn new(shared_data: String, user_data: String) -> Self {
+    pub fn new() -> Self {
+        let ipc = IpcClientHandle::empty();
+        log(&format!("XimeTextService::new() called, IPC state ptr={:p}", ipc.state));
         Self {
             thread_mgr: std::cell::RefCell::new(None),
             client_id: std::cell::Cell::new(0),
-            cookie: std::cell::Cell::new(0),
-            rime: std::sync::Mutex::new(None),
+            ipc,
             key_sink: std::cell::RefCell::new(None),
-            shared_data,
-            user_data,
+            keystroke_mgr: std::cell::RefCell::new(None),
         }
     }
 
-    fn ensure_rime(&self) {
-        let mut guard = self.rime.lock().unwrap();
-        if guard.is_some() {
-            return;
+    fn ensure_ipc(&self) -> std::result::Result<(), winxime_ipc::IpcError> {
+        let connected = self.ipc.is_connected();
+        log(&format!("ensure_ipc: is_connected={}, ptr={:p}", connected, self.ipc.debug_ptr()));
+        if connected {
+            return Ok(());
         }
-        let shared = std::path::Path::new(&self.shared_data);
-        let user = std::path::Path::new(&self.user_data);
-        match winxime_rime::RimeEngine::new(shared, user, "Xime") {
-            Ok(engine) => {
-                *guard = Some(RimeEngineHandle::new(engine));
+        log("ensure_ipc: attempting connect...");
+        match self.ipc.connect() {
+            Ok(()) => {
+                self.ipc.start_session();
+                log("ensure_ipc: connect OK");
+                Ok(())
             }
             Err(e) => {
-                eprintln!("Xime: failed to init Rime: {}", e);
+                log(&format!("ensure_ipc: connect FAILED: {:?}", e));
+                Err(e)
             }
         }
+    }
+}
+
+impl XimeTextService_Impl {
+    fn activate_impl(&self, ptim: Option<&ITfThreadMgr>, tid: u32) -> Result<()> {
+        init_log();
+        log(&format!("Activate called, tid={}", tid));
+        
+        *self.thread_mgr.borrow_mut() = ptim.cloned();
+        self.client_id.set(tid);
+
+        // Try to connect to IPC server
+        match self.ensure_ipc() {
+            Ok(()) => log("IPC connected successfully"),
+            Err(e) => log(&format!("IPC connection failed: {:?}", e)),
+        }
+
+        // Create KeyEventSink with shared IPC handle
+        let sink = KeyEventSink::new(self.ipc.clone());
+        sink.set_client_id(tid);
+        sink.set_thread_mgr(ptim.cloned());
+        log("KeyEventSink created with IPC handle");
+
+        let key_sink_itf: ITfKeyEventSink = sink.into();
+
+        if let Some(thread_mgr) = ptim {
+            if let Ok(kmgr) = thread_mgr.cast::<ITfKeystrokeMgr>() {
+                log("Got ITfKeystrokeMgr, attempting AdviseKeyEventSink...");
+                if unsafe { kmgr.AdviseKeyEventSink(tid, &key_sink_itf, BOOL(1)).is_ok() } {
+                    log("AdviseKeyEventSink succeeded");
+                    *self.keystroke_mgr.borrow_mut() = Some(kmgr);
+                    *self.key_sink.borrow_mut() = Some(key_sink_itf);
+                } else {
+                    log("AdviseKeyEventSink failed");
+                }
+            } else {
+                log("Failed to get ITfKeystrokeMgr");
+            }
+        } else {
+            log("No thread_mgr available");
+        }
+
+        Ok(())
+    }
+
+    fn deactivate_impl(&self) -> Result<()> {
+        if let Some(kmgr) = self.keystroke_mgr.borrow_mut().take() {
+            unsafe { let _ = kmgr.UnadviseKeyEventSink(self.client_id.get()); }
+        }
+
+        *self.key_sink.borrow_mut() = None;
+        *self.thread_mgr.borrow_mut() = None;
+        self.client_id.set(0);
+        Ok(())
     }
 }
 
 impl ITfTextInputProcessor_Impl for XimeTextService_Impl {
     fn Activate(&self, ptim: Option<&ITfThreadMgr>, tid: u32) -> Result<()> {
-        *self.thread_mgr.borrow_mut() = ptim.cloned();
-        self.client_id.set(tid);
-
-        self.ensure_rime();
-
-        let sink = KeyEventSink::new();
-        sink.set_client_id(tid);
-        sink.set_thread_mgr(ptim.cloned());
-        if let Some(handle) = self.rime.lock().unwrap().as_ref() {
-            sink.set_rime(handle.clone());
-        }
-
-        let key_sink_itf: ITfKeyEventSink = sink.into();
-
-        if let Some(thread_mgr) = ptim {
-            if let Ok(source) = thread_mgr.cast::<ITfSource>() {
-                let cookie = unsafe {
-                    source.AdviseSink(&ITfKeyEventSink::IID, &key_sink_itf)?
-                };
-                self.cookie.set(cookie);
-                *self.key_sink.borrow_mut() = Some(key_sink_itf);
-            }
-        }
-
-        Ok(())
+        self.activate_impl(ptim, tid)
     }
 
     fn Deactivate(&self) -> Result<()> {
-        let cookie = self.cookie.get();
-        if cookie != 0 {
-            if let Some(thread_mgr) = self.thread_mgr.borrow().as_ref() {
-                if let Ok(source) = thread_mgr.cast::<ITfSource>() {
-                    unsafe { let _ = source.UnadviseSink(cookie); }
-                }
-            }
-        }
-
-        self.cookie.set(0);
-        *self.key_sink.borrow_mut() = None;
-        *self.thread_mgr.borrow_mut() = None;
-        Ok(())
+        self.deactivate_impl()
     }
 }
+

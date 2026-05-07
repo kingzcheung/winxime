@@ -51,6 +51,21 @@ impl RimeEngine {
                 return Err(RimeError::ApiFunctionMissing("initialize"));
             }
 
+            // Initialize deployer
+            if let Some(deployer_init) = (*api).deployer_initialize {
+                deployer_init(std::ptr::null_mut());
+            }
+
+            // Deploy schemas
+            println!("Deploying Rime schemas...");
+            if let Some(deploy) = (*api).deploy {
+                if deploy() == FALSE {
+                    println!("Warning: Rime deploy returned false");
+                } else {
+                    println!("Rime schemas deployed successfully");
+                }
+            }
+
             // Set notification handler for deploy/option events
             if let Some(set_handler) = (*api).set_notification_handler {
                 set_handler(Some(rime_notification_callback), std::ptr::null_mut());

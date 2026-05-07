@@ -8,20 +8,6 @@ pub const CLSID_XIME: GUID = GUID {
     data4: [0x9C, 0xD1, 0x2A, 0x3B, 0x4C, 0x5D, 0x6E, 0x7F],
 };
 
-fn resolve_paths() -> (String, String) {
-    let workspace_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
-
-    let shared = workspace_dir.join("librime").join("data").join("minimal");
-    let user = workspace_dir.join("rime-data");
-
-    (shared.to_string_lossy().into_owned(), user.to_string_lossy().into_owned())
-}
-
 #[implement(IClassFactory)]
 pub struct ClassFactory;
 
@@ -33,11 +19,10 @@ impl IClassFactory_Impl for ClassFactory_Impl {
         ppvobject: *mut *mut core::ffi::c_void,
     ) -> Result<()> {
         if punkouter.is_some() {
-            return Err(Error::from(HRESULT(-2147221232))); // CLASS_E_NOAGGREGATION
+            return Err(Error::from(HRESULT(-2147221232)));
         }
 
-        let (shared_data, user_data) = resolve_paths();
-        let service = crate::XimeTextService::new(shared_data, user_data);
+        let service = crate::XimeTextService::new();
         let unknown: IUnknown = service.into();
         unsafe {
             let hr = Interface::query(&unknown, riid, ppvobject);

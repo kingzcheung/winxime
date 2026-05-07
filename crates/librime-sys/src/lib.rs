@@ -686,6 +686,30 @@ pub const XK_space: c_int = 32;
 
 // TSF virtual key codes
 pub const VK_A: u16 = 0x41;
+pub const VK_B: u16 = 0x42;
+pub const VK_C: u16 = 0x43;
+pub const VK_D: u16 = 0x44;
+pub const VK_E: u16 = 0x45;
+pub const VK_F: u16 = 0x46;
+pub const VK_G: u16 = 0x47;
+pub const VK_H: u16 = 0x48;
+pub const VK_I: u16 = 0x49;
+pub const VK_J: u16 = 0x4A;
+pub const VK_K: u16 = 0x4B;
+pub const VK_L: u16 = 0x4C;
+pub const VK_M: u16 = 0x4D;
+pub const VK_N: u16 = 0x4E;
+pub const VK_O: u16 = 0x4F;
+pub const VK_P: u16 = 0x50;
+pub const VK_Q: u16 = 0x51;
+pub const VK_R: u16 = 0x52;
+pub const VK_S: u16 = 0x53;
+pub const VK_T: u16 = 0x54;
+pub const VK_U: u16 = 0x55;
+pub const VK_V: u16 = 0x56;
+pub const VK_W: u16 = 0x57;
+pub const VK_X: u16 = 0x58;
+pub const VK_Y: u16 = 0x59;
 pub const VK_Z: u16 = 0x5A;
 pub const VK_0: u16 = 0x30;
 pub const VK_9: u16 = 0x39;
@@ -704,7 +728,33 @@ pub const VK_SHIFT: u16 = 0x10;
 pub const VK_CONTROL: u16 = 0x11;
 pub const VK_MENU: u16 = 0x12;
 
-// Map TSF VK to XK keycodes for Rime
+pub const XK_a: c_int = 0x61;
+pub const XK_b: c_int = 0x62;
+pub const XK_c: c_int = 0x63;
+pub const XK_d: c_int = 0x64;
+pub const XK_e: c_int = 0x65;
+pub const XK_f: c_int = 0x66;
+pub const XK_g: c_int = 0x67;
+pub const XK_h: c_int = 0x68;
+pub const XK_i: c_int = 0x69;
+pub const XK_j: c_int = 0x6A;
+pub const XK_k: c_int = 0x6B;
+pub const XK_l: c_int = 0x6C;
+pub const XK_m: c_int = 0x6D;
+pub const XK_n: c_int = 0x6E;
+pub const XK_o: c_int = 0x6F;
+pub const XK_p: c_int = 0x70;
+pub const XK_q: c_int = 0x71;
+pub const XK_r: c_int = 0x72;
+pub const XK_s: c_int = 0x73;
+pub const XK_t: c_int = 0x74;
+pub const XK_u: c_int = 0x75;
+pub const XK_v: c_int = 0x76;
+pub const XK_w: c_int = 0x77;
+pub const XK_x: c_int = 0x78;
+pub const XK_y: c_int = 0x79;
+pub const XK_z: c_int = 0x7A;
+
 pub fn vk_to_xk(vk: u16) -> c_int {
     match vk {
         VK_SPACE => XK_space,
@@ -712,7 +762,32 @@ pub fn vk_to_xk(vk: u16) -> c_int {
         VK_BACK => XK_BackSpace,
         VK_ESCAPE => XK_Escape,
         VK_DELETE => XK_Delete,
-        _ if (VK_A..=VK_Z).contains(&vk) => vk as c_int,
+        VK_A => XK_a,
+        VK_B => XK_b,
+        VK_C => XK_c,
+        VK_D => XK_d,
+        VK_E => XK_e,
+        VK_F => XK_f,
+        VK_G => XK_g,
+        VK_H => XK_h,
+        VK_I => XK_i,
+        VK_J => XK_j,
+        VK_K => XK_k,
+        VK_L => XK_l,
+        VK_M => XK_m,
+        VK_N => XK_n,
+        VK_O => XK_o,
+        VK_P => XK_p,
+        VK_Q => XK_q,
+        VK_R => XK_r,
+        VK_S => XK_s,
+        VK_T => XK_t,
+        VK_U => XK_u,
+        VK_V => XK_v,
+        VK_W => XK_w,
+        VK_X => XK_x,
+        VK_Y => XK_y,
+        VK_Z => XK_z,
         _ => vk as c_int,
     }
 }

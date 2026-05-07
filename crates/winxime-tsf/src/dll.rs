@@ -1,5 +1,7 @@
 use windows::Win32::Foundation::*;
-use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
+use windows::Win32::System::Com::*;
+use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetProcAddress, LoadLibraryW};
+use windows::Win32::UI::TextServices::*;
 use windows::core::*;
 use crate::class_factory::CLSID_XIME;
 
@@ -18,9 +20,8 @@ fn clsid_str() -> String {
 
 fn get_module_path() -> String {
     unsafe {
-        let handle = GetModuleHandleW(None).unwrap_or_default();
         let mut buf = [0u16; 260];
-        let len = GetModuleFileNameW(handle, &mut buf);
+        let len = GetModuleFileNameW(DLL_MODULE, &mut buf);
         if len > 0 {
             String::from_utf16_lossy(&buf[..len as usize])
         } else {
@@ -39,7 +40,7 @@ pub unsafe extern "system" fn DllGetClassObject(
         return E_POINTER;
     }
     if *rclsid != CLSID_XIME {
-        return HRESULT(-2147221231); // CLASS_E_CLASSNOTAVAILABLE
+        return HRESULT(-2147221231);
     }
     let factory = crate::ClassFactory;
     let unknown: IUnknown = factory.into();
@@ -68,16 +69,59 @@ pub unsafe extern "system" fn DllUnregisterServer() -> HRESULT {
     S_OK
 }
 
+static mut DLL_MODULE: HINSTANCE = HINSTANCE(std::ptr::null_mut());
+
 #[no_mangle]
 pub unsafe extern "system" fn DllMain(
-    _hinst: HINSTANCE,
+    hinst: HINSTANCE,
     _reason: u32,
     _reserved: *mut core::ffi::c_void,
 ) -> BOOL {
+    DLL_MODULE = hinst;
     BOOL(1)
 }
 
-fn do_register() -> std::io::Result<()> {
+fn wide_string(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+fn install_layout() {
+    let install_str = format!(
+        "0804:{}{{{}}}",
+        clsid_str(),
+        clsid_str(),
+    );
+    let wide: Vec<u16> = install_str.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        if let Ok(module) = LoadLibraryW(w!("input.dll")) {
+            if let Some(func) = std::mem::transmute::<_, Option<unsafe extern "system" fn(*const u16, u32) -> BOOL>>(
+                GetProcAddress(module, s!("InstallLayoutOrTip"))
+            ) {
+                let _ = func(wide.as_ptr(), 0);
+            }
+        }
+    }
+}
+
+fn uninstall_layout() {
+    let install_str = format!(
+        "0804:{}{{{}}}",
+        clsid_str(),
+        clsid_str(),
+    );
+    let wide: Vec<u16> = install_str.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        if let Ok(module) = LoadLibraryW(w!("input.dll")) {
+            if let Some(func) = std::mem::transmute::<_, Option<unsafe extern "system" fn(*const u16, u32) -> BOOL>>(
+                GetProcAddress(module, s!("InstallLayoutOrTip"))
+            ) {
+                let _ = func(wide.as_ptr(), 1);
+            }
+        }
+    }
+}
+
+fn do_register() -> Result<()> {
     use winreg::enums::*;
     use winreg::RegKey;
 
@@ -94,31 +138,63 @@ fn do_register() -> std::io::Result<()> {
     inproc.set_value("", &module_path)?;
     inproc.set_value("ThreadingModel", &"Apartment")?;
 
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let tip_path = format!("Software\\Microsoft\\CTF\\TIP\\{}", cs);
-    let (tip_key, _) = hklm.create_subkey(&tip_path)?;
-    tip_key.set_value("", &name)?;
+    let _ = hkcr.create_subkey(&format!("CLSID\\{}\\Implemented Categories\\{{34745C63-B2F0-4784-8B67-5E12C8701A31}}", cs));
 
-    let lang_path = format!("Language Profile\\0x{:04X}", TSF_LANGID);
-    let (lang_base, _) = tip_key.create_subkey(&lang_path)?;
-    let (profile, _) = lang_base.create_subkey(&cs)?;
-    profile.set_value("", &name)?;
-    profile.set_value("IconFile", &module_path)?;
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
 
-    let _ = tip_key.create_subkey("DisplayAttribute");
+        let mgr: ITfInputProcessorProfileMgr = CoCreateInstance(
+            &CLSID_TF_InputProcessorProfiles,
+            None,
+            CLSCTX_INPROC_SERVER,
+        )?;
 
-    let cat_path = format!("CLSID\\{}\\Implemented Categories", cs);
-    let (cat_key, _) = hkcr.create_subkey(&cat_path)?;
-    let _ = cat_key.create_subkey("{34745C63-B2F0-4784-8B67-5E12C8701A31}");
-    let _ = cat_key.create_subkey("{34745C63-B2F0-4784-8B67-5E12C8701A32}");
+        mgr.RegisterProfile(
+            &CLSID_XIME as *const GUID,
+            TSF_LANGID,
+            &CLSID_XIME as *const GUID,
+            &wide_string(name),
+            &wide_string(&module_path),
+            0,
+            None,
+            0,
+            BOOL(1),
+            0,
+        )?;
 
-    let categories = [
-        ("{34745C63-B2F0-4784-8B67-5E12C8701A31}", "Xime Text Input Processor"),
-        ("{34745C63-B2F0-4784-8B67-5E12C8701A32}", "Xime Keyboard"),
-    ];
-    for (catid, desc) in &categories {
-        let (ck, _) = hkcr.create_subkey(&format!("Component Categories\\{}", catid))?;
-        let _ = ck.set_value("", desc);
+        let profiles: ITfInputProcessorProfiles = mgr.cast()?;
+        profiles.EnableLanguageProfile(
+            &CLSID_XIME as *const GUID,
+            TSF_LANGID,
+            &CLSID_XIME as *const GUID,
+            BOOL(1),
+        )?;
+
+        let tsf_categories = [
+            GUID_TFCAT_TIP_KEYBOARD,
+            GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
+            GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+            GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+            GUID_TFCAT_TIPCAP_COMLESS,
+            GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+            GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
+        ];
+
+        if let Ok(cat_mgr) = CoCreateInstance::<_, ITfCategoryMgr>(
+            &CLSID_TF_CategoryMgr,
+            None,
+            CLSCTX_INPROC_SERVER,
+        ) {
+            for catid in &tsf_categories {
+                let _ = cat_mgr.RegisterCategory(
+                    &CLSID_XIME as *const GUID,
+                    catid as *const GUID,
+                    &CLSID_XIME as *const GUID,
+                );
+            }
+        }
+
+        install_layout();
     }
 
     Ok(())
@@ -130,10 +206,49 @@ fn do_unregister() {
 
     let cs = clsid_str();
 
+    uninstall_layout();
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        if let Ok(mgr) = CoCreateInstance::<_, ITfInputProcessorProfileMgr>(
+            &CLSID_TF_InputProcessorProfiles,
+            None,
+            CLSCTX_INPROC_SERVER,
+        ) {
+            let _ = mgr.UnregisterProfile(&CLSID_XIME as *const GUID, TSF_LANGID, &CLSID_XIME as *const GUID, 0);
+        }
+
+        let tsf_categories = [
+            GUID_TFCAT_TIP_KEYBOARD,
+            GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
+            GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+            GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+            GUID_TFCAT_TIPCAP_COMLESS,
+            GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+            GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
+        ];
+        if let Ok(cat_mgr) = CoCreateInstance::<_, ITfCategoryMgr>(
+            &CLSID_TF_CategoryMgr,
+            None,
+            CLSCTX_INPROC_SERVER,
+        ) {
+            for catid in &tsf_categories {
+                let _ = cat_mgr.UnregisterCategory(
+                    &CLSID_XIME as *const GUID,
+                    catid as *const GUID,
+                    &CLSID_XIME as *const GUID,
+                );
+            }
+        }
+    }
+
     let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
     let _ = hkcr.delete_subkey_all(&format!("CLSID\\{}", cs));
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let tip_path = format!("Software\\Microsoft\\CTF\\TIP\\{}", cs);
-    let _ = hklm.delete_subkey_all(&tip_path);
+    let _ = hklm.delete_subkey_all(&format!("Software\\Microsoft\\CTF\\TIP\\{}", cs));
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let _ = hkcu.delete_subkey_all(&format!("Software\\Microsoft\\CTF\\TIP\\{}", cs));
 }

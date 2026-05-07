@@ -5,8 +5,9 @@ members = [
     "crates/winxime-core",
     "crates/winxime-tsf",
     "crates/winxime-rime",
-    "crates/winxime-ui",
-    "crates/winxime",
+    "crates/winxime-ipc",
+    "crates/winxime-server",
+    "xtask",
 ]
 
 [workspace.package]
@@ -21,7 +22,8 @@ librime-sys = { path = "crates/librime-sys" }
 winxime-core = { path = "crates/winxime-core" }
 winxime-tsf = { path = "crates/winxime-tsf" }
 winxime-rime = { path = "crates/winxime-rime" }
-winxime-ui = { path = "crates/winxime-ui" }
+winxime-ipc = { path = "crates/winxime-ipc" }
+serde_json = "1"
 
 windows = { version = "0.58", features = [
     "implement",
