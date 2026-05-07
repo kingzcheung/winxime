@@ -211,6 +211,20 @@ struct XimeEditSession {
     output: RimeOutput,
     thread_mgr: Option<ITfThreadMgr>,
     composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
+    composition_sink: ITfCompositionSink,
+}
+
+#[implement(ITfCompositionSink)]
+struct CompositionSink {
+    composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
+}
+
+impl ITfCompositionSink_Impl for CompositionSink_Impl {
+    fn OnCompositionTerminated(&self, _ecwrite: u32, _pcomposition: Ref<'_, ITfComposition>) -> Result<()> {
+        log("OnCompositionTerminated: composition terminated");
+        *self.composition.lock().unwrap() = None;
+        Ok(())
+    }
 }
 
 impl ITfEditSession_Impl for XimeEditSession_Impl {
@@ -233,71 +247,97 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
         let context = unsafe { doc_mgr.GetBase() }?;
         crate::log::log("DoEditSession: got context");
 
-        if let Some(ref commit) = self.output.commit {
-            if !commit.is_empty() {
-                crate::log::log(&format!("DoEditSession: committing text '{}'", commit));
-                self.end_composition(ec);
-
-                // Use ITfInsertAtSelection to insert text (same as chewing-tsf)
-                use std::mem::ManuallyDrop;
-                use windows::Win32::UI::TextServices::{
-                    ITfInsertAtSelection, INSERT_TEXT_AT_SELECTION_FLAGS, TF_AE_END, TF_ANCHOR_END,
-                    TF_SELECTION,
-                };
-
-                crate::log::log("DoEditSession: getting ITfInsertAtSelection");
-                let insert_at_selection: ITfInsertAtSelection = context.cast()?;
-
-                let wide: Vec<u16> = commit.encode_utf16().collect();
-                crate::log::log(&format!(
-                    "DoEditSession: calling InsertTextAtSelection with '{}' ({} chars)",
-                    commit,
-                    wide.len()
-                ));
-
-                unsafe {
-                    let range = insert_at_selection.InsertTextAtSelection(
-                        ec,
-                        INSERT_TEXT_AT_SELECTION_FLAGS(0),
-                        &wide,
-                    )?;
-                    crate::log::log("DoEditSession: InsertTextAtSelection succeeded");
-
-                    range.Collapse(ec, TF_ANCHOR_END)?;
-                    crate::log::log("DoEditSession: range collapsed");
-
-                    // Set selection
-                    let mut selections = [TF_SELECTION::default(); 1];
-                    selections[0].range = ManuallyDrop::new(Some(range));
-                    selections[0].style.ase = TF_AE_END;
-                    selections[0].style.fInterimChar = FALSE;
-
-                    context.SetSelection(ec, &selections)?;
-                    crate::log::log("DoEditSession: selection set");
-
-                    let [TF_SELECTION { range, .. }] = selections;
-                    ManuallyDrop::into_inner(range);
-                }
-
-                crate::log::log("DoEditSession: commit done");
-                return Ok(());
-            }
-        }
+        // Handle commit and composition in one transaction (like chewing-tsf)
+        let commit_text = self.output.commit.clone().unwrap_or_default();
+        let preedit_text = self.output.preedit.clone();
 
         if self.output.composing {
             crate::log::log("DoEditSession: composing mode");
-            let preedit = self.output.preedit.as_str();
-            let comp = self.composition.lock().unwrap().take();
+            let comp = self.composition.lock().unwrap().clone();
 
-            if comp.is_some() {
-                crate::log::log("DoEditSession: update composition");
-                self.update_composition_text(&context, ec, preedit);
+            if let Some(ref composition) = comp {
+                crate::log::log("DoEditSession: update existing composition");
+                // Update composition: set full text (commit + preedit), then shift to separate
+                unsafe {
+                    if let Ok(range) = composition.GetRange() {
+                        let full_text = format!("{}{}", commit_text, preedit_text);
+                        let wide: Vec<u16> = full_text.encode_utf16().collect();
+                        crate::log::log(&format!("DoEditSession: setting full text '{}' ({} chars)", full_text, wide.len()));
+                        
+                        if range.SetText(ec, 0, &wide).is_ok() {
+                            crate::log::log("DoEditSession: SetText succeeded");
+                            
+                            // If there's commit text, shift composition start past it
+                            if !commit_text.is_empty() {
+                                let commit_len = commit_text.chars().count() as i32;
+                                let mut moved = 0;
+                                crate::log::log(&format!("DoEditSession: shifting start by {} chars", commit_len));
+                                range.ShiftStart(ec, commit_len, &mut moved, std::ptr::null_mut()).ok();
+                                composition.ShiftStart(ec, &range).ok();
+                                crate::log::log("DoEditSession: shift start done");
+                            }
+                            
+                            // Set cursor at end of preedit
+                            if let Ok(cursor_range) = range.Clone() {
+                                let preedit_len = preedit_text.chars().count() as i32;
+                                let mut moved = 0;
+                                cursor_range.Collapse(ec, TF_ANCHOR_START).ok();
+                                cursor_range.ShiftEnd(ec, preedit_len, &mut moved, std::ptr::null_mut()).ok();
+                                cursor_range.ShiftStart(ec, preedit_len, &mut moved, std::ptr::null_mut()).ok();
+                                
+                                use std::mem::ManuallyDrop;
+                                let mut selections = [TF_SELECTION::default(); 1];
+                                selections[0].range = ManuallyDrop::new(Some(cursor_range));
+                                selections[0].style.ase = TF_AE_END;
+                                selections[0].style.fInterimChar = FALSE;
+                                context.SetSelection(ec, &selections).ok();
+                                let [TF_SELECTION { range, .. }] = selections;
+                                ManuallyDrop::into_inner(range);
+                            }
+                        }
+                    }
+                }
             } else {
-                crate::log::log("DoEditSession: start composition");
-                self.start_composition(&context, ec, preedit);
+                crate::log::log("DoEditSession: start new composition");
+                self.start_composition(&context, ec, &preedit_text);
             }
+        } else if !commit_text.is_empty() {
+            crate::log::log(&format!("DoEditSession: committing '{}' and ending composition", commit_text));
+            
+            // Replace composition text with commit text first
+            let comp = self.composition.lock().unwrap().clone();
+            if let Some(ref composition) = comp {
+                unsafe {
+                    if let Ok(range) = composition.GetRange() {
+                        // Replace preedit with commit text
+                        let wide: Vec<u16> = commit_text.encode_utf16().collect();
+                        crate::log::log(&format!("DoEditSession: replacing composition with commit '{}'", commit_text));
+                        if range.SetText(ec, 0, &wide).is_ok() {
+                            // Set cursor at end of commit text
+                            let commit_len = commit_text.chars().count() as i32;
+                            let mut moved = 0;
+                            range.Collapse(ec, TF_ANCHOR_START).ok();
+                            range.ShiftEnd(ec, commit_len, &mut moved, std::ptr::null_mut()).ok();
+                            range.ShiftStart(ec, commit_len, &mut moved, std::ptr::null_mut()).ok();
+                            
+                            use std::mem::ManuallyDrop;
+                            let mut selections = [TF_SELECTION::default(); 1];
+                            selections[0].range = ManuallyDrop::new(Some(range));
+                            selections[0].style.ase = TF_AE_END;
+                            selections[0].style.fInterimChar = FALSE;
+                            context.SetSelection(ec, &selections).ok();
+                            let [TF_SELECTION { range, .. }] = selections;
+                            ManuallyDrop::into_inner(range);
+                        }
+                    }
+                }
+            }
+            
+            // Now end composition - the commit text becomes normal text
+            self.end_composition(ec);
+            crate::log::log("DoEditSession: commit done");
         } else {
-            crate::log::log("DoEditSession: end composition");
+            crate::log::log("DoEditSession: end composition (no commit)");
             self.end_composition(ec);
         }
 
@@ -336,8 +376,7 @@ impl XimeEditSession_Impl {
             };
             log("start_composition: got empty range");
 
-            let sink: Option<&ITfCompositionSink> = None;
-            match ctx_comp.StartComposition(ec, &range, sink) {
+            match ctx_comp.StartComposition(ec, &range, Some(&self.composition_sink)) {
                 Ok(comp) => {
                     log("start_composition: StartComposition succeeded");
                     let comp_range = match comp.GetRange() {
@@ -353,6 +392,22 @@ impl XimeEditSession_Impl {
                     match comp_range.SetText(ec, 0, &wide) {
                         Ok(_) => {
                             log("start_composition: SetText succeeded");
+                            // Set cursor at end of preedit
+                            let preedit_len = preedit.chars().count() as i32;
+                            let mut moved = 0;
+                            comp_range.Collapse(ec, TF_ANCHOR_START).ok();
+                            comp_range.ShiftEnd(ec, preedit_len, &mut moved, std::ptr::null_mut()).ok();
+                            comp_range.ShiftStart(ec, preedit_len, &mut moved, std::ptr::null_mut()).ok();
+                            
+                            use std::mem::ManuallyDrop;
+                            let mut selections = [TF_SELECTION::default(); 1];
+                            selections[0].range = ManuallyDrop::new(Some(comp_range));
+                            selections[0].style.ase = TF_AE_END;
+                            selections[0].style.fInterimChar = FALSE;
+                            context.SetSelection(ec, &selections).ok();
+                            let [TF_SELECTION { range, .. }] = selections;
+                            ManuallyDrop::into_inner(range);
+                            
                             *self.composition.lock().unwrap() = Some(comp);
                         }
                         Err(e) => {
@@ -536,10 +591,16 @@ impl KeyEventSink {
         let tid = self.client_id.load(std::sync::atomic::Ordering::Acquire);
         let mgr = self.thread_mgr.lock().unwrap().clone();
 
+        let composition_sink_impl = CompositionSink {
+            composition: self.composition.clone(),
+        };
+        let composition_sink: ITfCompositionSink = composition_sink_impl.into();
+
         let session = XimeEditSession {
             output,
             thread_mgr: mgr,
             composition: self.composition.clone(),
+            composition_sink,
         };
         let session_itf: ITfEditSession = session.into();
         log(&format!(
