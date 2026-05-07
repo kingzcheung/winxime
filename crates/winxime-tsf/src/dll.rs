@@ -129,26 +129,54 @@ fn do_register() -> Result<()> {
     let module_path = get_module_path();
     let name = "Xime 五笔输入法";
 
+    eprintln!("[Xime] DllRegisterServer: CLSID={}", cs);
+    eprintln!("[Xime] DllRegisterServer: module_path={}", module_path);
+
     let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
 
-    let (clsid_key, _) = hkcr.create_subkey(&format!("CLSID\\{}", cs))?;
-    clsid_key.set_value("", &name)?;
+    eprintln!("[Xime] Step 1: Creating CLSID registry key...");
+    let (clsid_key, _) = hkcr.create_subkey(&format!("CLSID\\{}", cs)).map_err(|e| {
+        eprintln!("[Xime] ERROR: Failed to create CLSID key: {}", e);
+        e
+    })?;
+    
+    eprintln!("[Xime] Step 2: Setting default value...");
+    clsid_key.set_value("", &name).map_err(|e| {
+        eprintln!("[Xime] ERROR: Failed to set default value: {}", e);
+        e
+    })?;
 
-    let (inproc, _) = clsid_key.create_subkey("InprocServer32")?;
-    inproc.set_value("", &module_path)?;
-    inproc.set_value("ThreadingModel", &"Apartment")?;
+    eprintln!("[Xime] Step 3: Creating InprocServer32...");
+    let (inproc, _) = clsid_key.create_subkey("InprocServer32").map_err(|e| {
+        eprintln!("[Xime] ERROR: Failed to create InprocServer32: {}", e);
+        e
+    })?;
+    inproc.set_value("", &module_path).map_err(|e| {
+        eprintln!("[Xime] ERROR: Failed to set module path: {}", e);
+        e
+    })?;
+    inproc.set_value("ThreadingModel", &"Apartment").map_err(|e| {
+        eprintln!("[Xime] ERROR: Failed to set ThreadingModel: {}", e);
+        e
+    })?;
 
     let _ = hkcr.create_subkey(&format!("CLSID\\{}\\Implemented Categories\\{{34745C63-B2F0-4784-8B67-5E12C8701A31}}", cs));
 
+    eprintln!("[Xime] Step 4: CoInitializeEx...");
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
 
+        eprintln!("[Xime] Step 5: CoCreateInstance ITfInputProcessorProfileMgr...");
         let mgr: ITfInputProcessorProfileMgr = CoCreateInstance(
             &CLSID_TF_InputProcessorProfiles,
             None,
             CLSCTX_INPROC_SERVER,
-        )?;
+        ).map_err(|e| {
+            eprintln!("[Xime] ERROR: Failed to create ITfInputProcessorProfileMgr: {:?}", e);
+            e
+        })?;
 
+        eprintln!("[Xime] Step 6: RegisterProfile...");
         mgr.RegisterProfile(
             &CLSID_XIME as *const GUID,
             TSF_LANGID,
@@ -160,16 +188,27 @@ fn do_register() -> Result<()> {
             0,
             BOOL(1),
             0,
-        )?;
+        ).map_err(|e| {
+            eprintln!("[Xime] ERROR: RegisterProfile failed: {:?}", e);
+            e
+        })?;
 
-        let profiles: ITfInputProcessorProfiles = mgr.cast()?;
+        eprintln!("[Xime] Step 7: EnableLanguageProfile...");
+        let profiles: ITfInputProcessorProfiles = mgr.cast().map_err(|e| {
+            eprintln!("[Xime] ERROR: Failed to cast to ITfInputProcessorProfiles: {:?}", e);
+            e
+        })?;
         profiles.EnableLanguageProfile(
             &CLSID_XIME as *const GUID,
             TSF_LANGID,
             &CLSID_XIME as *const GUID,
             BOOL(1),
-        )?;
+        ).map_err(|e| {
+            eprintln!("[Xime] ERROR: EnableLanguageProfile failed: {:?}", e);
+            e
+        })?;
 
+        eprintln!("[Xime] Step 8: Registering categories...");
         let tsf_categories = [
             GUID_TFCAT_TIP_KEYBOARD,
             GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
@@ -194,9 +233,11 @@ fn do_register() -> Result<()> {
             }
         }
 
+        eprintln!("[Xime] Step 9: install_layout...");
         install_layout();
     }
 
+    eprintln!("[Xime] DllRegisterServer completed successfully!");
     Ok(())
 }
 

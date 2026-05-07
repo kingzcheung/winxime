@@ -182,8 +182,11 @@ struct RimeOutput {
 impl RimeOutput {
     fn from_response(response: &IpcResponse) -> Self {
         let ctx = response.context.as_ref();
+        let commit = ctx.and_then(|c| c.commit.clone());
+        log(&format!("RimeOutput::from_response: context={}, commit={:?}, preedit='{}'", 
+            ctx.is_some(), commit, ctx.map(|c| c.preedit.str.clone()).unwrap_or_default()));
         Self {
-            commit: ctx.and_then(|c| c.commit.clone()),
+            commit,
             preedit: ctx.map(|c| c.preedit.str.clone()).unwrap_or_default(),
             candidates: ctx.map(|c| c.candidates.candies.iter().map(|t| t.str.clone()).collect()).unwrap_or_default(),
             composing: response.status.as_ref().map(|s| s.composing).unwrap_or(false),
@@ -218,31 +221,43 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
                 crate::log::log(&format!("DoEditSession: committing text '{}'", commit));
                 self.end_composition(ec);
 
-                let text_store: ITextStoreACP = context.cast()?;
-                let mut fetched: u32 = 0;
-                let mut selection = vec![TS_SELECTION_ACP::default(); 1];
-                unsafe { text_store.GetSelection(0, &mut selection, &mut fetched)?; }
+                // Use ITfInsertAtSelection to insert text (same as chewing-tsf)
+                use windows::Win32::UI::TextServices::{
+                    ITfInsertAtSelection, INSERT_TEXT_AT_SELECTION_FLAGS,
+                    TF_ANCHOR_END, TF_SELECTION, TF_AE_END,
+                };
+                use std::mem::ManuallyDrop;
 
-                if fetched > 0 {
-                    let sel = selection[0];
-                    crate::log::log(&format!("DoEditSession: selection start={}, end={}", sel.acpStart, sel.acpEnd));
-                    let wide: Vec<u16> = commit.encode_utf16().collect();
-                    unsafe {
-                        text_store.SetText(0, sel.acpStart, sel.acpEnd, &wide)?;
-                    }
-                    crate::log::log(&format!("DoEditSession: SetText succeeded, {} chars", wide.len()));
-                    let end = sel.acpStart + wide.len() as i32;
-                    unsafe {
-                        text_store.SetSelection(&[TS_SELECTION_ACP {
-                            acpStart: end,
-                            acpEnd: end,
-                            style: TS_SELECTIONSTYLE {
-                                ase: TsActiveSelEnd::default(),
-                                fInterimChar: BOOL(0),
-                            },
-                        }])?;
-                    }
+                crate::log::log("DoEditSession: getting ITfInsertAtSelection");
+                let insert_at_selection: ITfInsertAtSelection = context.cast()?;
+                
+                let wide: Vec<u16> = commit.encode_utf16().collect();
+                crate::log::log(&format!("DoEditSession: calling InsertTextAtSelection with '{}' ({} chars)", commit, wide.len()));
+                
+                unsafe {
+                    let range = insert_at_selection.InsertTextAtSelection(
+                        ec,
+                        INSERT_TEXT_AT_SELECTION_FLAGS(0),
+                        &wide,
+                    )?;
+                    crate::log::log("DoEditSession: InsertTextAtSelection succeeded");
+                    
+                    range.Collapse(ec, TF_ANCHOR_END)?;
+                    crate::log::log("DoEditSession: range collapsed");
+                    
+                    // Set selection
+                    let mut selections = [TF_SELECTION::default(); 1];
+                    selections[0].range = ManuallyDrop::new(Some(range));
+                    selections[0].style.ase = TF_AE_END;
+                    selections[0].style.fInterimChar = FALSE;
+                    
+                    context.SetSelection(ec, &selections)?;
+                    crate::log::log("DoEditSession: selection set");
+                    
+                    let [TF_SELECTION { range, .. }] = selections;
+                    ManuallyDrop::into_inner(range);
                 }
+                
                 crate::log::log("DoEditSession: commit done");
                 return Ok(());
             }

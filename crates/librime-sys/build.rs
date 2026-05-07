@@ -37,41 +37,38 @@ fn main() {
 }
 
 fn copy_rime_data(workspace_dir: &Path, librime_dir: &Path) {
-    let data_dir = workspace_dir.join("data");
-    let target_dir = librime_dir.join("data");
+    let minimal_dir = librime_dir.join("data").join("minimal");
+    let target_data_dir = workspace_dir.join("target").join("debug").join("data");
     
-    if !data_dir.exists() {
-        println!("cargo:warning=data directory not found, skipping copy");
+    if !minimal_dir.exists() {
+        println!("cargo:warning=minimal data directory not found, skipping copy");
         return;
     }
     
-    println!("cargo:warning=Copying rime data files...");
+    println!("cargo:warning=Copying minimal rime data to target...");
+    std::fs::create_dir_all(&target_data_dir).ok();
     
-    for entry in std::fs::read_dir(&data_dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        
-        if path.is_file() {
-            let ext = path.extension().and_then(|s| s.to_str());
-            if ext == Some("yaml") || ext == Some("lua") {
-                let target = target_dir.join(entry.file_name());
-                std::fs::copy(&path, &target).unwrap();
-                println!("cargo:warning=Copied: {}", entry.file_name().to_string_lossy());
-            }
+    let essential_files = ["default.yaml", "essay.txt", "symbols.yaml"];
+    for file in &essential_files {
+        let src = minimal_dir.join(file);
+        let dst = target_data_dir.join(file);
+        if src.exists() {
+            std::fs::copy(&src, &dst).ok();
+            println!("cargo:warning=Copied: {}", file);
         }
     }
     
     let opencc_src = librime_dir.join("share").join("opencc");
-    let opencc_dst = target_dir.join("opencc");
+    let opencc_dst = target_data_dir.join("opencc");
     
     if opencc_src.exists() {
-        std::fs::create_dir_all(&opencc_dst).unwrap();
-        for entry in std::fs::read_dir(&opencc_src).unwrap() {
+        std::fs::create_dir_all(&opencc_dst).ok();
+        for entry in std::fs::read_dir(&opencc_src).unwrap_or_else(|_| panic!("Failed to read opencc dir")) {
             let entry = entry.unwrap();
             let src_path = entry.path();
             if src_path.is_file() {
                 let dst_path = opencc_dst.join(entry.file_name());
-                std::fs::copy(&src_path, &dst_path).unwrap();
+                std::fs::copy(&src_path, &dst_path).ok();
             }
         }
         println!("cargo:warning=Copied opencc configuration files");

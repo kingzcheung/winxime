@@ -114,22 +114,26 @@ fn process_request(request: &IpcRequest, engine: &Arc<std::sync::Mutex<RimeEngin
                     println!("ProcessKeyEvent: keycode={}, modifiers={}", key.keycode, key.modifiers);
                     let result = eng.process_key(key.keycode, key.modifiers);
                     println!("  -> handled={}", result);
-                    if result {
-                        println!("  input: {:?}", eng.get_input());
-                    }
                     result
                 },
                 _ => false,
             };
             
+            // Only call get_commit ONCE and cache the result
             let commit = eng.get_commit();
+            println!("  commit: {:?}", commit);
+            println!("  input: {:?}", eng.get_input());
+            println!("  is_composing: {}", eng.is_composing());
+            
             let ipc_ctx = get_ipc_context(&eng, &commit);
             if handled {
                 update_context(&mut eng, context);
                 if commit.is_some() {
+                    println!("  -> hiding window (commit exists)");
                     window.hide();
                 } else if let Some(ctx) = &ipc_ctx {
                     if ctx.candidates.candies.is_empty() && ctx.preedit.str.is_empty() {
+                        println!("  -> hiding window (empty)");
                         window.hide();
                     } else {
                         let pos = context.read(|c| (c.caret_x, c.caret_y));

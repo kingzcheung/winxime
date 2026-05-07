@@ -1,0 +1,14 @@
+E20260507 21:33:35.324603 21232 engine.cc:312] error creating translator: 'lua_translator'
+E20260507 21:33:35.325763 21232 engine.cc:312] error creating translator: 'lua_translator'
+[IPC Server] Client handler started
+[IPC Server] Read 55 bytes
+[IPC Server] Received: {"command":"start_session","session_id":0,"data":null}
+[IPC Server] Sending: {"success":true,"session_id":0,"context":null,"status":null}
+[IPC Server] Response sent
+[IPC Server] Read 83 bytes
+[IPC Server] Received: {"command":"process_key_event","session_id":1,"data":{"keycode":97,"modifiers":0}}
+[IPC Server] Sending: {"success":true,"session_id":1,"context":{"preedit":{"str":"a"},"commit":null,"candidates":{"current_page":0,"total_pages":1,"highlighted":0,"is_last_page":true,"candies":[{"str":"工"},{"str":"戈"},{"str":"式"},{"str":"戒"},{"str":"节"}],"comments":[{"str":""},{"str":""},{"str":"~a"},{"str":"~a"},{"str":"~b"}],"labels":[]}},"status":{"schema_name":"","schema_id":"","ascii_mode":false,"composing":true}}
+[IPC Server] Response sent
+[IPC Server] Read 0 bytes
+[IPC Server] Connection closed
+[IPC Server] Handler exiting

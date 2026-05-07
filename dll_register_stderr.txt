@@ -1,0 +1,5 @@
+[Xime] DllRegisterServer: CLSID={5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}
+[Xime] DllRegisterServer: module_path=C:\Users\kingz\Documents\GitHub\winxime\target\debug\winxime_tsf.dll
+[Xime] Step 1: Creating CLSID registry key...
+[Xime] ERROR: Failed to create CLSID key: 拒绝访问。 (os error 5)
+DllRegisterServer failed: 拒绝访问。 (0x80070005)

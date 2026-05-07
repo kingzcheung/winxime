@@ -3,9 +3,10 @@
 ## 当前状态
 - [x] cargo build / cargo test 零错误零警告
 - [x] librime 引擎编译 (build.rs 自动化)
-- [x] 五笔配置: kingzcheung/rime-wubi → rime-data/
+- [x] 配置管理模块 (winxime-config)
 - [x] IPC 架构重构完成
 - [x] Server 正常启动并监听 Named Pipe
+- [x] Rime engine 初始化成功，加载 wubi86_jidian schema
 
 ## 架构重构 (2026-05-07)
 
@@ -31,6 +32,7 @@
 | winxime-tsf | TSF DLL, IPC Client | dll |
 | winxime-rime | Rime 引擎封装 | lib |
 | winxime-core | 共享数据结构 | lib |
+| winxime-config | 配置管理、基础配置自动加载 | lib |
 | librime-sys | librime FFI | lib |
 
 ## 实现情况
@@ -61,6 +63,13 @@
 ### 5. winxime-rime - 完成
 - [x] Rime API 封装
 
+### 6. winxime-config - 完成 (2026-05-07)
+- [x] 配置结构定义 (XimeConfig)
+- [x] 双目录管理: shared_data_dir + user_data_dir
+- [x] 运行时检查必需配置
+- [x] 自动下载默认配置 (https://github.com/kingzcheang/rime-wubi)
+- [x] 开发模式 vs 生产模式自动切换
+
 ## 运行方式
 
 ### 开发测试
@@ -87,6 +96,8 @@ cargo run -p xtask -- run-dev
 ## 下一步
 1. ~~更新 winxime-tsf 使用 IPC Client 连接 Server~~ (已完成)
 2. ~~实现 winxime-server IPC Server~~ (已完成)
-3. 测试 IPC 通信流程（DLL 连接 Server）
-4. 完善候选词窗口动态渲染
-5. 注册 DLL 并验证端到端功能
+3. ~~添加 winxime-config 配置模块~~ (已完成 2026-05-07)
+4. ~~测试配置加载~~ (Server 成功启动，wubi86_jidian schema 已加载)
+5. 测试按键处理（注册 DLL，测试端到端功能）
+6. 完善候选词窗口动态渲染
+7. 系统托盘图标
