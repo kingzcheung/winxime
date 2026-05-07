@@ -138,28 +138,29 @@ fn process_request(
                 _ => false,
             };
 
-            // Only call get_commit ONCE and cache the result
             let commit = eng.get_commit();
             println!("  commit: {:?}", commit);
             println!("  input: {:?}", eng.get_input());
             println!("  is_composing: {}", eng.is_composing());
 
             let ipc_ctx = get_ipc_context(&eng, &commit);
-            if handled {
-                update_context(&mut eng, context);
-                if commit.is_some() {
-                    println!("  -> hiding window (commit exists)");
+            update_context(&mut eng, context);
+            
+            if commit.is_some() {
+                println!("  -> hiding window (commit exists)");
+                window.hide();
+            } else if !eng.is_composing() {
+                println!("  -> hiding window (not composing)");
+                window.hide();
+            } else if let Some(ctx) = &ipc_ctx {
+                if ctx.candidates.candies.is_empty() && ctx.preedit.str.is_empty() {
+                    println!("  -> hiding window (empty)");
                     window.hide();
-                } else if let Some(ctx) = &ipc_ctx {
-                    if ctx.candidates.candies.is_empty() && ctx.preedit.str.is_empty() {
-                        println!("  -> hiding window (empty)");
-                        window.hide();
-                    } else {
-                        let pos = context.read(|c| (c.caret_x, c.caret_y));
-                        println!("  -> showing window at ({}, {})", pos.0, pos.1);
-                        window.show(pos.0, pos.1);
-                        window.update(ctx);
-                    }
+                } else {
+                    let pos = context.read(|c| (c.caret_x, c.caret_y));
+                    println!("  -> showing window at ({}, {})", pos.0, pos.1);
+                    window.show(pos.0, pos.1);
+                    window.update(ctx);
                 }
             }
 

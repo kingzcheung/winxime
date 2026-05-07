@@ -307,70 +307,79 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
 
 impl XimeEditSession_Impl {
     fn start_composition(&self, context: &ITfContext, ec: u32, preedit: &str) {
-        let text_store: ITextStoreACP = match context.cast() {
+        log(&format!("start_composition: preedit='{}'", preedit));
+        use windows::Win32::UI::TextServices::{ITfInsertAtSelection, TF_IAS_QUERYONLY};
+        
+        let insert_at_selection: ITfInsertAtSelection = match context.cast() {
             Ok(s) => s,
-            Err(_) => return,
+            Err(e) => {
+                log(&format!("start_composition: cast ITfInsertAtSelection failed: {:?}", e));
+                return;
+            }
         };
-
-        let mut fetched: u32 = 0;
-        let mut selection = vec![TS_SELECTION_ACP::default(); 1];
-        if unsafe { text_store.GetSelection(0, &mut selection, &mut fetched) }.is_err()
-            || fetched == 0
-        {
-            return;
-        }
-        let sel = selection[0];
 
         let ctx_comp: ITfContextComposition = match context.cast() {
             Ok(c) => c,
-            Err(_) => return,
-        };
-
-        let range_acp: ITfRangeACP = match text_store.cast() {
-            Ok(r) => r,
-            Err(_) => return,
-        };
-
-        let range: ITfRange = match range_acp.cast() {
-            Ok(r) => r,
-            Err(_) => return,
-        };
-
-        let none_sink: Option<&ITfCompositionSink> = None;
-        match unsafe { ctx_comp.StartComposition(ec, &range, none_sink) } {
-            Ok(comp) => {
-                let wide: Vec<u16> = preedit.encode_utf16().collect();
-                unsafe {
-                    text_store
-                        .SetText(0, sel.acpStart, sel.acpStart, &wide)
-                        .ok();
-                }
-                *self.composition.lock().unwrap() = Some(comp);
+            Err(e) => {
+                log(&format!("start_composition: cast ITfContextComposition failed: {:?}", e));
+                return;
             }
-            Err(_) => {}
+        };
+
+        unsafe {
+            let range = match insert_at_selection.InsertTextAtSelection(ec, TF_IAS_QUERYONLY, &[]) {
+                Ok(r) => r,
+                Err(e) => {
+                    log(&format!("start_composition: InsertTextAtSelection failed: {:?}", e));
+                    return;
+                }
+            };
+            log("start_composition: got empty range");
+
+            let sink: Option<&ITfCompositionSink> = None;
+            match ctx_comp.StartComposition(ec, &range, sink) {
+                Ok(comp) => {
+                    log("start_composition: StartComposition succeeded");
+                    let comp_range = match comp.GetRange() {
+                        Ok(r) => r,
+                        Err(e) => {
+                            log(&format!("start_composition: GetRange failed: {:?}", e));
+                            return;
+                        }
+                    };
+                    
+                    let wide: Vec<u16> = preedit.encode_utf16().collect();
+                    log(&format!("start_composition: setting text {} chars", wide.len()));
+                    match comp_range.SetText(ec, 0, &wide) {
+                        Ok(_) => {
+                            log("start_composition: SetText succeeded");
+                            *self.composition.lock().unwrap() = Some(comp);
+                        }
+                        Err(e) => {
+                            log(&format!("start_composition: SetText failed: {:?}", e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    log(&format!("start_composition: StartComposition failed: {:?}", e));
+                }
+            }
         }
     }
 
-    fn update_composition_text(&self, _context: &ITfContext, _ec: u32, preedit: &str) {
-        let text_store: ITextStoreACP = match _context.cast() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-
-        let mut fetched: u32 = 0;
-        let mut selection = vec![TS_SELECTION_ACP::default(); 1];
-        if unsafe { text_store.GetSelection(0, &mut selection, &mut fetched) }.is_err()
-            || fetched == 0
-        {
-            return;
-        }
-        let sel = selection[0];
-
-        let wide: Vec<u16> = preedit.encode_utf16().collect();
-        unsafe {
-            text_store
-                .SetText(0, sel.acpStart, sel.acpStart, &wide)
-                .ok();
+    fn update_composition_text(&self, _context: &ITfContext, ec: u32, preedit: &str) {
+        log(&format!("update_composition_text: preedit='{}'", preedit));
+        let comp = self.composition.lock().unwrap();
+        if let Some(ref composition) = *comp {
+            unsafe {
+                if let Ok(range) = composition.GetRange() {
+                    let wide: Vec<u16> = preedit.encode_utf16().collect();
+                    match range.SetText(ec, 0, &wide) {
+                        Ok(_) => log("update_composition_text: SetText succeeded"),
+                        Err(e) => log(&format!("update_composition_text: SetText failed: {:?}", e)),
+                    }
+                }
+            }
         }
     }
 

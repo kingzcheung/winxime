@@ -165,11 +165,6 @@ impl CandidateWindow {
         if ptr != 0 {
             let ctx = &*(ptr as *const Context);
 
-            let preedit = &ctx.preedit.str;
-            if !preedit.is_empty() {
-                win32_text(hdc, preedit, 8, 8, 192, 28, 0x333333);
-            }
-
             for (i, cand) in ctx.candidates.candies.iter().enumerate() {
                 if i >= 5 {
                     break;
