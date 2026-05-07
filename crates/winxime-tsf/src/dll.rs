@@ -1,27 +1,34 @@
+use crate::class_factory::CLSID_XIME;
 use windows::Win32::Foundation::*;
 use windows::Win32::System::Com::*;
 use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetProcAddress, LoadLibraryW};
+use windows::Win32::UI::Input::KeyboardAndMouse::HKL;
 use windows::Win32::UI::TextServices::*;
-use windows::core::*;
-use crate::class_factory::CLSID_XIME;
+use windows_core::*;
 
 const TSF_LANGID: u16 = 0x0804;
 
 fn clsid_str() -> String {
     format!(
         "{{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-        CLSID_XIME.data1, CLSID_XIME.data2, CLSID_XIME.data3,
-        CLSID_XIME.data4[0], CLSID_XIME.data4[1],
-        CLSID_XIME.data4[2], CLSID_XIME.data4[3],
-        CLSID_XIME.data4[4], CLSID_XIME.data4[5],
-        CLSID_XIME.data4[6], CLSID_XIME.data4[7],
+        CLSID_XIME.data1,
+        CLSID_XIME.data2,
+        CLSID_XIME.data3,
+        CLSID_XIME.data4[0],
+        CLSID_XIME.data4[1],
+        CLSID_XIME.data4[2],
+        CLSID_XIME.data4[3],
+        CLSID_XIME.data4[4],
+        CLSID_XIME.data4[5],
+        CLSID_XIME.data4[6],
+        CLSID_XIME.data4[7],
     )
 }
 
 fn get_module_path() -> String {
     unsafe {
         let mut buf = [0u16; 260];
-        let len = GetModuleFileNameW(DLL_MODULE, &mut buf);
+        let len = GetModuleFileNameW(Some(HMODULE(DLL_MODULE.0)), &mut buf);
         if len > 0 {
             String::from_utf16_lossy(&buf[..len as usize])
         } else {
@@ -86,17 +93,18 @@ fn wide_string(s: &str) -> Vec<u16> {
 }
 
 fn install_layout() {
-    let install_str = format!(
-        "0804:{}{{{}}}",
-        clsid_str(),
-        clsid_str(),
-    );
-    let wide: Vec<u16> = install_str.encode_utf16().chain(std::iter::once(0)).collect();
+    let install_str = format!("0804:{}{{{}}}", clsid_str(), clsid_str(),);
+    let wide: Vec<u16> = install_str
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
     unsafe {
         if let Ok(module) = LoadLibraryW(w!("input.dll")) {
-            if let Some(func) = std::mem::transmute::<_, Option<unsafe extern "system" fn(*const u16, u32) -> BOOL>>(
-                GetProcAddress(module, s!("InstallLayoutOrTip"))
-            ) {
+            if let Some(func) = std::mem::transmute::<
+                _,
+                Option<unsafe extern "system" fn(*const u16, u32) -> BOOL>,
+            >(GetProcAddress(module, s!("InstallLayoutOrTip")))
+            {
                 let _ = func(wide.as_ptr(), 0);
             }
         }
@@ -104,17 +112,18 @@ fn install_layout() {
 }
 
 fn uninstall_layout() {
-    let install_str = format!(
-        "0804:{}{{{}}}",
-        clsid_str(),
-        clsid_str(),
-    );
-    let wide: Vec<u16> = install_str.encode_utf16().chain(std::iter::once(0)).collect();
+    let install_str = format!("0804:{}{{{}}}", clsid_str(), clsid_str(),);
+    let wide: Vec<u16> = install_str
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
     unsafe {
         if let Ok(module) = LoadLibraryW(w!("input.dll")) {
-            if let Some(func) = std::mem::transmute::<_, Option<unsafe extern "system" fn(*const u16, u32) -> BOOL>>(
-                GetProcAddress(module, s!("InstallLayoutOrTip"))
-            ) {
+            if let Some(func) = std::mem::transmute::<
+                _,
+                Option<unsafe extern "system" fn(*const u16, u32) -> BOOL>,
+            >(GetProcAddress(module, s!("InstallLayoutOrTip")))
+            {
                 let _ = func(wide.as_ptr(), 1);
             }
         }
@@ -139,7 +148,7 @@ fn do_register() -> Result<()> {
         eprintln!("[Xime] ERROR: Failed to create CLSID key: {}", e);
         e
     })?;
-    
+
     eprintln!("[Xime] Step 2: Setting default value...");
     clsid_key.set_value("", &name).map_err(|e| {
         eprintln!("[Xime] ERROR: Failed to set default value: {}", e);
@@ -155,26 +164,32 @@ fn do_register() -> Result<()> {
         eprintln!("[Xime] ERROR: Failed to set module path: {}", e);
         e
     })?;
-    inproc.set_value("ThreadingModel", &"Apartment").map_err(|e| {
-        eprintln!("[Xime] ERROR: Failed to set ThreadingModel: {}", e);
-        e
-    })?;
+    inproc
+        .set_value("ThreadingModel", &"Apartment")
+        .map_err(|e| {
+            eprintln!("[Xime] ERROR: Failed to set ThreadingModel: {}", e);
+            e
+        })?;
 
-    let _ = hkcr.create_subkey(&format!("CLSID\\{}\\Implemented Categories\\{{34745C63-B2F0-4784-8B67-5E12C8701A31}}", cs));
+    let _ = hkcr.create_subkey(&format!(
+        "CLSID\\{}\\Implemented Categories\\{{34745C63-B2F0-4784-8B67-5E12C8701A31}}",
+        cs
+    ));
 
     eprintln!("[Xime] Step 4: CoInitializeEx...");
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
 
         eprintln!("[Xime] Step 5: CoCreateInstance ITfInputProcessorProfileMgr...");
-        let mgr: ITfInputProcessorProfileMgr = CoCreateInstance(
-            &CLSID_TF_InputProcessorProfiles,
-            None,
-            CLSCTX_INPROC_SERVER,
-        ).map_err(|e| {
-            eprintln!("[Xime] ERROR: Failed to create ITfInputProcessorProfileMgr: {:?}", e);
-            e
-        })?;
+        let mgr: ITfInputProcessorProfileMgr =
+            CoCreateInstance(&CLSID_TF_InputProcessorProfiles, None, CLSCTX_INPROC_SERVER)
+                .map_err(|e| {
+                    eprintln!(
+                        "[Xime] ERROR: Failed to create ITfInputProcessorProfileMgr: {:?}",
+                        e
+                    );
+                    e
+                })?;
 
         eprintln!("[Xime] Step 6: RegisterProfile...");
         mgr.RegisterProfile(
@@ -184,29 +199,35 @@ fn do_register() -> Result<()> {
             &wide_string(name),
             &wide_string(&module_path),
             0,
-            None,
+            HKL::default(),
             0,
-            BOOL(1),
+            true,
             0,
-        ).map_err(|e| {
-            eprintln!("[Xime] ERROR: RegisterProfile failed: {:?}", e);
+        )
+        .map_err(|e| {
+            eprintln!("  -> ERROR: RegisterProfile: {:?}", e);
             e
         })?;
 
         eprintln!("[Xime] Step 7: EnableLanguageProfile...");
         let profiles: ITfInputProcessorProfiles = mgr.cast().map_err(|e| {
-            eprintln!("[Xime] ERROR: Failed to cast to ITfInputProcessorProfiles: {:?}", e);
+            eprintln!(
+                "[Xime] ERROR: Failed to cast to ITfInputProcessorProfiles: {:?}",
+                e
+            );
             e
         })?;
-        profiles.EnableLanguageProfile(
-            &CLSID_XIME as *const GUID,
-            TSF_LANGID,
-            &CLSID_XIME as *const GUID,
-            BOOL(1),
-        ).map_err(|e| {
-            eprintln!("[Xime] ERROR: EnableLanguageProfile failed: {:?}", e);
-            e
-        })?;
+        profiles
+            .EnableLanguageProfile(
+                &CLSID_XIME as *const GUID,
+                TSF_LANGID,
+                &CLSID_XIME as *const GUID,
+                true,
+            )
+            .map_err(|e| {
+                eprintln!("  -> ERROR: EnableLanguageProfile: {:?}", e);
+                e
+            })?;
 
         eprintln!("[Xime] Step 8: Registering categories...");
         let tsf_categories = [
@@ -219,11 +240,9 @@ fn do_register() -> Result<()> {
             GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
         ];
 
-        if let Ok(cat_mgr) = CoCreateInstance::<_, ITfCategoryMgr>(
-            &CLSID_TF_CategoryMgr,
-            None,
-            CLSCTX_INPROC_SERVER,
-        ) {
+        if let Ok(cat_mgr) =
+            CoCreateInstance::<_, ITfCategoryMgr>(&CLSID_TF_CategoryMgr, None, CLSCTX_INPROC_SERVER)
+        {
             for catid in &tsf_categories {
                 let _ = cat_mgr.RegisterCategory(
                     &CLSID_XIME as *const GUID,
@@ -257,7 +276,12 @@ fn do_unregister() {
             None,
             CLSCTX_INPROC_SERVER,
         ) {
-            let _ = mgr.UnregisterProfile(&CLSID_XIME as *const GUID, TSF_LANGID, &CLSID_XIME as *const GUID, 0);
+            let _ = mgr.UnregisterProfile(
+                &CLSID_XIME as *const GUID,
+                TSF_LANGID,
+                &CLSID_XIME as *const GUID,
+                0,
+            );
         }
 
         let tsf_categories = [
@@ -269,11 +293,9 @@ fn do_unregister() {
             GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
             GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
         ];
-        if let Ok(cat_mgr) = CoCreateInstance::<_, ITfCategoryMgr>(
-            &CLSID_TF_CategoryMgr,
-            None,
-            CLSCTX_INPROC_SERVER,
-        ) {
+        if let Ok(cat_mgr) =
+            CoCreateInstance::<_, ITfCategoryMgr>(&CLSID_TF_CategoryMgr, None, CLSCTX_INPROC_SERVER)
+        {
             for catid in &tsf_categories {
                 let _ = cat_mgr.UnregisterCategory(
                     &CLSID_XIME as *const GUID,

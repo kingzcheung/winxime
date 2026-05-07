@@ -18,11 +18,7 @@ pub fn init_log() {
     let mut guard = LOG_FILE.lock().unwrap();
     if guard.is_none() {
         if let Some(path) = get_log_path() {
-            if let Ok(file) = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-            {
+            if let Ok(file) = OpenOptions::new().create(true).append(true).open(&path) {
                 *guard = Some(file);
             }
         }
@@ -32,10 +28,15 @@ pub fn init_log() {
 pub fn log(msg: &str) {
     let mut guard = LOG_FILE.lock().unwrap();
     if let Some(ref mut file) = guard.as_mut() {
-        let _ = writeln!(file, "[{}] {}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(), msg);
+        let _ = writeln!(
+            file,
+            "[{}] {}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            msg
+        );
         let _ = file.flush();
     }
 }

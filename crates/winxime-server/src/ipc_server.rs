@@ -1,20 +1,24 @@
-use std::sync::Arc;
-use std::io::{BufReader, BufWriter, BufRead, Write};
-use winxime_core::SharedInputContext;
-use winxime_ipc::{IpcRequest, IpcResponse, IpcCommand, IpcRequestData, get_pipe_path};
-use winxime_rime::RimeEngine;
 use crate::ui::CandidateWindow;
-use interprocess::os::windows::named_pipe::{PipeListenerOptions, pipe_mode::Bytes};
+use interprocess::os::windows::named_pipe::{pipe_mode::Bytes, PipeListenerOptions};
 use interprocess::os::windows::security_descriptor::SecurityDescriptor;
+use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::sync::Arc;
 use widestring::u16cstr;
+use winxime_core::SharedInputContext;
+use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
+use winxime_rime::RimeEngine;
 
-pub fn run_ipc_server(engine: Arc<std::sync::Mutex<RimeEngine>>, context: Arc<SharedInputContext>, window: Arc<CandidateWindow>) {
+pub fn run_ipc_server(
+    engine: Arc<std::sync::Mutex<RimeEngine>>,
+    context: Arc<SharedInputContext>,
+    window: Arc<CandidateWindow>,
+) {
     let pipe_path = get_pipe_path();
     println!("Winxime Server: creating named pipe at {}", pipe_path);
-    
+
     let sd = SecurityDescriptor::deserialize(u16cstr!("D:(A;;GA;;;WD)"))
         .expect("Failed to create security descriptor");
-    
+
     let listener = match PipeListenerOptions::new()
         .path(pipe_path)
         .mode(interprocess::os::windows::named_pipe::PipeMode::Bytes)
@@ -27,9 +31,9 @@ pub fn run_ipc_server(engine: Arc<std::sync::Mutex<RimeEngine>>, context: Arc<Sh
             return;
         }
     };
-    
+
     println!("Waiting for client connections...");
-    
+
     for pipe in listener.incoming() {
         match pipe {
             Ok(p) => {
@@ -48,83 +52,98 @@ pub fn run_ipc_server(engine: Arc<std::sync::Mutex<RimeEngine>>, context: Arc<Sh
     }
 }
 
-fn handle_connection(pipe: interprocess::os::windows::named_pipe::DuplexPipeStream<Bytes>, engine: Arc<std::sync::Mutex<RimeEngine>>, context: Arc<SharedInputContext>, window: Arc<CandidateWindow>) {
+fn handle_connection(
+    pipe: interprocess::os::windows::named_pipe::DuplexPipeStream<Bytes>,
+    engine: Arc<std::sync::Mutex<RimeEngine>>,
+    context: Arc<SharedInputContext>,
+    window: Arc<CandidateWindow>,
+) {
     let (recv, send) = pipe.split();
     let mut reader = BufReader::new(recv);
     let mut writer = BufWriter::new(send);
-    
+
     loop {
         let mut buffer = Vec::new();
         if let Err(_) = reader.read_until(0, &mut buffer) {
             break;
         }
-        
+
         if buffer.last() != Some(&0) {
             break;
         }
         buffer.pop();
-        
+
         if buffer.is_empty() {
             continue;
         }
-        
+
         let request: IpcRequest = match serde_json::from_slice(&buffer) {
             Ok(r) => r,
             Err(_) => continue,
         };
         println!("Received request: {:?}", request.command);
-        
+
         let response = process_request(&request, &engine, &context, &window);
-        
+
         let json = match serde_json::to_vec(&response) {
             Ok(j) => j,
             Err(_) => continue,
         };
-        if writer.write_all(&json).is_err() { break; }
-        if writer.write_all(&[0]).is_err() { break; }
-        if writer.flush().is_err() { break; }
+        if writer.write_all(&json).is_err() {
+            break;
+        }
+        if writer.write_all(&[0]).is_err() {
+            break;
+        }
+        if writer.flush().is_err() {
+            break;
+        }
     }
 }
 
-fn process_request(request: &IpcRequest, engine: &Arc<std::sync::Mutex<RimeEngine>>, context: &Arc<SharedInputContext>, window: &Arc<CandidateWindow>) -> IpcResponse {
+fn process_request(
+    request: &IpcRequest,
+    engine: &Arc<std::sync::Mutex<RimeEngine>>,
+    context: &Arc<SharedInputContext>,
+    window: &Arc<CandidateWindow>,
+) -> IpcResponse {
     let mut eng = engine.lock().unwrap();
-    
+
     match request.command {
-        IpcCommand::Echo => {
-            IpcResponse {
-                success: true,
-                session_id: request.session_id,
-                context: None,
-                status: None,
-            }
-        }
-        
-        IpcCommand::StartSession | IpcCommand::EndSession => {
-            IpcResponse {
-                success: true,
-                session_id: request.session_id,
-                context: None,
-                status: None,
-            }
-        }
-        
+        IpcCommand::Echo => IpcResponse {
+            success: true,
+            session_id: request.session_id,
+            context: None,
+            status: None,
+        },
+
+        IpcCommand::StartSession | IpcCommand::EndSession => IpcResponse {
+            success: true,
+            session_id: request.session_id,
+            context: None,
+            status: None,
+        },
+
         IpcCommand::ProcessKeyEvent => {
             let handled = match &request.data {
                 IpcRequestData::KeyEvent(key) => {
-                    println!("ProcessKeyEvent: keycode={}, modifiers={}", key.keycode, key.modifiers);
+                    println!(
+                        "ProcessKeyEvent: keycode={}, modifiers={}",
+                        key.keycode, key.modifiers
+                    );
                     let result = eng.process_key(key.keycode, key.modifiers);
                     println!("  -> handled={}", result);
                     result
-                },
+                }
                 _ => false,
             };
-            
+
             // Only call get_commit ONCE and cache the result
             let commit = eng.get_commit();
             println!("  commit: {:?}", commit);
             println!("  input: {:?}", eng.get_input());
             println!("  is_composing: {}", eng.is_composing());
-            
+
             let ipc_ctx = get_ipc_context(&eng, &commit);
             if handled {
                 update_context(&mut eng, context);
@@ -137,12 +156,13 @@ fn process_request(request: &IpcRequest, engine: &Arc<std::sync::Mutex<RimeEngin
                         window.hide();
                     } else {
                         let pos = context.read(|c| (c.caret_x, c.caret_y));
+                        println!("  -> showing window at ({}, {})", pos.0, pos.1);
                         window.show(pos.0, pos.1);
                         window.update(ctx);
                     }
                 }
             }
-            
+
             IpcResponse {
                 success: handled,
                 session_id: request.session_id,
@@ -150,15 +170,33 @@ fn process_request(request: &IpcRequest, engine: &Arc<std::sync::Mutex<RimeEngin
                 status: Some(get_ipc_status(&eng)),
             }
         }
-        
-        _ => {
+
+        IpcCommand::UpdateInputPosition => {
+            match &request.data {
+                IpcRequestData::Position(pos) => {
+                    println!("UpdateInputPosition: x={}, y={}", pos.x, pos.y);
+                    context.update(|ctx| {
+                        ctx.caret_x = pos.x;
+                        ctx.caret_y = pos.y;
+                    });
+                }
+                _ => {}
+            }
+
             IpcResponse {
-                success: false,
+                success: true,
                 session_id: request.session_id,
                 context: None,
                 status: None,
             }
         }
+
+        _ => IpcResponse {
+            success: false,
+            session_id: request.session_id,
+            context: None,
+            status: None,
+        },
     }
 }
 
@@ -167,12 +205,15 @@ fn update_context(eng: &mut RimeEngine, context: &Arc<SharedInputContext>) {
         ctx.is_composing = eng.is_composing();
         ctx.composition.preedit = eng.get_input().unwrap_or_default();
         ctx.commit_text = eng.get_commit().unwrap_or_default();
-        
+
         let candidates = eng.get_candidates();
-        ctx.candidates = candidates.iter().map(|c| winxime_core::CandidateInfo {
-            text: c.text.clone(),
-            comment: c.comment.clone().unwrap_or_default(),
-        }).collect();
+        ctx.candidates = candidates
+            .iter()
+            .map(|c| winxime_core::CandidateInfo {
+                text: c.text.clone(),
+                comment: c.comment.clone().unwrap_or_default(),
+            })
+            .collect();
     });
 }
 
@@ -187,11 +228,11 @@ fn get_ipc_status(eng: &RimeEngine) -> winxime_ipc::Status {
 
 fn get_ipc_context(eng: &RimeEngine, commit: &Option<String>) -> Option<winxime_ipc::Context> {
     let composing = eng.is_composing();
-    
+
     if !composing && commit.is_none() {
         return None;
     }
-    
+
     Some(winxime_ipc::Context {
         preedit: winxime_ipc::Text {
             str: eng.get_input().unwrap_or_default(),
@@ -202,12 +243,20 @@ fn get_ipc_context(eng: &RimeEngine, commit: &Option<String>) -> Option<winxime_
             total_pages: 1,
             highlighted: 0,
             is_last_page: true,
-            candies: eng.get_candidates().iter().map(|c| winxime_ipc::Text {
-                str: c.text.clone(),
-            }).collect(),
-            comments: eng.get_candidates().iter().map(|c| winxime_ipc::Text {
-                str: c.comment.clone().unwrap_or_default(),
-            }).collect(),
+            candies: eng
+                .get_candidates()
+                .iter()
+                .map(|c| winxime_ipc::Text {
+                    str: c.text.clone(),
+                })
+                .collect(),
+            comments: eng
+                .get_candidates()
+                .iter()
+                .map(|c| winxime_ipc::Text {
+                    str: c.comment.clone().unwrap_or_default(),
+                })
+                .collect(),
             labels: Vec::new(),
         },
     })

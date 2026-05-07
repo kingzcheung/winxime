@@ -12,9 +12,8 @@ crate-type = ["cdylib"]
 winxime-core.workspace = true
 winxime-ipc.workspace = true
 librime-sys.workspace = true
-windows-core = "0.58"
-windows = { version = "0.58", features = [
-    "implement",
+windows-core = "0.62.2"
+windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_System_LibraryLoader",

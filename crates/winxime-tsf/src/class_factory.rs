@@ -1,5 +1,5 @@
 use windows::Win32::System::Com::*;
-use windows::core::*;
+use windows_core::*;
 
 pub const CLSID_XIME: GUID = GUID {
     data1: 0x5C1E4D8A,
@@ -14,11 +14,11 @@ pub struct ClassFactory;
 impl IClassFactory_Impl for ClassFactory_Impl {
     fn CreateInstance(
         &self,
-        punkouter: Option<&IUnknown>,
+        punkouter: Ref<'_, IUnknown>,
         riid: *const GUID,
         ppvobject: *mut *mut core::ffi::c_void,
     ) -> Result<()> {
-        if punkouter.is_some() {
+        if punkouter.as_ref().is_some() {
             return Err(Error::from(HRESULT(-2147221232)));
         }
 
@@ -26,11 +26,15 @@ impl IClassFactory_Impl for ClassFactory_Impl {
         let unknown: IUnknown = service.into();
         unsafe {
             let hr = Interface::query(&unknown, riid, ppvobject);
-            if hr.is_ok() { Ok(()) } else { Err(Error::from(hr)) }
+            if hr.is_ok() {
+                Ok(())
+            } else {
+                Err(Error::from(hr))
+            }
         }
     }
 
-    fn LockServer(&self, _flock: windows::Win32::Foundation::BOOL) -> Result<()> {
+    fn LockServer(&self, _flock: BOOL) -> Result<()> {
         Ok(())
     }
 }

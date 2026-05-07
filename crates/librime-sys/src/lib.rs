@@ -16,7 +16,8 @@ macro_rules! rime_struct {
     ($var:ident : $t:ty) => {
         let $var = std::mem::MaybeUninit::<$t>::zeroed();
         let mut $var = unsafe { $var.assume_init() };
-        $var.data_size = (std::mem::size_of::<$t>() - std::mem::size_of_val(&$var.data_size)) as std::os::raw::c_int;
+        $var.data_size = (std::mem::size_of::<$t>() - std::mem::size_of_val(&$var.data_size))
+            as std::os::raw::c_int;
     };
 }
 
@@ -162,12 +163,8 @@ pub struct RimeApi {
     // 1
     pub setup: Option<unsafe extern "C" fn(traits: *mut RimeTraits)>,
     // 2
-    pub set_notification_handler: Option<
-        unsafe extern "C" fn(
-            handler: RimeNotificationHandler,
-            context_object: *mut c_void,
-        ),
-    >,
+    pub set_notification_handler:
+        Option<unsafe extern "C" fn(handler: RimeNotificationHandler, context_object: *mut c_void)>,
     // 3
     pub initialize: Option<unsafe extern "C" fn(traits: *mut RimeTraits)>,
     // 4
@@ -188,10 +185,8 @@ pub struct RimeApi {
     // 11
     pub deploy_schema: Option<unsafe extern "C" fn(schema_file: *const c_char) -> Bool>,
     // 12
-    pub deploy_config_file: Option<unsafe extern "C" fn(
-        file_name: *const c_char,
-        version_key: *const c_char,
-    ) -> Bool>,
+    pub deploy_config_file:
+        Option<unsafe extern "C" fn(file_name: *const c_char, version_key: *const c_char) -> Bool>,
     // 13
     pub sync_user_data: Option<unsafe extern "C" fn() -> Bool>,
 
@@ -208,11 +203,7 @@ pub struct RimeApi {
 
     // 19
     pub process_key: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            keycode: c_int,
-            mask: c_int,
-        ) -> Bool,
+        unsafe extern "C" fn(session_id: RimeSessionId, keycode: c_int, mask: c_int) -> Bool,
     >,
     // 20
     pub commit_composition: Option<unsafe extern "C" fn(session_id: RimeSessionId) -> Bool>,
@@ -220,56 +211,31 @@ pub struct RimeApi {
     pub clear_composition: Option<unsafe extern "C" fn(session_id: RimeSessionId)>,
 
     // 22
-    pub get_commit: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            commit: *mut RimeCommit,
-        ) -> Bool,
-    >,
+    pub get_commit:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, commit: *mut RimeCommit) -> Bool>,
     // 23
     pub free_commit: Option<unsafe extern "C" fn(commit: *mut RimeCommit) -> Bool>,
     // 24
-    pub get_context: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            context: *mut RimeContext,
-        ) -> Bool,
-    >,
+    pub get_context:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, context: *mut RimeContext) -> Bool>,
     // 25
     pub free_context: Option<unsafe extern "C" fn(ctx: *mut RimeContext) -> Bool>,
     // 26
-    pub get_status: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            status: *mut RimeStatus,
-        ) -> Bool,
-    >,
+    pub get_status:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, status: *mut RimeStatus) -> Bool>,
     // 27
     pub free_status: Option<unsafe extern "C" fn(status: *mut RimeStatus) -> Bool>,
 
     // 28
-    pub set_option: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            option: *const c_char,
-            value: Bool,
-        ),
-    >,
+    pub set_option:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, option: *const c_char, value: Bool)>,
     // 29
-    pub get_option: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            option: *const c_char,
-        ) -> Bool,
-    >,
+    pub get_option:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, option: *const c_char) -> Bool>,
 
     // 30
     pub set_property: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            prop: *const c_char,
-            value: *const c_char,
-        ),
+        unsafe extern "C" fn(session_id: RimeSessionId, prop: *const c_char, value: *const c_char),
     >,
     // 31
     pub get_property: Option<
@@ -282,9 +248,7 @@ pub struct RimeApi {
     >,
 
     // 32
-    pub get_schema_list: Option<
-        unsafe extern "C" fn(schema_list: *mut RimeSchemaList) -> Bool,
-    >,
+    pub get_schema_list: Option<unsafe extern "C" fn(schema_list: *mut RimeSchemaList) -> Bool>,
     // 33
     pub free_schema_list: Option<unsafe extern "C" fn(schema_list: *mut RimeSchemaList)>,
 
@@ -297,36 +261,20 @@ pub struct RimeApi {
         ) -> Bool,
     >,
     // 35
-    pub select_schema: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            schema_id: *const c_char,
-        ) -> Bool,
-    >,
+    pub select_schema:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, schema_id: *const c_char) -> Bool>,
 
     // 36
-    pub schema_open: Option<
-        unsafe extern "C" fn(
-            schema_id: *const c_char,
-            config: *mut RimeConfig,
-        ) -> Bool,
-    >,
+    pub schema_open:
+        Option<unsafe extern "C" fn(schema_id: *const c_char, config: *mut RimeConfig) -> Bool>,
     // 37
-    pub config_open: Option<
-        unsafe extern "C" fn(
-            config_id: *const c_char,
-            config: *mut RimeConfig,
-        ) -> Bool,
-    >,
+    pub config_open:
+        Option<unsafe extern "C" fn(config_id: *const c_char, config: *mut RimeConfig) -> Bool>,
     // 38
     pub config_close: Option<unsafe extern "C" fn(config: *mut RimeConfig) -> Bool>,
     // 39
     pub config_get_bool: Option<
-        unsafe extern "C" fn(
-            config: *mut RimeConfig,
-            key: *const c_char,
-            value: *mut Bool,
-        ) -> Bool,
+        unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char, value: *mut Bool) -> Bool,
     >,
     // 40
     pub config_get_int: Option<
@@ -338,11 +286,7 @@ pub struct RimeApi {
     >,
     // 41
     pub config_get_double: Option<
-        unsafe extern "C" fn(
-            config: *mut RimeConfig,
-            key: *const c_char,
-            value: *mut f64,
-        ) -> Bool,
+        unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char, value: *mut f64) -> Bool,
     >,
     // 42
     pub config_get_string: Option<
@@ -354,19 +298,11 @@ pub struct RimeApi {
         ) -> Bool,
     >,
     // 43
-    pub config_get_cstring: Option<
-        unsafe extern "C" fn(
-            config: *mut RimeConfig,
-            key: *const c_char,
-        ) -> *const c_char,
-    >,
+    pub config_get_cstring:
+        Option<unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char) -> *const c_char>,
     // 44
-    pub config_update_signature: Option<
-        unsafe extern "C" fn(
-            config: *mut RimeConfig,
-            signer: *const c_char,
-        ) -> Bool,
-    >,
+    pub config_update_signature:
+        Option<unsafe extern "C" fn(config: *mut RimeConfig, signer: *const c_char) -> Bool>,
     // 45
     pub config_begin_map: Option<
         unsafe extern "C" fn(
@@ -376,26 +312,19 @@ pub struct RimeApi {
         ) -> Bool,
     >,
     // 46
-    pub config_next: Option<
-        unsafe extern "C" fn(iterator: *mut RimeConfigIterator) -> Bool,
-    >,
+    pub config_next: Option<unsafe extern "C" fn(iterator: *mut RimeConfigIterator) -> Bool>,
     // 47
     pub config_end: Option<unsafe extern "C" fn(iterator: *mut RimeConfigIterator)>,
 
     // 48
     pub simulate_key_sequence: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            key_sequence: *const c_char,
-        ) -> Bool,
+        unsafe extern "C" fn(session_id: RimeSessionId, key_sequence: *const c_char) -> Bool,
     >,
 
     // 49
     pub register_module: Option<unsafe extern "C" fn(module: *mut RimeModule) -> Bool>,
     // 50
-    pub find_module: Option<
-        unsafe extern "C" fn(module_name: *const c_char) -> *mut RimeModule,
-    >,
+    pub find_module: Option<unsafe extern "C" fn(module_name: *const c_char) -> *mut RimeModule>,
 
     // 51
     pub run_task: Option<unsafe extern "C" fn(task_name: *const c_char) -> Bool>,
@@ -408,38 +337,23 @@ pub struct RimeApi {
     // 55
     pub get_user_id: Option<unsafe extern "C" fn() -> *const c_char>,
     // 56
-    pub get_user_data_sync_dir: Option<
-        unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize),
-    >,
+    pub get_user_data_sync_dir: Option<unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize)>,
 
     // 57
     pub config_init: Option<unsafe extern "C" fn(config: *mut RimeConfig) -> Bool>,
     // 58
-    pub config_load_string: Option<
-        unsafe extern "C" fn(config: *mut RimeConfig, yaml: *const c_char) -> Bool,
-    >,
+    pub config_load_string:
+        Option<unsafe extern "C" fn(config: *mut RimeConfig, yaml: *const c_char) -> Bool>,
 
     // 59-62 config setters
     pub config_set_bool: Option<
-        unsafe extern "C" fn(
-            config: *mut RimeConfig,
-            key: *const c_char,
-            value: Bool,
-        ) -> Bool,
+        unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char, value: Bool) -> Bool,
     >,
     pub config_set_int: Option<
-        unsafe extern "C" fn(
-            config: *mut RimeConfig,
-            key: *const c_char,
-            value: c_int,
-        ) -> Bool,
+        unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char, value: c_int) -> Bool,
     >,
     pub config_set_double: Option<
-        unsafe extern "C" fn(
-            config: *mut RimeConfig,
-            key: *const c_char,
-            value: f64,
-        ) -> Bool,
+        unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char, value: f64) -> Bool,
     >,
     pub config_set_string: Option<
         unsafe extern "C" fn(
@@ -464,21 +378,14 @@ pub struct RimeApi {
             value: *mut RimeConfig,
         ) -> Bool,
     >,
-    pub config_clear: Option<
-        unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char) -> Bool,
-    >,
-    pub config_create_list: Option<
-        unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char) -> Bool,
-    >,
-    pub config_create_map: Option<
-        unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char) -> Bool,
-    >,
-    pub config_list_size: Option<
-        unsafe extern "C" fn(
-            config: *mut RimeConfig,
-            key: *const c_char,
-        ) -> usize,
-    >,
+    pub config_clear:
+        Option<unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char) -> Bool>,
+    pub config_create_list:
+        Option<unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char) -> Bool>,
+    pub config_create_map:
+        Option<unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char) -> Bool>,
+    pub config_list_size:
+        Option<unsafe extern "C" fn(config: *mut RimeConfig, key: *const c_char) -> usize>,
     pub config_begin_list: Option<
         unsafe extern "C" fn(
             iterator: *mut RimeConfigIterator,
@@ -488,25 +395,19 @@ pub struct RimeApi {
     >,
 
     // 70
-    pub get_input: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId) -> *const c_char,
-    >,
+    pub get_input: Option<unsafe extern "C" fn(session_id: RimeSessionId) -> *const c_char>,
     // 71
     pub get_caret_pos: Option<unsafe extern "C" fn(session_id: RimeSessionId) -> usize>,
     // 72
-    pub select_candidate: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool,
-    >,
+    pub select_candidate:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool>,
     // 73
     pub get_version: Option<unsafe extern "C" fn() -> *const c_char>,
     // 74
-    pub set_caret_pos: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId, caret_pos: usize),
-    >,
+    pub set_caret_pos: Option<unsafe extern "C" fn(session_id: RimeSessionId, caret_pos: usize)>,
     // 75
-    pub select_candidate_on_current_page: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool,
-    >,
+    pub select_candidate_on_current_page:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool>,
 
     // 76-78 candidate list iterator
     pub candidate_list_begin: Option<
@@ -515,22 +416,13 @@ pub struct RimeApi {
             iterator: *mut RimeCandidateListIterator,
         ) -> Bool,
     >,
-    pub candidate_list_next: Option<
-        unsafe extern "C" fn(
-            iterator: *mut RimeCandidateListIterator,
-        ) -> Bool,
-    >,
-    pub candidate_list_end: Option<
-        unsafe extern "C" fn(iterator: *mut RimeCandidateListIterator),
-    >,
+    pub candidate_list_next:
+        Option<unsafe extern "C" fn(iterator: *mut RimeCandidateListIterator) -> Bool>,
+    pub candidate_list_end: Option<unsafe extern "C" fn(iterator: *mut RimeCandidateListIterator)>,
 
     // 79
-    pub user_config_open: Option<
-        unsafe extern "C" fn(
-            config_id: *const c_char,
-            config: *mut RimeConfig,
-        ) -> Bool,
-    >,
+    pub user_config_open:
+        Option<unsafe extern "C" fn(config_id: *const c_char, config: *mut RimeConfig) -> Bool>,
 
     // 80
     pub candidate_list_from_index: Option<
@@ -546,24 +438,12 @@ pub struct RimeApi {
     pub get_staging_dir: Option<unsafe extern "C" fn() -> *const c_char>,
 
     // 83-85 proto (deprecated)
-    pub commit_proto: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            commit_builder: *mut c_void,
-        ),
-    >,
-    pub context_proto: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            context_builder: *mut c_void,
-        ),
-    >,
-    pub status_proto: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            status_builder: *mut c_void,
-        ),
-    >,
+    pub commit_proto:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, commit_builder: *mut c_void)>,
+    pub context_proto:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, context_builder: *mut c_void)>,
+    pub status_proto:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, status_builder: *mut c_void)>,
 
     // 86
     pub get_state_label: Option<
@@ -575,13 +455,11 @@ pub struct RimeApi {
     >,
 
     // 87
-    pub delete_candidate: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool,
-    >,
+    pub delete_candidate:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool>,
     // 88
-    pub delete_candidate_on_current_page: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool,
-    >,
+    pub delete_candidate_on_current_page:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool>,
 
     // 89
     pub get_state_label_abbreviated: Option<
@@ -594,43 +472,26 @@ pub struct RimeApi {
     >,
 
     // 90
-    pub set_input: Option<
-        unsafe extern "C" fn(
-            session_id: RimeSessionId,
-            input: *const c_char,
-        ) -> Bool,
-    >,
+    pub set_input:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, input: *const c_char) -> Bool>,
 
     // 91-95 dir accessors with buffer
-    pub get_shared_data_dir_s: Option<
-        unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize),
-    >,
-    pub get_user_data_dir_s: Option<
-        unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize),
-    >,
-    pub get_prebuilt_data_dir_s: Option<
-        unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize),
-    >,
-    pub get_staging_dir_s: Option<
-        unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize),
-    >,
-    pub get_sync_dir_s: Option<
-        unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize),
-    >,
+    pub get_shared_data_dir_s: Option<unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize)>,
+    pub get_user_data_dir_s: Option<unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize)>,
+    pub get_prebuilt_data_dir_s: Option<unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize)>,
+    pub get_staging_dir_s: Option<unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize)>,
+    pub get_sync_dir_s: Option<unsafe extern "C" fn(dir: *mut c_char, buffer_size: usize)>,
 
     // 96
-    pub highlight_candidate: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool,
-    >,
+    pub highlight_candidate:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool>,
     // 97
-    pub highlight_candidate_on_current_page: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool,
-    >,
+    pub highlight_candidate_on_current_page:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, index: usize) -> Bool>,
 
     // 98
-    pub change_page: Option<
-        unsafe extern "C" fn(session_id: RimeSessionId, backward: Bool) -> Bool,
-    >,
+    pub change_page:
+        Option<unsafe extern "C" fn(session_id: RimeSessionId, backward: Bool) -> Bool>,
 }
 
 // the rime_get_api is a standalone function exported from the DLL
@@ -638,8 +499,8 @@ pub struct RimeApi {
 pub fn rime_get_api() -> Option<*const RimeApi> {
     use std::ffi::CString;
     use std::ptr;
-    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
     use windows::core::PCSTR;
+    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
 
     static mut API_CACHE: *const RimeApi = ptr::null();
 
@@ -656,8 +517,7 @@ pub fn rime_get_api() -> Option<*const RimeApi> {
             let proc = GetProcAddress(hmodule, PCSTR(fn_name.as_ptr() as *const u8));
 
             if let Some(proc) = proc {
-                let get_api: extern "C" fn() -> *const RimeApi =
-                    std::mem::transmute(proc);
+                let get_api: extern "C" fn() -> *const RimeApi = std::mem::transmute(proc);
                 API_CACHE = get_api();
                 return Some(API_CACHE);
             }
@@ -723,7 +583,7 @@ pub const VK_DOWN: u16 = 0x28;
 pub const VK_LEFT: u16 = 0x25;
 pub const VK_RIGHT: u16 = 0x27;
 pub const VK_PRIOR: u16 = 0x21; // PageUp
-pub const VK_NEXT: u16 = 0x22;  // PageDown
+pub const VK_NEXT: u16 = 0x22; // PageDown
 pub const VK_SHIFT: u16 = 0x10;
 pub const VK_CONTROL: u16 = 0x11;
 pub const VK_MENU: u16 = 0x12;

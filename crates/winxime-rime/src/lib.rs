@@ -1,3 +1,3 @@
 mod engine;
 
-pub use engine::{RimeEngine, RimeError, Composition, Candidate};
+pub use engine::{Candidate, Composition, RimeEngine, RimeError};

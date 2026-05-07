@@ -1,7 +1,7 @@
 use std::env;
-use std::path::{PathBuf, Path};
-use std::process::{Command, Stdio};
 use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -11,43 +11,46 @@ fn main() {
     if env::var("CARGO_CFG_TARGET_OS").unwrap() != "windows" {
         return;
     }
-    
+
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
-    
+
     let librime_dir = workspace_dir.join("librime");
     let dist_dir = librime_dir.join("dist");
     let dist_lib_dir = dist_dir.join("lib");
     let rime_dll = dist_lib_dir.join("rime.dll");
-    
+
     if !rime_dll.exists() {
         build_librime(&librime_dir, workspace_dir);
     }
-    
+
     if rime_dll.exists() {
         println!("cargo:rustc-link-search=native={}", dist_lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=rime");
     } else {
-        panic!("librime build failed: rime.dll not found at {}", rime_dll.display());
+        panic!(
+            "librime build failed: rime.dll not found at {}",
+            rime_dll.display()
+        );
     }
-    
+
     copy_rime_data(&workspace_dir, &librime_dir);
-    
+
     println!("cargo:rerun-if-changed=build.rs");
 }
 
 fn copy_rime_data(workspace_dir: &Path, librime_dir: &Path) {
     let minimal_dir = librime_dir.join("data").join("minimal");
     let target_data_dir = workspace_dir.join("target").join("debug").join("data");
-    
+
     if !minimal_dir.exists() {
         println!("cargo:warning=minimal data directory not found, skipping copy");
         return;
     }
-    
+
     println!("cargo:warning=Copying minimal rime data to target...");
     std::fs::create_dir_all(&target_data_dir).ok();
-    
+
     let essential_files = ["default.yaml", "essay.txt", "symbols.yaml"];
     for file in &essential_files {
         let src = minimal_dir.join(file);
@@ -57,13 +60,15 @@ fn copy_rime_data(workspace_dir: &Path, librime_dir: &Path) {
             println!("cargo:warning=Copied: {}", file);
         }
     }
-    
+
     let opencc_src = librime_dir.join("share").join("opencc");
     let opencc_dst = target_data_dir.join("opencc");
-    
+
     if opencc_src.exists() {
         std::fs::create_dir_all(&opencc_dst).ok();
-        for entry in std::fs::read_dir(&opencc_src).unwrap_or_else(|_| panic!("Failed to read opencc dir")) {
+        for entry in
+            std::fs::read_dir(&opencc_src).unwrap_or_else(|_| panic!("Failed to read opencc dir"))
+        {
             let entry = entry.unwrap();
             let src_path = entry.path();
             if src_path.is_file() {
@@ -76,85 +81,112 @@ fn copy_rime_data(workspace_dir: &Path, librime_dir: &Path) {
 }
 
 fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
-    println!("cargo:warning=Building librime from source (this may take 10+ minutes on first build)...");
-    
-    let vswhere = PathBuf::from("C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe");
+    println!(
+        "cargo:warning=Building librime from source (this may take 10+ minutes on first build)..."
+    );
+
+    let vswhere =
+        PathBuf::from("C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe");
     if !vswhere.exists() {
         panic!("Visual Studio Installer not found at {}", vswhere.display());
     }
-    
+
     let vs_install: String = match Command::new(&vswhere)
         .args(["-latest", "-property", "installationPath"])
-        .output() {
+        .output()
+    {
         Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
         Err(e) => panic!("vswhere failed: {}", e),
     };
-    
+
     if vs_install.is_empty() {
         panic!("Visual Studio not found via vswhere");
     }
-    
+
     println!("cargo:warning=Using Visual Studio at: {}", vs_install);
-    
+
     let env_bat = librime_dir.join("env.bat");
     {
         let mut file = std::fs::File::create(&env_bat).unwrap();
         writeln!(file, "@echo off").unwrap();
         writeln!(file, "set RIME_ROOT={}", librime_dir.display()).unwrap();
-        writeln!(file, "if not defined BOOST_ROOT set BOOST_ROOT={}\\deps\\boost-1.89.0", librime_dir.display()).unwrap();
+        writeln!(
+            file,
+            "if not defined BOOST_ROOT set BOOST_ROOT={}\\deps\\boost-1.89.0",
+            librime_dir.display()
+        )
+        .unwrap();
         writeln!(file, "set ARCH=x64").unwrap();
         writeln!(file, "set BJAM_TOOLSET=msvc-14.3").unwrap();
         writeln!(file, "set CMAKE_GENERATOR=\"Visual Studio 17 2022\"").unwrap();
         writeln!(file, "set PLATFORM_TOOLSET=v143").unwrap();
     }
-    
+
     let temp_bat = workspace_dir.join("temp-build-librime.bat");
     {
         let mut file = std::fs::File::create(&temp_bat).unwrap();
         writeln!(file, "@echo off").unwrap();
-        writeln!(file, "call \"{}\\VC\\Auxiliary\\Build\\vcvars64.bat\"", vs_install).unwrap();
+        writeln!(
+            file,
+            "call \"{}\\VC\\Auxiliary\\Build\\vcvars64.bat\"",
+            vs_install
+        )
+        .unwrap();
         writeln!(file, "cd /d \"{}\"", librime_dir.display()).unwrap();
-        writeln!(file, "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat", librime_dir.display()).unwrap();
-        writeln!(file, "if not defined BOOST_ROOT set BOOST_ROOT={}\\deps\\boost-1.89.0", librime_dir.display()).unwrap();
+        writeln!(
+            file,
+            "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat",
+            librime_dir.display()
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "if not defined BOOST_ROOT set BOOST_ROOT={}\\deps\\boost-1.89.0",
+            librime_dir.display()
+        )
+        .unwrap();
         writeln!(file, "build.bat deps").unwrap();
         writeln!(file, "build.bat librime").unwrap();
     }
-    
+
     println!("cargo:warning=Starting librime compilation...");
-    
+
     let running = Arc::new(AtomicBool::new(true));
     let running_clone = running.clone();
-    
+
     let progress_thread = thread::spawn(move || {
         let mut count = 0;
         while running_clone.load(Ordering::Relaxed) {
             thread::sleep(Duration::from_secs(30));
             if running_clone.load(Ordering::Relaxed) {
                 count += 1;
-                println!("cargo:warning=librime build in progress... ({} minutes elapsed)", count / 2);
+                println!(
+                    "cargo:warning=librime build in progress... ({} minutes elapsed)",
+                    count / 2
+                );
             }
         }
     });
-    
+
     let status = Command::new(&temp_bat)
         .current_dir(workspace_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status();
-    
+
     running.store(false, Ordering::Relaxed);
     progress_thread.join().ok();
-    
+
     std::fs::remove_file(&temp_bat).ok();
-    
+
     match status {
         Ok(s) if s.success() => {
             println!("cargo:warning=librime compilation finished successfully");
-        },
+        }
         Ok(s) => {
             panic!("librime build failed with exit code: {:?}", s.code());
-        },
+        }
         Err(e) => {
             panic!("librime build failed to execute: {}", e);
         }

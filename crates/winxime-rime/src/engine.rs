@@ -277,7 +277,11 @@ impl RimeEngine {
         unsafe {
             if let Some(set_opt) = (*self.api).set_option {
                 let c_opt = CString::new(option).unwrap();
-                set_opt(self.session, c_opt.as_ptr(), if value { TRUE } else { FALSE });
+                set_opt(
+                    self.session,
+                    c_opt.as_ptr(),
+                    if value { TRUE } else { FALSE },
+                );
             }
         }
     }
@@ -394,12 +398,16 @@ extern "C" fn rime_notification_callback(
         let typ = if message_type.is_null() {
             ""
         } else {
-            std::ffi::CStr::from_ptr(message_type).to_str().unwrap_or("")
+            std::ffi::CStr::from_ptr(message_type)
+                .to_str()
+                .unwrap_or("")
         };
         let val = if message_value.is_null() {
             ""
         } else {
-            std::ffi::CStr::from_ptr(message_value).to_str().unwrap_or("")
+            std::ffi::CStr::from_ptr(message_value)
+                .to_str()
+                .unwrap_or("")
         };
         println!("Xime notification: {} = {}", typ, val);
     }
