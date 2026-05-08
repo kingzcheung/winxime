@@ -99,6 +99,7 @@ fn handle_connection(
             break;
         }
     }
+    println!("Client disconnected");
 }
 
 fn process_request(
@@ -117,12 +118,15 @@ fn process_request(
             status: None,
         },
 
-        IpcCommand::StartSession | IpcCommand::EndSession => IpcResponse {
-            success: true,
-            session_id: request.session_id,
-            context: None,
-            status: None,
-        },
+        IpcCommand::StartSession | IpcCommand::EndSession => {
+            println!("Session: {:?}", request.command);
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: None,
+            }
+        }
 
         IpcCommand::FocusIn => {
             println!("FocusIn");
@@ -135,7 +139,7 @@ fn process_request(
         }
 
         IpcCommand::FocusOut => {
-            println!("FocusOut -> hiding window");
+            println!("FocusOut -> hide");
             window.hide();
             IpcResponse {
                 success: true,
@@ -148,12 +152,9 @@ fn process_request(
         IpcCommand::ProcessKeyEvent => {
             let handled = match &request.data {
                 IpcRequestData::KeyEvent(key) => {
-                    println!(
-                        "ProcessKeyEvent: keycode={}, modifiers={}",
-                        key.keycode, key.modifiers
-                    );
+                    println!("Key: {} mod: {}", key.keycode, key.modifiers);
                     let result = eng.process_key(key.keycode, key.modifiers);
-                    println!("  -> handled={}", result);
+                    println!("  handled: {}", result);
                     result
                 }
                 _ => false,
@@ -162,25 +163,27 @@ fn process_request(
             let commit = eng.get_commit();
             println!("  commit: {:?}", commit);
             println!("  input: {:?}", eng.get_input());
-            println!("  is_composing: {}", eng.is_composing());
+            println!("  composing: {}", eng.is_composing());
 
             let ipc_ctx = get_ipc_context(&eng, &commit);
             update_context(&mut eng, context);
             
             if commit.is_some() {
-                println!("  -> hiding window (commit exists)");
+                println!("  -> hide (commit)");
                 window.hide();
             } else if !eng.is_composing() {
-                println!("  -> hiding window (not composing)");
+                println!("  -> hide (not composing)");
                 window.hide();
             } else if let Some(ctx) = &ipc_ctx {
+                println!("  candies: {:?}", ctx.candidates.candies);
                 if ctx.candidates.candies.is_empty() && ctx.preedit.str.is_empty() {
-                    println!("  -> hiding window (empty)");
+                    println!("  -> hide (empty)");
                     window.hide();
                 } else {
                     let pos = context.read(|c| (c.caret_x, c.caret_y));
-                    println!("  -> showing window at ({}, {})", pos.0, pos.1);
+                    println!("  -> show at ({}, {})", pos.0, pos.1);
                     window.show(pos.0, pos.1);
+                    println!("  -> update {} candies", ctx.candidates.candies.len());
                     window.update(ctx);
                 }
             }
@@ -196,7 +199,7 @@ fn process_request(
         IpcCommand::UpdateInputPosition => {
             match &request.data {
                 IpcRequestData::Position(pos) => {
-                    println!("UpdateInputPosition: x={}, y={}", pos.x, pos.y);
+                    println!("Position: {},{}", pos.x, pos.y);
                     context.update(|ctx| {
                         ctx.caret_x = pos.x;
                         ctx.caret_y = pos.y;
@@ -211,6 +214,11 @@ fn process_request(
                 context: None,
                 status: None,
             }
+        }
+
+        IpcCommand::ShutdownServer => {
+            println!("Shutdown requested");
+            std::process::exit(0);
         }
 
         _ => IpcResponse {

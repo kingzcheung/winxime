@@ -263,38 +263,49 @@ impl RenderedView {
                 unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
             }
             WM_SHOW_CANDIDATE => {
-                let _ = ShowWindow(hwnd, SW_SHOWNA);
+                println!("WM_SHOW_CANDIDATE received, hwnd={:?}", hwnd.0);
+                let result = ShowWindow(hwnd, SW_SHOWNA);
+                println!("  ShowWindow(SW_SHOWNA) result: {:?}", result);
                 LRESULT(0)
             }
             WM_HIDE_CANDIDATE => {
+                println!("WM_HIDE_CANDIDATE received");
                 let _ = ShowWindow(hwnd, SW_HIDE);
                 LRESULT(0)
             }
             WM_UPDATE_CANDIDATE => {
+                println!("WM_UPDATE_CANDIDATE received");
                 let ctx_ptr = wparam.0 as *mut Context;
                 if !ctx_ptr.is_null() {
                     let ctx = Box::from_raw(ctx_ptr);
+                    println!("  ctx.candidates: {} items", ctx.candidates.candies.len());
                     let model = CandidateModel::from(&*ctx);
+                    println!("  model.items: {} items", model.items.len());
                     
                     let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                     if !this_ptr.is_null() {
                         (*this_ptr).model.replace(model.clone());
                         
                         let view = (*this_ptr).view.borrow();
-                        let dpi = RenderedView::get_dpi_for_window(hwnd);
-                        if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
-                            let _ = SetWindowPos(
-                                hwnd,
-                                Some(HWND_TOPMOST),
-                                0,
-                                0,
-                                metrics.hw_width as i32,
-                                metrics.hw_height as i32,
-                                SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS,
-                            );
+                        if let Some(view) = view.as_ref() {
+                            let dpi = RenderedView::get_dpi_for_window(hwnd);
+                            println!("  calculating client rect at DPI {}", dpi);
+                            if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
+                                println!("  window size: {}x{}", metrics.hw_width, metrics.hw_height);
+                                let _ = SetWindowPos(
+                                    hwnd,
+                                    Some(HWND_TOPMOST),
+                                    0,
+                                    0,
+                                    metrics.hw_width as i32,
+                                    metrics.hw_height as i32,
+                                    SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS,
+                                );
+                            }
                         }
                     }
                     let _ = InvalidateRect(Some(hwnd), None, true);
+                    println!("  window invalidated for repaint");
                 }
                 LRESULT(0)
             }
@@ -305,15 +316,19 @@ impl RenderedView {
                 LRESULT(0)
             }
             WM_PAINT => {
+                println!("WM_PAINT received");
                 let mut ps = PAINTSTRUCT::default();
                 BeginPaint(hwnd, &mut ps);
 
                 let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                 if !this_ptr.is_null() {
                     let model = (*this_ptr).model.borrow();
+                    println!("  painting {} items", model.items.len());
                     if !model.items.is_empty() {
                         let view = (*this_ptr).view.borrow();
-                        let _ = view.on_paint(&model);
+                        if let Some(view) = view.as_ref() {
+                            let _ = view.on_paint(&model);
+                        }
                     }
                 }
 
@@ -329,10 +344,12 @@ impl RenderedView {
                     if !this_ptr.is_null() {
                         let model = (*this_ptr).model.borrow();
                         let view = (*this_ptr).view.borrow();
-                        if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
-                            pos.cx = metrics.hw_width as i32;
-                            pos.cy = metrics.hw_height as i32;
-                            (pos.x, pos.y) = RenderedView::clamp_point_to_monitor(pos.x, pos.y, pos.cx, pos.cy);
+                        if let Some(view) = view.as_ref() {
+                            if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
+                                pos.cx = metrics.hw_width as i32;
+                                pos.cy = metrics.hw_height as i32;
+                                (pos.x, pos.y) = RenderedView::clamp_point_to_monitor(pos.x, pos.y, pos.cx, pos.cy);
+                            }
                         }
                     }
                 }
@@ -779,7 +796,7 @@ let comment_brush = self.d2d_context
 
 pub struct CandidateWindow {
     model: RefCell<CandidateModel>,
-    view: RefCell<RenderedView>,
+    view: RefCell<Option<RenderedView>>,
 }
 
 unsafe impl Send for CandidateWindow {}
@@ -787,45 +804,70 @@ unsafe impl Sync for CandidateWindow {}
 
 impl CandidateWindow {
     pub fn new() -> Arc<Self> {
-        let mut candidate_window = Arc::new_uninit();
-        let user_data_ptr = Arc::as_ptr(&candidate_window);
-
-        let view = RenderedView::new(user_data_ptr.cast())
-            .expect("Failed to create RenderedView");
-
-        Arc::get_mut(&mut candidate_window).unwrap().write(Self {
+        let window = Arc::new(Self {
             model: RefCell::new(CandidateModel::default()),
-            view: RefCell::new(view),
+            view: RefCell::new(None),
         });
+        
+        // Initialize UI immediately in the thread that will run message loop
+        window.ensure_view_initialized();
+        
+        window
+    }
 
-        unsafe { candidate_window.assume_init() }
+    fn ensure_view_initialized(&self) {
+        if self.view.borrow().is_none() {
+            let user_data_ptr = self as *const Self;
+            match RenderedView::new(user_data_ptr.cast()) {
+                Ok(view) => {
+                    println!("UI initialized successfully");
+                    *self.view.borrow_mut() = Some(view);
+                }
+                Err(e) => {
+                    eprintln!("Failed to initialize UI: {}", e);
+                }
+            }
+        }
     }
 
     pub fn show(&self, x: i32, y: i32) {
-        let view = self.view.borrow();
-        unsafe {
-            let _ = SetWindowPos(view.hwnd, Some(HWND_TOPMOST), x, y + 24, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
-            let _ = PostMessageW(Some(view.hwnd), WM_SHOW_CANDIDATE, WPARAM(0), LPARAM(0));
+        self.ensure_view_initialized();
+        if let Some(view) = self.view.borrow().as_ref() {
+            println!("  show: hwnd={:?}, moving to ({}, {})", view.hwnd.0, x, y + 24);
+            unsafe {
+                let _ = SetWindowPos(view.hwnd, Some(HWND_TOPMOST), x, y + 24, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                println!("  show: posting WM_SHOW_CANDIDATE");
+                let result = PostMessageW(Some(view.hwnd), WM_SHOW_CANDIDATE, WPARAM(0), LPARAM(0));
+                println!("  show: PostMessageW result: {:?}", result);
+            }
+        } else {
+            println!("  show: view is None!");
         }
     }
 
     pub fn hide(&self) {
-        let view = self.view.borrow();
-        unsafe {
-            let _ = PostMessageW(Some(view.hwnd), WM_HIDE_CANDIDATE, WPARAM(0), LPARAM(0));
+        if let Some(view) = self.view.borrow().as_ref() {
+            unsafe {
+                let _ = PostMessageW(Some(view.hwnd), WM_HIDE_CANDIDATE, WPARAM(0), LPARAM(0));
+            }
         }
     }
 
     pub fn update(&self, ctx: &Context) {
-        let view = self.view.borrow();
-        unsafe {
-            let ctx_ptr = Box::into_raw(Box::new(ctx.clone()));
-            let _ = PostMessageW(
-                Some(view.hwnd),
-                WM_UPDATE_CANDIDATE,
-                WPARAM(ctx_ptr as usize),
-                LPARAM(0),
-            );
+        if let Some(view) = self.view.borrow().as_ref() {
+            println!("  update: hwnd={:?}, posting WM_UPDATE_CANDIDATE", view.hwnd.0);
+            unsafe {
+                let ctx_ptr = Box::into_raw(Box::new(ctx.clone()));
+                let result = PostMessageW(
+                    Some(view.hwnd),
+                    WM_UPDATE_CANDIDATE,
+                    WPARAM(ctx_ptr as usize),
+                    LPARAM(0),
+                );
+                println!("  update: PostMessageW result: {:?}", result);
+            }
+        } else {
+            println!("  update: view is None!");
         }
     }
 }

@@ -10,6 +10,23 @@ pub enum IpcError {
     ReadFailed,
 }
 
+pub fn check_server_running() -> bool {
+    let pipe_path = crate::messages::get_pipe_path();
+    match DuplexPipeStream::<Bytes>::connect_by_path(pipe_path) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
+pub fn stop_server() -> bool {
+    if check_server_running() {
+        IpcClient::shutdown_server();
+        true
+    } else {
+        false
+    }
+}
+
 pub struct IpcClient {
     pipe: DuplexPipeStream<Bytes>,
 }
@@ -30,7 +47,6 @@ impl IpcClient {
     ) -> Result<crate::IpcResponse, IpcError> {
         let json = serde_json::to_vec(request).map_err(|_| IpcError::SerializeFailed)?;
 
-        // Write request
         self.pipe
             .write_all(&json)
             .map_err(|_| IpcError::WriteFailed)?;
@@ -39,16 +55,15 @@ impl IpcClient {
             .map_err(|_| IpcError::WriteFailed)?;
         self.pipe.flush().map_err(|_| IpcError::WriteFailed)?;
 
-        // Read response directly from pipe (no BufReader to avoid buffering issues)
         let mut response_buf = Vec::new();
         let mut byte = [0u8; 1];
 
         loop {
             match self.pipe.read(&mut byte) {
-                Ok(0) => break, // EOF
+                Ok(0) => break,
                 Ok(_) => {
                     if byte[0] == 0 {
-                        break; // Null terminator
+                        break;
                     }
                     response_buf.push(byte[0]);
                 }
@@ -73,7 +88,6 @@ impl IpcClient {
             .map_err(|_| IpcError::WriteFailed)?;
         self.pipe.flush().map_err(|_| IpcError::WriteFailed)?;
 
-        // Read and discard the response to keep pipe in sync
         let mut response_buf = Vec::new();
         let mut byte = [0u8; 1];
         loop {
@@ -89,5 +103,18 @@ impl IpcClient {
             }
         }
         Ok(())
+    }
+
+    pub fn shutdown_server() -> bool {
+        if let Ok(mut client) = Self::connect() {
+            let request = crate::IpcRequest {
+                command: crate::IpcCommand::ShutdownServer,
+                session_id: 0,
+                data: crate::IpcRequestData::None,
+            };
+            client.send_oneway(&request).is_ok()
+        } else {
+            false
+        }
     }
 }

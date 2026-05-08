@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_call:
+    outputs:
+      unsigned-artifact-id:
+        description: "Unsigned Installer"
+        value: ${{ jobs.package.outputs.unsigned-artifact-id }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    name: Build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release --quiet
+
+      - name: Copy data files
+        run: |
+          if exist target\release\data (
+            echo data already exists
+          ) else (
+            xcopy /E /I /Y librime\data target\release\data
+          )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Release Binaries
+          path: |
+            target/release/winxime-server.exe
+            target/release/winxime_tsf.dll
+            target/release/winxime-setup.exe
+            target/release/winxime-tsf-register.exe
+            target/release/rime.dll
+            target/release/data
+
+  package:
+    runs-on: windows-latest
+    name: Package
+    outputs:
+      unsigned-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+    needs: [build]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Download Release Binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: Release Binaries
+          path: target/release
+
+      - name: Install WiX
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/v3.14.1/wix314.exe" -OutFile wix314.exe
+          Start-Process wix314.exe -ArgumentList "/quiet", "/norestart" -Wait
+
+      - name: Build MSI
+        run: cargo wix --package winxime-server --no-build
+
+      - id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unsigned Installer
+          path: target/wix/winxime-server-0.1.0-x86_64.msi

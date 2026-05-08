@@ -3,3 +3,6 @@ librime-rs-master
 Cargo.lock
 /data
 /*.log
+/dist
+/installer
+/*.zip

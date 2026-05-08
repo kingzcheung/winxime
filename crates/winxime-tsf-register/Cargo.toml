@@ -1,0 +1,19 @@
+[package]
+name = "winxime-tsf-register"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_UI_TextServices",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Globalization",
+] }
+windows-core.workspace = true
+winxime-ipc.workspace = true

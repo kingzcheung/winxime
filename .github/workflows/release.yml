@@ -1,0 +1,47 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    uses: ./.github/workflows/ci.yml
+
+  code-signing:
+    needs: [build]
+    uses: ./.github/workflows/code-signing.yml
+    with:
+      signing-policy-slug: release-signing
+      github-artifact-id: ${{ needs.build.outputs.unsigned-artifact-id }}
+    secrets:
+      api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+
+  release:
+    runs-on: ubuntu-latest
+    name: Release
+    needs: [code-signing]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Signed Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: Signed Installer
+          path: dist
+      - name: Rename
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          mv dist/winxime.msi dist/winxime-$REF_NAME.msi
+          mv dist/winxime.msi.sha256 dist/winxime-$REF_NAME.msi.sha256
+      - name: GH Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Winxime ${{ github.ref_name }}
+          draft: true
+          files: |
+            dist/winxime-${{ github.ref_name }}.msi
+            dist/winxime-${{ github.ref_name }}.msi.sha256

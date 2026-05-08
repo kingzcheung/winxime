@@ -1,0 +1,42 @@
+name: Code Signing
+
+on:
+  workflow_call:
+    inputs:
+      signing-policy-slug:
+        required: true
+        type: string
+      github-artifact-id:
+        required: true
+        type: string
+    secrets:
+      api-token:
+        required: true
+
+jobs:
+  code-signing:
+    runs-on: ubuntu-latest
+    name: Code Signing
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Sign Artifact
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: "${{ secrets.api-token }}"
+          organization-id: "${{ secrets.SIGNPATH_ORGANIZATION_ID }}"
+          project-slug: "winxime"
+          signing-policy-slug: "${{ inputs.signing-policy-slug }}"
+          github-artifact-id: "${{ inputs.github-artifact-id }}"
+          wait-for-completion: true
+          output-artifact-directory: dist
+      - name: Rename Artifact and Calculate Checksum
+        run: |
+          mv dist/winxime-server-0.1.0-x86_64.msi dist/winxime.msi || true
+          sha256sum dist/winxime.msi > dist/winxime.msi.sha256
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Signed Installer
+          path: |
+            dist/winxime.msi
+            dist/winxime.msi.sha256
