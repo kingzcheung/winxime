@@ -25,6 +25,7 @@ Copy-Item "target\release\winxime-server.exe" $distDir
 Copy-Item "target\release\winxime_tsf.dll" $distDir
 Copy-Item "target\release\winxime-setup.exe" $distDir -ErrorAction SilentlyContinue
 Copy-Item "target\release\winxime-tsf-register.exe" $distDir
+Copy-Item "resource\trayicon\zh_light.ico" "$distDir\icon.ico"
 
 # 4. Copy rime.dll from debug (or build release version)
 if (Test-Path "target\debug\rime.dll") {
@@ -43,7 +44,7 @@ $installScript = @"
 echo Installing Xime Input Method...
 echo.
 echo Step 1: Registering input method...
-"%~dp0winxime-tsf-register.exe" -r "%~dp0winxime_tsf.dll"
+"%~dp0winxime-tsf-register.exe" -r "%~dp0icon.ico"
 echo.
 echo Step 2: Enabling input method...
 "%~dp0winxime-tsf-register.exe" -i

@@ -2,13 +2,14 @@ use std::sync::Arc;
 use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM, HINSTANCE},
     System::LibraryLoader::GetModuleHandleW,
+    System::Registry::{RegCloseKey, RegGetValueW, RegOpenKeyExW, HKEY_CURRENT_USER, KEY_READ, RRF_RT_DWORD},
     UI::{
         Shell::{NIM_ADD, NIM_DELETE, NIM_MODIFY, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIF_STATE, NIS_HIDDEN, Shell_NotifyIconW, NOTIFYICONDATAW, NOTIFY_ICON_STATE},
         WindowsAndMessaging::{
             AppendMenuW, CreateIconFromResource, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-            DestroyWindow, LoadIconW, PostQuitMessage,
+            LoadIconW, PostQuitMessage,
             RegisterClassW,
-            WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WM_USER,
+            WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WM_USER, WM_SETTINGCHANGE,
             WNDCLASSW, IDI_APPLICATION, IDC_ARROW, LoadCursorW,
             MF_SEPARATOR, MF_STRING,
             WS_POPUP, CW_USEDEFAULT, HMENU, HICON,
@@ -16,8 +17,10 @@ use windows::Win32::{
     },
 };
 
-const ZH_ICO: &[u8] = include_bytes!("../../../resource/trayicon/zh.ico");
-const EN_ICO: &[u8] = include_bytes!("../../../resource/trayicon/en.ico");
+const ZH_LIGHT_ICO: &[u8] = include_bytes!("../../../resource/trayicon/zh_light.ico");
+const ZH_DARK_ICO: &[u8] = include_bytes!("../../../resource/trayicon/zh_dark.ico");
+const EN_LIGHT_ICO: &[u8] = include_bytes!("../../../resource/trayicon/en_light.ico");
+const EN_DARK_ICO: &[u8] = include_bytes!("../../../resource/trayicon/en_dark.ico");
 
 pub const WM_TRAY_EVENT: u32 = WM_USER + 100;
 
@@ -35,6 +38,7 @@ pub enum TrayAction {
 static mut TRAY_HWND: Option<HWND> = None;
 static mut TRAY_MENU: Option<HMENU> = None;
 static mut TRAY_ON_ACTION: Option<Arc<dyn Fn(TrayAction) + Send + Sync>> = None;
+static mut TRAY_IS_ASCII: bool = false;
 
 pub struct TrayIcon;
 
@@ -94,7 +98,7 @@ impl TrayIcon {
     
     fn add_icon(hwnd: HWND) {
         unsafe {
-            let hicon = load_icon_from_ico(ZH_ICO);
+            let hicon = load_icon_from_ico(get_icon_for_mode(false));
             let mut nid = NOTIFYICONDATAW::default();
             nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
             nid.hWnd = hwnd;
@@ -132,6 +136,10 @@ impl TrayIcon {
                 Self::handle_menu_command(wparam.0 as u32);
                 LRESULT(0)
             }
+            WM_SETTINGCHANGE => {
+                Self::refresh_icon_for_theme_change();
+                LRESULT(0)
+            }
             WM_DESTROY => {
                 Self::remove_icon(hwnd);
                 TRAY_HWND = None;
@@ -144,6 +152,29 @@ impl TrayIcon {
                 LRESULT(0)
             }
             _ => DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+    }
+    
+    fn refresh_icon_for_theme_change() {
+        unsafe {
+            if let Some(hwnd) = TRAY_HWND {
+                let is_ascii = TRAY_IS_ASCII;
+                let hicon = load_icon_from_ico(get_icon_for_mode(is_ascii));
+                let tip_str = if is_ascii { "EN\0" } else { "中\0" };
+                let tip: Vec<u16> = tip_str.encode_utf16().collect();
+                let mut nid = NOTIFYICONDATAW::default();
+                nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+                nid.hWnd = hwnd;
+                nid.uID = TRAY_ID;
+                nid.uFlags = NIF_ICON | NIF_TIP;
+                nid.hIcon = hicon;
+                for (i, c) in tip.iter().enumerate() {
+                    if i < nid.szTip.len() {
+                        nid.szTip[i] = *c;
+                    }
+                }
+                let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
+            }
         }
     }
     
@@ -173,8 +204,9 @@ impl TrayIcon {
 /// 更新托盘图标状态（中/英）
 pub fn update_tray_icon(is_ascii: bool) {
     unsafe {
+        TRAY_IS_ASCII = is_ascii;
         if let Some(hwnd) = TRAY_HWND {
-            let hicon = load_icon_from_ico(if is_ascii { EN_ICO } else { ZH_ICO });
+            let hicon = load_icon_from_ico(get_icon_for_mode(is_ascii));
             let tip_str = if is_ascii { "EN\0" } else { "中\0" };
             let tip: Vec<u16> = tip_str.encode_utf16().collect();
             let mut nid = NOTIFYICONDATAW::default();
@@ -247,5 +279,45 @@ fn load_icon_from_ico(ico_data: &[u8]) -> HICON {
         
         CreateIconFromResource(icon_data, true, 0x00030000)
             .unwrap_or_else(|_| LoadIconW(None, IDI_APPLICATION).unwrap_or_default())
+    }
+}
+
+fn is_system_light_theme() -> bool {
+    unsafe {
+        let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0".encode_utf16().collect();
+        let value: Vec<u16> = "SystemUsesLightTheme\0".encode_utf16().collect();
+        let mut hkey = windows::Win32::System::Registry::HKEY::default();
+        
+        if RegOpenKeyExW(HKEY_CURRENT_USER, windows_core::PCWSTR(subkey.as_ptr()), Some(0), KEY_READ, &mut hkey).is_ok() {
+            let mut data: u32 = 1;
+            let mut data_size = std::mem::size_of::<u32>() as u32;
+            
+            let result = RegGetValueW(
+                hkey,
+                windows_core::PCWSTR::null(),
+                windows_core::PCWSTR(value.as_ptr()),
+                RRF_RT_DWORD,
+                None,
+                Some(&mut data as *mut _ as *mut _),
+                Some(&mut data_size),
+            );
+            
+            let _ = RegCloseKey(hkey);
+            
+            if result.is_ok() {
+                return data != 0;
+            }
+        }
+        true
+    }
+}
+
+fn get_icon_for_mode(is_ascii: bool) -> &'static [u8] {
+    let is_light = is_system_light_theme();
+    match (is_ascii, is_light) {
+        (false, true) => ZH_LIGHT_ICO,
+        (false, false) => ZH_DARK_ICO,
+        (true, true) => EN_LIGHT_ICO,
+        (true, false) => EN_DARK_ICO,
     }
 }

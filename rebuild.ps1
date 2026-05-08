@@ -1,14 +1,19 @@
 # Rebuild and test winxime (development workflow)
 
-Write-Host "Step 1: Unregistering DLL..." -ForegroundColor Yellow
-Start-Process -Verb RunAs -Wait -FilePath "regsvr32.exe" -ArgumentList "/u /s", "target\debug\winxime_tsf.dll"
-Start-Sleep -Seconds 2
+$iconPath = "$PSScriptRoot\resource\icon.ico"
+$registerExe = "$PSScriptRoot\target\debug\winxime-tsf-register.exe"
 
-Write-Host "Step 2: Stopping server..." -ForegroundColor Yellow
+Write-Host "Step 1: Stopping server..." -ForegroundColor Yellow
 cargo run -p winxime-server -- /q 2>&1 | Out-Null
 Start-Sleep -Seconds 2
 Get-Process -Name "winxime-server" -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 1
+
+Write-Host "Step 2: Unregistering..." -ForegroundColor Yellow
+if (Test-Path $registerExe) {
+    Start-Process -Verb RunAs -Wait -FilePath $registerExe -ArgumentList "-u"
+    Start-Sleep -Seconds 2
+}
 
 Write-Host "Step 3: Building..." -ForegroundColor Yellow
 cargo build --quiet
@@ -17,11 +22,15 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host "Step 4: Registering DLL..." -ForegroundColor Yellow
-Start-Process -Verb RunAs -Wait -FilePath "regsvr32.exe" -ArgumentList "/s", "target\debug\winxime_tsf.dll"
+Write-Host "Step 4: Registering with icon..." -ForegroundColor Yellow
+Start-Process -Verb RunAs -Wait -FilePath $registerExe -ArgumentList "-r", $iconPath
 Start-Sleep -Seconds 2
 
-Write-Host "Step 5: Starting server (debug mode)..." -ForegroundColor Yellow
+Write-Host "Step 5: Enabling..." -ForegroundColor Yellow
+Start-Process -Verb RunAs -Wait -FilePath $registerExe -ArgumentList "-i"
+Start-Sleep -Seconds 1
+
+Write-Host "Step 6: Starting server (debug mode)..." -ForegroundColor Yellow
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cargo run -p winxime-server" -WindowStyle Normal
 Start-Sleep -Seconds 3
 
