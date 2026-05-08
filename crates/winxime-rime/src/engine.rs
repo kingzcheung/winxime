@@ -244,6 +244,58 @@ impl RimeEngine {
         }
     }
 
+    pub fn is_ascii_mode(&self) -> bool {
+        unsafe {
+            rime_struct!(status: RimeStatus);
+
+            if let Some(get_status) = (*self.api).get_status {
+                if get_status(self.session, &mut status) == FALSE {
+                    if let Some(free) = (*self.api).free_status {
+                        free(&mut status);
+                    }
+                    return false;
+                }
+            } else {
+                return false;
+            }
+
+            let ascii_mode = status.is_ascii_mode != FALSE;
+            if let Some(free) = (*self.api).free_status {
+                free(&mut status);
+            }
+            ascii_mode
+        }
+    }
+
+    pub fn get_status(&self) -> Option<RimeEngineStatus> {
+        unsafe {
+            rime_struct!(status: RimeStatus);
+
+            if let Some(get_status) = (*self.api).get_status {
+                if get_status(self.session, &mut status) == FALSE {
+                    if let Some(free) = (*self.api).free_status {
+                        free(&mut status);
+                    }
+                    return None;
+                }
+            } else {
+                return None;
+            }
+
+            let result = RimeEngineStatus {
+                is_composing: status.is_composing != FALSE,
+                is_ascii_mode: status.is_ascii_mode != FALSE,
+                schema_id: c_str_to_string(status.schema_id).unwrap_or_default(),
+                schema_name: c_str_to_string(status.schema_name).unwrap_or_default(),
+            };
+
+            if let Some(free) = (*self.api).free_status {
+                free(&mut status);
+            }
+            Some(result)
+        }
+    }
+
     pub fn select_candidate(&mut self, index: usize) -> bool {
         unsafe {
             if let Some(select) = (*self.api).select_candidate {
@@ -437,6 +489,14 @@ unsafe fn c_str_to_string(ptr: *mut i8) -> Option<String> {
         return None;
     }
     CStr::from_ptr(ptr).to_str().ok().map(|s| s.to_owned())
+}
+
+#[derive(Debug, Clone)]
+pub struct RimeEngineStatus {
+    pub is_composing: bool,
+    pub is_ascii_mode: bool,
+    pub schema_id: String,
+    pub schema_name: String,
 }
 
 #[derive(Debug, Clone)]

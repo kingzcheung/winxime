@@ -551,6 +551,8 @@ pub const XK_Prior: c_int = 65365;
 pub const XK_Next: c_int = 65366;
 pub const XK_Home: c_int = 65360;
 pub const XK_End: c_int = 65367;
+pub const XK_Shift_L: c_int = 65505;
+pub const XK_Shift_R: c_int = 65506;
 
 // TSF virtual key codes
 pub const VK_A: u16 = 0x41;
@@ -636,6 +638,7 @@ pub fn vk_to_xk(vk: u16) -> c_int {
         VK_DOWN => XK_Down,
         VK_PRIOR => XK_Prior,
         VK_NEXT => XK_Next,
+        VK_SHIFT => XK_Shift_L,
         VK_A => XK_a,
         VK_B => XK_b,
         VK_C => XK_c,

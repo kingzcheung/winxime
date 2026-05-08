@@ -221,6 +221,21 @@ fn process_request(
             std::process::exit(0);
         }
 
+        IpcCommand::ToggleAsciiMode => {
+            println!("ToggleAsciiMode requested");
+            let current = eng.is_ascii_mode();
+            let new_mode = !current;
+            println!("  -> current={}, setting to {}", current, new_mode);
+            eng.set_option("ascii_mode", new_mode);
+            
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: Some(get_ipc_status(&eng)),
+            }
+        }
+
         _ => IpcResponse {
             success: false,
             session_id: request.session_id,
@@ -249,11 +264,12 @@ fn update_context(eng: &mut RimeEngine, context: &Arc<SharedInputContext>) {
 }
 
 fn get_ipc_status(eng: &RimeEngine) -> winxime_ipc::Status {
+    let status = eng.get_status();
     winxime_ipc::Status {
         composing: eng.is_composing(),
-        ascii_mode: false,
-        schema_id: String::new(),
-        schema_name: String::new(),
+        ascii_mode: status.as_ref().map(|s| s.is_ascii_mode).unwrap_or(false),
+        schema_id: status.as_ref().map(|s| s.schema_id.clone()).unwrap_or_default(),
+        schema_name: status.as_ref().map(|s| s.schema_name.clone()).unwrap_or_default(),
     }
 }
 

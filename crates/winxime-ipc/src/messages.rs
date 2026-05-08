@@ -93,6 +93,7 @@ pub enum IpcCommand {
     CommitComposition,
     ClearComposition,
     ShutdownServer,
+    ToggleAsciiMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

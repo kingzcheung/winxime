@@ -3,7 +3,7 @@ use std::sync::Arc;
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::TextServices::*;
-use windows_core::*;
+use windows_core::{*, Interface};
 use winxime_ipc::{
     IpcClient, IpcCommand, IpcRequest, IpcRequestData, IpcResponse, KeyEventData, Position,
 };
@@ -135,6 +135,21 @@ impl IpcClientHandle {
                 data: IpcRequestData::Position(Position { x, y }),
             };
             let _ = client.send_oneway(&request);
+        }
+    }
+
+    pub fn toggle_ascii_mode(&self) -> Option<IpcResponse> {
+        let mut guard = self.state.lock().unwrap();
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::ToggleAsciiMode,
+                session_id,
+                data: IpcRequestData::None,
+            };
+            client.send_request(&request).ok()
+        } else {
+            None
         }
     }
 
@@ -480,16 +495,18 @@ pub struct KeyEventSink {
     thread_mgr: std::sync::Mutex<Option<ITfThreadMgr>>,
     client_id: std::sync::atomic::AtomicU32,
     composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
+    ascii_mode: crate::language_bar::SharedAsciiMode,
 }
 
 impl KeyEventSink {
-    pub fn new(ipc: IpcClientHandle) -> Self {
+    pub fn new(ipc: IpcClientHandle, ascii_mode: crate::language_bar::SharedAsciiMode) -> Self {
         Self {
             ipc,
             composing: std::sync::atomic::AtomicBool::new(false),
             thread_mgr: std::sync::Mutex::new(None),
             client_id: std::sync::atomic::AtomicU32::new(0),
             composition: Arc::new(std::sync::Mutex::new(None)),
+            ascii_mode,
         }
     }
 
@@ -785,13 +802,43 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
     fn OnTestKeyUp(
         &self,
         _pic: Ref<'_, ITfContext>,
-        _wparam: WPARAM,
+        wparam: WPARAM,
         _lparam: LPARAM,
     ) -> Result<BOOL> {
+        let vk = VIRTUAL_KEY(wparam.0 as u16);
+        if vk.0 == VK_SHIFT.0 {
+            return Ok(BOOL(1));
+        }
         Ok(BOOL(0))
     }
 
-    fn OnKeyUp(&self, _pic: Ref<'_, ITfContext>, _wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
+    fn OnKeyUp(&self, _pic: Ref<'_, ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
+        let vk = VIRTUAL_KEY(wparam.0 as u16);
+        log(&format!("OnKeyUp: vk={}", vk.0));
+        
+        if vk.0 != VK_SHIFT.0 {
+            return Ok(BOOL(0));
+        }
+
+        if !self.ipc.is_connected() {
+            log("  -> IPC not connected");
+            return Ok(BOOL(0));
+        }
+
+        log("  -> calling toggle_ascii_mode");
+        let response = self.ipc.toggle_ascii_mode();
+        log(&format!("  -> response: {:?}", response));
+        
+        if let Some(response) = response {
+            if response.success {
+                if let Some(status) = response.status {
+                    log(&format!("  -> ascii_mode: {}", status.ascii_mode));
+                    self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                }
+                return Ok(BOOL(1));
+            }
+        }
+        
         Ok(BOOL(0))
     }
 
@@ -807,7 +854,24 @@ pub struct XimeTextService {
     ipc: IpcClientHandle,
     key_sink: std::cell::RefCell<Option<ITfKeyEventSink>>,
     keystroke_mgr: std::cell::RefCell<Option<ITfKeystrokeMgr>>,
+    lang_bar_mgr: std::cell::RefCell<Option<ITfLangBarItemMgr>>,
+    ascii_mode: crate::language_bar::SharedAsciiMode,
+    lang_bar_sink: std::cell::RefCell<Option<ITfLangBarItemSink>>,
 }
+
+pub const GUID_LANG_BAR_ITEM: GUID = GUID {
+    data1: 0xA1B2C3D4,
+    data2: 0xE5F6,
+    data3: 0x789A,
+    data4: [0xBC, 0xDE, 0xF0, 0x12, 0x34, 0x56, 0x78, 0x9A],
+};
+
+pub const CLSID_TEXT_SERVICE: GUID = GUID {
+    data1: 0x5E1E4B52,
+    data2: 0x4A6D,
+    data3: 0x4F3A,
+    data4: [0xB5, 0xC7, 0xD8, 0xE9, 0xF0, 0x1A, 0x2B, 0x3C],
+};
 
 impl XimeTextService {
     pub fn new() -> Self {
@@ -822,6 +886,9 @@ impl XimeTextService {
             ipc,
             key_sink: std::cell::RefCell::new(None),
             keystroke_mgr: std::cell::RefCell::new(None),
+            lang_bar_mgr: std::cell::RefCell::new(None),
+            ascii_mode: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            lang_bar_sink: std::cell::RefCell::new(None),
         }
     }
 
@@ -864,8 +931,8 @@ impl XimeTextService_Impl {
             Err(e) => log(&format!("IPC connection failed: {:?}", e)),
         }
 
-        // Create KeyEventSink with shared IPC handle
-        let sink = KeyEventSink::new(self.ipc.clone());
+        // Create KeyEventSink with shared IPC handle and ascii_mode
+        let sink = KeyEventSink::new(self.ipc.clone(), self.ascii_mode.clone());
         sink.set_client_id(tid);
         sink.set_thread_mgr(ptim.cloned());
         log("KeyEventSink created with IPC handle");
@@ -885,6 +952,21 @@ impl XimeTextService_Impl {
             } else {
                 log("Failed to get ITfKeystrokeMgr");
             }
+
+            // Initialize language bar with shared ascii_mode
+            if let Ok(lang_bar_mgr) = thread_mgr.cast::<ITfLangBarItemMgr>() {
+                log("Got ITfLangBarItemMgr, creating LangBarItem...");
+                let lang_bar = crate::language_bar::LangBarItemButton::new(GUID_LANG_BAR_ITEM, self.ipc.clone(), self.ascii_mode.clone());
+                let lang_bar_itf: ITfLangBarItemButton = lang_bar.into();
+                if unsafe { lang_bar_mgr.AddItem(&lang_bar_itf).is_ok() } {
+                    log("LangBarItem added successfully");
+                    *self.lang_bar_mgr.borrow_mut() = Some(lang_bar_mgr);
+                } else {
+                    log("LangBarItem AddItem failed");
+                }
+            } else {
+                log("Failed to get ITfLangBarItemMgr");
+            }
         } else {
             log("No thread_mgr available");
         }
@@ -900,6 +982,7 @@ impl XimeTextService_Impl {
         }
 
         *self.key_sink.borrow_mut() = None;
+        *self.lang_bar_mgr.borrow_mut() = None;
         *self.thread_mgr.borrow_mut() = None;
         self.client_id.set(0);
         Ok(())

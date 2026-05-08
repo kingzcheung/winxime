@@ -85,6 +85,7 @@ pub unsafe extern "system" fn DllMain(
     _reserved: *mut core::ffi::c_void,
 ) -> BOOL {
     DLL_MODULE = hinst;
+    crate::language_bar::set_instance(hinst);
     BOOL(1)
 }
 
