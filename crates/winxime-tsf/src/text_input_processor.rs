@@ -8,6 +8,8 @@ use winxime_ipc::{
     IpcClient, IpcCommand, IpcRequest, IpcRequestData, IpcResponse, KeyEventData, Position,
 };
 
+const TF_INVALID_COOKIE: u32 = 0xFFFFFFFF;
+
 const VK_X_A: u16 = 0x41;
 const VK_X_Z: u16 = 0x5A;
 const VK_X_0: u16 = 0x30;
@@ -75,10 +77,21 @@ impl IpcClientHandle {
                 session_id: 0,
                 data: IpcRequestData::None,
             };
-            if let Ok(response) = client.send_request(&request) {
-                guard.session_id = response.session_id;
-                return (guard.session_id, Some(response));
+            log(&format!("start_session: sending request, session_id=0"));
+            match client.send_request(&request) {
+                Ok(response) => {
+                    log(&format!("start_session: got response, session_id={}, ascii_mode={}", 
+                        response.session_id, 
+                        response.status.as_ref().map(|s| s.ascii_mode).unwrap_or(false)));
+                    guard.session_id = response.session_id;
+                    return (guard.session_id, Some(response));
+                }
+                Err(e) => {
+                    log(&format!("start_session: send_request FAILED: {:?}", e));
+                }
             }
+        } else {
+            log("start_session: no client");
         }
         (guard.session_id, None)
     }
@@ -92,10 +105,19 @@ impl IpcClientHandle {
                 session_id,
                 data: IpcRequestData::KeyEvent(KeyEventData { keycode, modifiers }),
             };
-            client.send_request(&request).ok()
+            match client.send_request(&request) {
+                Ok(response) => {
+                    log(&format!("process_key: got response, success={}", response.success));
+                    return Some(response);
+                }
+                Err(e) => {
+                    log(&format!("process_key: send_request FAILED: {:?}", e));
+                }
+            }
         } else {
-            None
+            log("process_key: no client");
         }
+        None
     }
 
     pub fn select_candidate(&self, index: usize) -> Option<IpcResponse> {
@@ -885,7 +907,7 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
     }
 }
 
-#[implement(ITfTextInputProcessor)]
+#[implement(ITfTextInputProcessor, ITfActiveLanguageProfileNotifySink, ITfThreadFocusSink)]
 pub struct XimeTextService {
     thread_mgr: std::cell::RefCell<Option<ITfThreadMgr>>,
     client_id: std::cell::Cell<u32>,
@@ -896,16 +918,13 @@ pub struct XimeTextService {
     ascii_mode: crate::language_bar::SharedAsciiMode,
     lang_bar_sink_ref: crate::language_bar::LangBarSinkRef,
     lang_bar_item: std::cell::RefCell<Option<ITfLangBarItemButton>>,
+    profile_sink_cookie: std::cell::Cell<u32>,
+    profile_source: std::cell::RefCell<Option<ITfSource>>,
+    thread_focus_sink_cookie: std::cell::Cell<u32>,
+    thread_focus_source: std::cell::RefCell<Option<ITfSource>>,
 }
 
 pub const GUID_LANG_BAR_ITEM: GUID = GUID_LBI_INPUTMODE;
-
-pub const CLSID_TEXT_SERVICE: GUID = GUID {
-    data1: 0x5E1E4B52,
-    data2: 0x4A6D,
-    data3: 0x4F3A,
-    data4: [0xB5, 0xC7, 0xD8, 0xE9, 0xF0, 0x1A, 0x2B, 0x3C],
-};
 
 impl XimeTextService {
     pub fn new() -> Self {
@@ -924,6 +943,10 @@ impl XimeTextService {
             ascii_mode: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             lang_bar_sink_ref: Arc::new(std::sync::Mutex::new(None)),
             lang_bar_item: std::cell::RefCell::new(None),
+            profile_sink_cookie: std::cell::Cell::new(TF_INVALID_COOKIE),
+            profile_source: std::cell::RefCell::new(None),
+            thread_focus_sink_cookie: std::cell::Cell::new(TF_INVALID_COOKIE),
+            thread_focus_source: std::cell::RefCell::new(None),
         }
     }
 
@@ -1023,6 +1046,40 @@ impl XimeTextService_Impl {
             } else {
                 log("Failed to get ITfLangBarItemMgr");
             }
+
+            // Register profile activation sink for input method switching
+            if let Ok(source) = thread_mgr.cast::<ITfSource>() {
+                log("Got ITfSource from thread_mgr, registering sinks...");
+                use windows_core::ComObjectInterface;
+                
+                // Register ITfActiveLanguageProfileNotifySink
+                let profile_sink_ref = ComObjectInterface::<ITfActiveLanguageProfileNotifySink>::as_interface_ref(self);
+                let profile_sink: ITfActiveLanguageProfileNotifySink = profile_sink_ref.to_owned();
+                unsafe {
+                    if let Ok(cookie) = source.AdviseSink(&ITfActiveLanguageProfileNotifySink::IID, &profile_sink) {
+                        log(&format!("Profile sink registered, cookie={}", cookie));
+                        self.profile_sink_cookie.set(cookie);
+                        *self.profile_source.borrow_mut() = Some(source.clone());
+                    } else {
+                        log("Failed to AdviseSink for profile");
+                    }
+                }
+                
+                // Register ITfThreadFocusSink
+                let thread_focus_sink_ref = ComObjectInterface::<ITfThreadFocusSink>::as_interface_ref(self);
+                let thread_focus_sink: ITfThreadFocusSink = thread_focus_sink_ref.to_owned();
+                unsafe {
+                    if let Ok(cookie) = source.AdviseSink(&ITfThreadFocusSink::IID, &thread_focus_sink) {
+                        log(&format!("Thread focus sink registered, cookie={}", cookie));
+                        self.thread_focus_sink_cookie.set(cookie);
+                        *self.thread_focus_source.borrow_mut() = Some(source);
+                    } else {
+                        log("Failed to AdviseSink for thread focus");
+                    }
+                }
+            } else {
+                log("Failed to get ITfSource from thread_mgr");
+            }
         } else {
             log("No thread_mgr available");
         }
@@ -1033,6 +1090,26 @@ impl XimeTextService_Impl {
     fn deactivate_impl(&self) -> Result<()> {
         log("Deactivate called");
         self.ipc.hide_tray_icon();
+        
+        // Unregister profile sink
+        if self.profile_sink_cookie.get() != TF_INVALID_COOKIE {
+            if let Some(source) = self.profile_source.borrow_mut().take() {
+                unsafe {
+                    let _ = source.UnadviseSink(self.profile_sink_cookie.get());
+                }
+            }
+            self.profile_sink_cookie.set(TF_INVALID_COOKIE);
+        }
+        
+        // Unregister thread focus sink
+        if self.thread_focus_sink_cookie.get() != TF_INVALID_COOKIE {
+            if let Some(source) = self.thread_focus_source.borrow_mut().take() {
+                unsafe {
+                    let _ = source.UnadviseSink(self.thread_focus_sink_cookie.get());
+                }
+            }
+            self.thread_focus_sink_cookie.set(TF_INVALID_COOKIE);
+        }
         
         if let Some(kmgr) = self.keystroke_mgr.borrow_mut().take() {
             unsafe {
@@ -1064,5 +1141,133 @@ impl ITfTextInputProcessor_Impl for XimeTextService_Impl {
 
     fn Deactivate(&self) -> Result<()> {
         self.deactivate_impl()
+    }
+}
+
+impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
+    fn OnActivated(&self, clsid: *const GUID, guidprofile: *const GUID, factivated: BOOL) -> Result<()> {
+        let clsid_ref = unsafe { clsid.as_ref() };
+        let profile_ref = unsafe { guidprofile.as_ref() };
+        
+        log(&format!("ITfActiveLanguageProfileNotifySink::OnActivated: clsid={:?}, profile={:?}, activated={}", 
+            clsid_ref, profile_ref, factivated.0));
+        
+        // Check if this is our text service being activated
+        let our_clsid = crate::class_factory::CLSID_XIME;
+        if let Some(clsid_val) = clsid_ref {
+            if clsid_val != &our_clsid {
+                log("  -> Not our TIP, ignoring");
+                return Ok(());
+            }
+        }
+        
+        if factivated.as_bool() {
+            log("  -> Our TIP is being activated!");
+            
+            // Ensure IPC connected
+            if !self.ipc.is_connected() {
+                log("  -> IPC not connected, attempting reconnect...");
+                if self.ipc.connect().is_err() {
+                    log("  -> Reconnect failed, skipping");
+                    return Ok(());
+                }
+                log("  -> Reconnected!");
+            }
+            
+            // Ensure key event sink is registered
+            if self.key_sink.borrow().is_none() {
+                log("  -> Key sink not registered, re-registering...");
+                if let Some(thread_mgr) = self.thread_mgr.borrow().as_ref() {
+                    if let Ok(kmgr) = thread_mgr.cast::<ITfKeystrokeMgr>() {
+                        let sink_impl = KeyEventSink::new(self.ipc.clone(), self.ascii_mode.clone(), self.lang_bar_sink_ref.clone());
+                        sink_impl.set_client_id(self.client_id.get());
+                        sink_impl.set_thread_mgr(Some(thread_mgr.clone()));
+                        
+                        let key_sink_itf: ITfKeyEventSink = sink_impl.into();
+                        let tid = self.client_id.get();
+                        
+                        unsafe {
+                            if kmgr.AdviseKeyEventSink(tid, &key_sink_itf, true).is_ok() {
+                                log("  -> Key sink re-registered successfully");
+                                *self.keystroke_mgr.borrow_mut() = Some(kmgr);
+                                *self.key_sink.borrow_mut() = Some(key_sink_itf);
+                            } else {
+                                log("  -> Key sink re-registration failed");
+                            }
+                        }
+                    }
+                }
+            } else {
+                log("  -> Key sink already registered");
+            }
+            
+            // Get current status from server
+            if let Some(response) = self.ipc.start_session().1 {
+                if let Some(status) = response.status {
+                    log(&format!("  -> ascii_mode from server: {}", status.ascii_mode));
+                    self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                    
+                    // Update language bar
+                    if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap() {
+                        unsafe {
+                            let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
+                        }
+                    }
+                }
+            }
+            
+            // Show tray icon when activated
+            self.ipc.show_tray_icon();
+        } else {
+            log("  -> Our TIP is being deactivated");
+            self.ipc.hide_tray_icon();
+        }
+        
+        Ok(())
+    }
+}
+
+impl ITfThreadFocusSink_Impl for XimeTextService_Impl {
+    fn OnSetThreadFocus(&self) -> Result<()> {
+        log("ITfThreadFocusSink::OnSetThreadFocus");
+        
+        // Ensure IPC connected
+        if !self.ipc.is_connected() {
+            log("  -> IPC not connected, attempting reconnect...");
+            if self.ipc.connect().is_err() {
+                log("  -> Reconnect failed");
+                return Ok(());
+            }
+            log("  -> Reconnected!");
+        }
+        
+        // Sync status with server
+        if let Some(response) = self.ipc.start_session().1 {
+            if let Some(status) = response.status {
+                log(&format!("  -> ascii_mode from server: {}", status.ascii_mode));
+                self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                
+                // Update language bar
+                if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap() {
+                    unsafe {
+                        let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
+                    }
+                }
+            }
+        }
+        
+        // Show tray icon
+        self.ipc.show_tray_icon();
+        
+        Ok(())
+    }
+    
+    fn OnKillThreadFocus(&self) -> Result<()> {
+        log("ITfThreadFocusSink::OnKillThreadFocus");
+        
+        // Hide UI when thread loses focus
+        self.ipc.hide_tray_icon();
+        
+        Ok(())
     }
 }

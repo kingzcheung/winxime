@@ -51,7 +51,7 @@ fn guid_eq(a: &GUID, b: &GUID) -> bool {
 impl ITfLangBarItem_Impl for LangBarItemButton_Impl {
     fn GetInfo(&self, pInfo: *mut TF_LANGBARITEMINFO) -> Result<()> {
         let info = unsafe { &mut *pInfo };
-        info.clsidService = crate::text_input_processor::CLSID_TEXT_SERVICE;
+        info.clsidService = crate::class_factory::CLSID_XIME;
         info.guidItem = self.guid;
         info.dwStyle = TF_LBI_STYLE_BTN_BUTTON;
         info.ulSort = 1;

@@ -1,12 +1,7 @@
 use crate::class_factory::CLSID_XIME;
 use windows::Win32::Foundation::*;
-use windows::Win32::System::Com::*;
 use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetProcAddress, LoadLibraryW};
-use windows::Win32::UI::Input::KeyboardAndMouse::HKL;
-use windows::Win32::UI::TextServices::*;
 use windows_core::*;
-
-const TSF_LANGID: u16 = 0x0804;
 
 fn clsid_str() -> String {
     format!(
@@ -89,29 +84,6 @@ pub unsafe extern "system" fn DllMain(
     BOOL(1)
 }
 
-fn wide_string(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
-fn install_layout() {
-    let install_str = format!("0804:{}{{{}}}", clsid_str(), clsid_str(),);
-    let wide: Vec<u16> = install_str
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-    unsafe {
-        if let Ok(module) = LoadLibraryW(w!("input.dll")) {
-            if let Some(func) = std::mem::transmute::<
-                _,
-                Option<unsafe extern "system" fn(*const u16, u32) -> BOOL>,
-            >(GetProcAddress(module, s!("InstallLayoutOrTip")))
-            {
-                let _ = func(wide.as_ptr(), 0);
-            }
-        }
-    }
-}
-
 fn uninstall_layout() {
     let install_str = format!("0804:{}{{{}}}", clsid_str(), clsid_str(),);
     let wide: Vec<u16> = install_str
@@ -177,87 +149,8 @@ fn do_register() -> Result<()> {
         cs
     ));
 
-    eprintln!("[Xime] Step 4: CoInitializeEx...");
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-        eprintln!("[Xime] Step 5: CoCreateInstance ITfInputProcessorProfileMgr...");
-        let mgr: ITfInputProcessorProfileMgr =
-            CoCreateInstance(&CLSID_TF_InputProcessorProfiles, None, CLSCTX_INPROC_SERVER)
-                .map_err(|e| {
-                    eprintln!(
-                        "[Xime] ERROR: Failed to create ITfInputProcessorProfileMgr: {:?}",
-                        e
-                    );
-                    e
-                })?;
-
-        eprintln!("[Xime] Step 6: RegisterProfile...");
-        mgr.RegisterProfile(
-            &CLSID_XIME as *const GUID,
-            TSF_LANGID,
-            &CLSID_XIME as *const GUID,
-            &wide_string(name),
-            &wide_string(&module_path),
-            0,
-            HKL::default(),
-            0,
-            true,
-            0,
-        )
-        .map_err(|e| {
-            eprintln!("  -> ERROR: RegisterProfile: {:?}", e);
-            e
-        })?;
-
-        eprintln!("[Xime] Step 7: EnableLanguageProfile...");
-        let profiles: ITfInputProcessorProfiles = mgr.cast().map_err(|e| {
-            eprintln!(
-                "[Xime] ERROR: Failed to cast to ITfInputProcessorProfiles: {:?}",
-                e
-            );
-            e
-        })?;
-        profiles
-            .EnableLanguageProfile(
-                &CLSID_XIME as *const GUID,
-                TSF_LANGID,
-                &CLSID_XIME as *const GUID,
-                true,
-            )
-            .map_err(|e| {
-                eprintln!("  -> ERROR: EnableLanguageProfile: {:?}", e);
-                e
-            })?;
-
-        eprintln!("[Xime] Step 8: Registering categories...");
-        let tsf_categories = [
-            GUID_TFCAT_TIP_KEYBOARD,
-            GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
-            GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
-            GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
-            GUID_TFCAT_TIPCAP_COMLESS,
-            GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
-            GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
-        ];
-
-        if let Ok(cat_mgr) =
-            CoCreateInstance::<_, ITfCategoryMgr>(&CLSID_TF_CategoryMgr, None, CLSCTX_INPROC_SERVER)
-        {
-            for catid in &tsf_categories {
-                let _ = cat_mgr.RegisterCategory(
-                    &CLSID_XIME as *const GUID,
-                    catid as *const GUID,
-                    &CLSID_XIME as *const GUID,
-                );
-            }
-        }
-
-        eprintln!("[Xime] Step 9: install_layout...");
-        install_layout();
-    }
-
     eprintln!("[Xime] DllRegisterServer completed successfully!");
+    eprintln!("[Xime] Note: Run winxime-tsf-register to register TSF profile and icon");
     Ok(())
 }
 
@@ -268,44 +161,6 @@ fn do_unregister() {
     let cs = clsid_str();
 
     uninstall_layout();
-
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-        if let Ok(mgr) = CoCreateInstance::<_, ITfInputProcessorProfileMgr>(
-            &CLSID_TF_InputProcessorProfiles,
-            None,
-            CLSCTX_INPROC_SERVER,
-        ) {
-            let _ = mgr.UnregisterProfile(
-                &CLSID_XIME as *const GUID,
-                TSF_LANGID,
-                &CLSID_XIME as *const GUID,
-                0,
-            );
-        }
-
-        let tsf_categories = [
-            GUID_TFCAT_TIP_KEYBOARD,
-            GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
-            GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
-            GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
-            GUID_TFCAT_TIPCAP_COMLESS,
-            GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
-            GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
-        ];
-        if let Ok(cat_mgr) =
-            CoCreateInstance::<_, ITfCategoryMgr>(&CLSID_TF_CategoryMgr, None, CLSCTX_INPROC_SERVER)
-        {
-            for catid in &tsf_categories {
-                let _ = cat_mgr.UnregisterCategory(
-                    &CLSID_XIME as *const GUID,
-                    catid as *const GUID,
-                    &CLSID_XIME as *const GUID,
-                );
-            }
-        }
-    }
 
     let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
     let _ = hkcr.delete_subkey_all(&format!("CLSID\\{}", cs));

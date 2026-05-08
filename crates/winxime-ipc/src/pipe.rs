@@ -3,11 +3,25 @@ use std::io::{Read, Write};
 
 #[derive(Debug)]
 pub enum IpcError {
-    ConnectionFailed,
-    SerializeFailed,
-    DeserializeFailed,
-    WriteFailed,
-    ReadFailed,
+    ConnectionFailed(String),
+    SerializeFailed(String),
+    DeserializeFailed(String),
+    WriteFailed(String),
+    ReadFailed(String),
+    EmptyResponse,
+}
+
+impl std::fmt::Display for IpcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IpcError::ConnectionFailed(s) => write!(f, "ConnectionFailed: {}", s),
+            IpcError::SerializeFailed(s) => write!(f, "SerializeFailed: {}", s),
+            IpcError::DeserializeFailed(s) => write!(f, "DeserializeFailed: {}", s),
+            IpcError::WriteFailed(s) => write!(f, "WriteFailed: {}", s),
+            IpcError::ReadFailed(s) => write!(f, "ReadFailed: {}", s),
+            IpcError::EmptyResponse => write!(f, "EmptyResponse"),
+        }
+    }
 }
 
 pub fn check_server_running() -> bool {
@@ -20,8 +34,7 @@ pub fn check_server_running() -> bool {
 
 pub fn stop_server() -> bool {
     if check_server_running() {
-        IpcClient::shutdown_server();
-        true
+        IpcClient::shutdown_server()
     } else {
         false
     }
@@ -37,7 +50,7 @@ impl IpcClient {
 
         match DuplexPipeStream::connect_by_path(pipe_path) {
             Ok(pipe) => Ok(Self { pipe }),
-            Err(_) => Err(IpcError::ConnectionFailed),
+            Err(e) => Err(IpcError::ConnectionFailed(format!("{:?}", e))),
         }
     }
 
@@ -45,15 +58,15 @@ impl IpcClient {
         &mut self,
         request: &crate::IpcRequest,
     ) -> Result<crate::IpcResponse, IpcError> {
-        let json = serde_json::to_vec(request).map_err(|_| IpcError::SerializeFailed)?;
+        let json = serde_json::to_vec(request).map_err(|e| IpcError::SerializeFailed(format!("{:?}", e)))?;
 
         self.pipe
             .write_all(&json)
-            .map_err(|_| IpcError::WriteFailed)?;
+            .map_err(|e| IpcError::WriteFailed(format!("write_all json: {:?}", e)))?;
         self.pipe
             .write_all(&[0])
-            .map_err(|_| IpcError::WriteFailed)?;
-        self.pipe.flush().map_err(|_| IpcError::WriteFailed)?;
+            .map_err(|e| IpcError::WriteFailed(format!("write_all terminator: {:?}", e)))?;
+        self.pipe.flush().map_err(|e| IpcError::WriteFailed(format!("flush: {:?}", e)))?;
 
         let mut response_buf = Vec::new();
         let mut byte = [0u8; 1];
@@ -67,26 +80,26 @@ impl IpcClient {
                     }
                     response_buf.push(byte[0]);
                 }
-                Err(_) => return Err(IpcError::ReadFailed),
+                Err(e) => return Err(IpcError::ReadFailed(format!("{:?}", e))),
             }
         }
 
         if response_buf.is_empty() {
-            return Err(IpcError::ReadFailed);
+            return Err(IpcError::EmptyResponse);
         }
 
-        serde_json::from_slice(&response_buf).map_err(|_| IpcError::DeserializeFailed)
+        serde_json::from_slice(&response_buf).map_err(|e| IpcError::DeserializeFailed(format!("{:?}", e)))
     }
 
     pub fn send_oneway(&mut self, request: &crate::IpcRequest) -> Result<(), IpcError> {
-        let json = serde_json::to_vec(request).map_err(|_| IpcError::SerializeFailed)?;
+        let json = serde_json::to_vec(request).map_err(|e| IpcError::SerializeFailed(format!("{:?}", e)))?;
         self.pipe
             .write_all(&json)
-            .map_err(|_| IpcError::WriteFailed)?;
+            .map_err(|e| IpcError::WriteFailed(format!("{:?}", e)))?;
         self.pipe
             .write_all(&[0])
-            .map_err(|_| IpcError::WriteFailed)?;
-        self.pipe.flush().map_err(|_| IpcError::WriteFailed)?;
+            .map_err(|e| IpcError::WriteFailed(format!("{:?}", e)))?;
+        self.pipe.flush().map_err(|e| IpcError::WriteFailed(format!("{:?}", e)))?;
 
         let mut response_buf = Vec::new();
         let mut byte = [0u8; 1];
