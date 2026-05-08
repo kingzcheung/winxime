@@ -2,7 +2,7 @@ use crate::ui::CandidateWindow;
 use interprocess::os::windows::named_pipe::{pipe_mode::Bytes, PipeListenerOptions};
 use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use widestring::u16cstr;
 use winxime_core::SharedInputContext;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
@@ -12,6 +12,7 @@ pub fn run_ipc_server(
     engine: Arc<std::sync::Mutex<RimeEngine>>,
     context: Arc<SharedInputContext>,
     window: Arc<CandidateWindow>,
+    ascii_mode: Arc<AtomicBool>,
 ) {
     let pipe_path = get_pipe_path();
     println!("Winxime Server: creating named pipe at {}", pipe_path);
@@ -41,8 +42,9 @@ pub fn run_ipc_server(
                 let engine_clone = engine.clone();
                 let context_clone = context.clone();
                 let window_clone = window.clone();
+                let ascii_mode_clone = ascii_mode.clone();
                 std::thread::spawn(move || {
-                    handle_connection(p, engine_clone, context_clone, window_clone);
+                    handle_connection(p, engine_clone, context_clone, window_clone, ascii_mode_clone);
                 });
             }
             Err(e) => {
@@ -53,10 +55,11 @@ pub fn run_ipc_server(
 }
 
 fn handle_connection(
-    pipe: interprocess::os::windows::named_pipe::DuplexPipeStream<Bytes>,
+    pipe: interprocess::os::windows::named_pipe::PipeStream<Bytes, Bytes>,
     engine: Arc<std::sync::Mutex<RimeEngine>>,
     context: Arc<SharedInputContext>,
     window: Arc<CandidateWindow>,
+    ascii_mode: Arc<AtomicBool>,
 ) {
     let (recv, send) = pipe.split();
     let mut reader = BufReader::new(recv);
@@ -83,7 +86,7 @@ fn handle_connection(
         };
         println!("Received request: {:?}", request.command);
 
-        let response = process_request(&request, &engine, &context, &window);
+        let response = process_request(&request, &engine, &context, &window, &ascii_mode);
 
         let json = match serde_json::to_vec(&response) {
             Ok(j) => j,
@@ -107,6 +110,7 @@ fn process_request(
     engine: &Arc<std::sync::Mutex<RimeEngine>>,
     context: &Arc<SharedInputContext>,
     window: &Arc<CandidateWindow>,
+    ascii_mode: &Arc<AtomicBool>,
 ) -> IpcResponse {
     let mut eng = engine.lock().unwrap();
 
@@ -118,8 +122,18 @@ fn process_request(
             status: None,
         },
 
-        IpcCommand::StartSession | IpcCommand::EndSession => {
-            println!("Session: {:?}", request.command);
+        IpcCommand::StartSession => {
+            println!("StartSession");
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: Some(get_ipc_status(&eng)),
+            }
+        }
+
+        IpcCommand::EndSession => {
+            println!("EndSession");
             IpcResponse {
                 success: true,
                 session_id: request.session_id,
@@ -134,7 +148,7 @@ fn process_request(
                 success: true,
                 session_id: request.session_id,
                 context: None,
-                status: None,
+                status: Some(get_ipc_status(&eng)),
             }
         }
 
@@ -227,12 +241,34 @@ fn process_request(
             let new_mode = !current;
             println!("  -> current={}, setting to {}", current, new_mode);
             eng.set_option("ascii_mode", new_mode);
+            ascii_mode.store(new_mode, Ordering::Release);
+            crate::tray::update_tray_icon(new_mode);
             
             IpcResponse {
                 success: true,
                 session_id: request.session_id,
                 context: None,
                 status: Some(get_ipc_status(&eng)),
+            }
+        }
+
+        IpcCommand::ShowTrayIcon => {
+            crate::tray::show_icon();
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: None,
+            }
+        }
+
+        IpcCommand::HideTrayIcon => {
+            crate::tray::hide_icon();
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: None,
             }
         }
 

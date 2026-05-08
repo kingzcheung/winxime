@@ -13,6 +13,8 @@ const VK_X_Z: u16 = 0x5A;
 const VK_X_0: u16 = 0x30;
 const VK_X_9: u16 = 0x39;
 
+const GUID_LBI_INPUTMODE: GUID = GUID::from_u128(0x5D5D8287_5B53_4DAA_B44C_52EB4794A3E7);
+
 struct IpcState {
     client: Option<IpcClient>,
     session_id: u32,
@@ -65,7 +67,7 @@ impl IpcClientHandle {
         r
     }
 
-    pub fn start_session(&self) -> u32 {
+    pub fn start_session(&self) -> (u32, Option<IpcResponse>) {
         let mut guard = self.state.lock().unwrap();
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -75,9 +77,10 @@ impl IpcClientHandle {
             };
             if let Ok(response) = client.send_request(&request) {
                 guard.session_id = response.session_id;
+                return (guard.session_id, Some(response));
             }
         }
-        guard.session_id
+        (guard.session_id, None)
     }
 
     pub fn process_key(&self, keycode: i32, modifiers: i32) -> Option<IpcResponse> {
@@ -173,6 +176,30 @@ impl IpcClientHandle {
             let request = IpcRequest {
                 command: IpcCommand::FocusOut,
                 session_id,
+                data: IpcRequestData::None,
+            };
+            let _ = client.send_oneway(&request);
+        }
+    }
+
+    pub fn show_tray_icon(&self) {
+        let mut guard = self.state.lock().unwrap();
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::ShowTrayIcon,
+                session_id: 0,
+                data: IpcRequestData::None,
+            };
+            let _ = client.send_oneway(&request);
+        }
+    }
+
+    pub fn hide_tray_icon(&self) {
+        let mut guard = self.state.lock().unwrap();
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::HideTrayIcon,
+                session_id: 0,
                 data: IpcRequestData::None,
             };
             let _ = client.send_oneway(&request);
@@ -496,10 +523,11 @@ pub struct KeyEventSink {
     client_id: std::sync::atomic::AtomicU32,
     composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
     ascii_mode: crate::language_bar::SharedAsciiMode,
+    lang_bar_sink_ref: crate::language_bar::LangBarSinkRef,
 }
 
 impl KeyEventSink {
-    pub fn new(ipc: IpcClientHandle, ascii_mode: crate::language_bar::SharedAsciiMode) -> Self {
+    pub fn new(ipc: IpcClientHandle, ascii_mode: crate::language_bar::SharedAsciiMode, sink_ref: crate::language_bar::LangBarSinkRef) -> Self {
         Self {
             ipc,
             composing: std::sync::atomic::AtomicBool::new(false),
@@ -507,6 +535,7 @@ impl KeyEventSink {
             client_id: std::sync::atomic::AtomicU32::new(0),
             composition: Arc::new(std::sync::Mutex::new(None)),
             ascii_mode,
+            lang_bar_sink_ref: sink_ref,
         }
     }
 
@@ -517,6 +546,14 @@ impl KeyEventSink {
     pub fn set_client_id(&self, id: u32) {
         self.client_id
             .store(id, std::sync::atomic::Ordering::Release);
+    }
+
+    fn update_lang_bar(&self) {
+        if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap() {
+            unsafe {
+                let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
+            }
+        }
     }
 
     fn is_composing(&self) -> bool {
@@ -834,6 +871,7 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
                 if let Some(status) = response.status {
                     log(&format!("  -> ascii_mode: {}", status.ascii_mode));
                     self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                    self.update_lang_bar();
                 }
                 return Ok(BOOL(1));
             }
@@ -856,15 +894,11 @@ pub struct XimeTextService {
     keystroke_mgr: std::cell::RefCell<Option<ITfKeystrokeMgr>>,
     lang_bar_mgr: std::cell::RefCell<Option<ITfLangBarItemMgr>>,
     ascii_mode: crate::language_bar::SharedAsciiMode,
-    lang_bar_sink: std::cell::RefCell<Option<ITfLangBarItemSink>>,
+    lang_bar_sink_ref: crate::language_bar::LangBarSinkRef,
+    lang_bar_item: std::cell::RefCell<Option<ITfLangBarItemButton>>,
 }
 
-pub const GUID_LANG_BAR_ITEM: GUID = GUID {
-    data1: 0xA1B2C3D4,
-    data2: 0xE5F6,
-    data3: 0x789A,
-    data4: [0xBC, 0xDE, 0xF0, 0x12, 0x34, 0x56, 0x78, 0x9A],
-};
+pub const GUID_LANG_BAR_ITEM: GUID = GUID_LBI_INPUTMODE;
 
 pub const CLSID_TEXT_SERVICE: GUID = GUID {
     data1: 0x5E1E4B52,
@@ -888,7 +922,8 @@ impl XimeTextService {
             keystroke_mgr: std::cell::RefCell::new(None),
             lang_bar_mgr: std::cell::RefCell::new(None),
             ascii_mode: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            lang_bar_sink: std::cell::RefCell::new(None),
+            lang_bar_sink_ref: Arc::new(std::sync::Mutex::new(None)),
+            lang_bar_item: std::cell::RefCell::new(None),
         }
     }
 
@@ -900,12 +935,18 @@ impl XimeTextService {
             self.ipc.debug_ptr()
         ));
         if connected {
-            return Ok(());
+            return Ok(())
         }
         log("ensure_ipc: attempting connect...");
         match self.ipc.connect() {
             Ok(()) => {
-                self.ipc.start_session();
+                let (_, response) = self.ipc.start_session();
+                if let Some(response) = response {
+                    if let Some(status) = response.status {
+                        log(&format!("ensure_ipc: initial ascii_mode={}", status.ascii_mode));
+                        self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                    }
+                }
                 log("ensure_ipc: connect OK");
                 Ok(())
             }
@@ -925,19 +966,25 @@ impl XimeTextService_Impl {
         *self.thread_mgr.borrow_mut() = ptim.cloned();
         self.client_id.set(tid);
 
-        // Try to connect to IPC server
         match self.ensure_ipc() {
-            Ok(()) => log("IPC connected successfully"),
+            Ok(()) => {
+                log("IPC connected successfully");
+                self.ipc.show_tray_icon();
+                if let Some(response) = self.ipc.start_session().1 {
+                    if let Some(status) = response.status {
+                        self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                    }
+                }
+            }
             Err(e) => log(&format!("IPC connection failed: {:?}", e)),
         }
 
-        // Create KeyEventSink with shared IPC handle and ascii_mode
-        let sink = KeyEventSink::new(self.ipc.clone(), self.ascii_mode.clone());
-        sink.set_client_id(tid);
-        sink.set_thread_mgr(ptim.cloned());
+        let sink_impl = KeyEventSink::new(self.ipc.clone(), self.ascii_mode.clone(), self.lang_bar_sink_ref.clone());
+        sink_impl.set_client_id(tid);
+        sink_impl.set_thread_mgr(ptim.cloned());
         log("KeyEventSink created with IPC handle");
 
-        let key_sink_itf: ITfKeyEventSink = sink.into();
+        let key_sink_itf: ITfKeyEventSink = sink_impl.into();
 
         if let Some(thread_mgr) = ptim {
             if let Ok(kmgr) = thread_mgr.cast::<ITfKeystrokeMgr>() {
@@ -953,16 +1000,25 @@ impl XimeTextService_Impl {
                 log("Failed to get ITfKeystrokeMgr");
             }
 
-            // Initialize language bar with shared ascii_mode
             if let Ok(lang_bar_mgr) = thread_mgr.cast::<ITfLangBarItemMgr>() {
                 log("Got ITfLangBarItemMgr, creating LangBarItem...");
-                let lang_bar = crate::language_bar::LangBarItemButton::new(GUID_LANG_BAR_ITEM, self.ipc.clone(), self.ascii_mode.clone());
+                let lang_bar = crate::language_bar::LangBarItemButton::new(
+                    GUID_LANG_BAR_ITEM,
+                    self.ipc.clone(),
+                    self.ascii_mode.clone(),
+                    self.lang_bar_sink_ref.clone(),
+                );
                 let lang_bar_itf: ITfLangBarItemButton = lang_bar.into();
-                if unsafe { lang_bar_mgr.AddItem(&lang_bar_itf).is_ok() } {
-                    log("LangBarItem added successfully");
-                    *self.lang_bar_mgr.borrow_mut() = Some(lang_bar_mgr);
-                } else {
-                    log("LangBarItem AddItem failed");
+                let add_result = unsafe { lang_bar_mgr.AddItem(&lang_bar_itf) };
+                match add_result {
+                    Ok(_) => {
+                        log("LangBarItem added successfully");
+                        *self.lang_bar_mgr.borrow_mut() = Some(lang_bar_mgr);
+                        *self.lang_bar_item.borrow_mut() = Some(lang_bar_itf);
+                    }
+                    Err(e) => {
+                        log(&format!("LangBarItem AddItem failed: {:?}", e));
+                    }
                 }
             } else {
                 log("Failed to get ITfLangBarItemMgr");
@@ -975,14 +1031,26 @@ impl XimeTextService_Impl {
     }
 
     fn deactivate_impl(&self) -> Result<()> {
+        log("Deactivate called");
+        self.ipc.hide_tray_icon();
+        
         if let Some(kmgr) = self.keystroke_mgr.borrow_mut().take() {
             unsafe {
                 let _ = kmgr.UnadviseKeyEventSink(self.client_id.get());
             }
         }
 
+        if let Some(lang_bar_mgr) = self.lang_bar_mgr.borrow_mut().take() {
+            if let Some(lang_bar_item) = self.lang_bar_item.borrow_mut().take() {
+                unsafe {
+                    if let Err(e) = lang_bar_mgr.RemoveItem(&lang_bar_item) {
+                        log(&format!("RemoveItem failed: {:?}", e));
+                    }
+                }
+            }
+        }
+
         *self.key_sink.borrow_mut() = None;
-        *self.lang_bar_mgr.borrow_mut() = None;
         *self.thread_mgr.borrow_mut() = None;
         self.client_id.set(0);
         Ok(())

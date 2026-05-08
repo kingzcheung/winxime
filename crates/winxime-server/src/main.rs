@@ -1,9 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ipc_server;
+mod tray;
 mod ui;
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicBool};
 use windows::Win32::{
     System::Recovery::{REGISTER_APPLICATION_RESTART_FLAGS, RegisterApplicationRestart},
     UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext},
@@ -80,6 +81,8 @@ fn main() {
 
     let context = Arc::new(SharedInputContext::new());
     
+    let ascii_mode = Arc::new(AtomicBool::new(false));
+    
     #[cfg(debug_assertions)]
     println!("Creating UI window...");
     
@@ -91,10 +94,49 @@ fn main() {
     let engine_clone = engine.clone();
     let context_clone = context.clone();
     let window_clone = window.clone();
+    let ascii_mode_clone = ascii_mode.clone();
     std::thread::spawn(move || {
-        ipc_server::run_ipc_server(engine_clone, context_clone, window_clone);
+        ipc_server::run_ipc_server(engine_clone, context_clone, window_clone, ascii_mode_clone);
     });
 
+    #[cfg(debug_assertions)]
+    println!("Creating tray icon...");
+    
+    let on_action = {
+        let engine = engine.clone();
+        Arc::new(move |action: tray::TrayAction| {
+            match action {
+                tray::TrayAction::ToggleAsciiMode => {
+                    let mut eng = engine.lock().unwrap();
+                    let current = eng.is_ascii_mode();
+                    eng.set_option("ascii_mode", !current);
+                    tray::update_tray_icon(!current);
+                    #[cfg(debug_assertions)]
+                    println!("Tray: toggled ascii_mode to {}", !current);
+                }
+                tray::TrayAction::OpenSettings => {
+                    let exe_path = std::env::current_exe().unwrap();
+                    let exe_dir = exe_path.parent().unwrap();
+                    let setup_path = exe_dir.join("winxime-setup.exe");
+                    if setup_path.exists() {
+                        std::process::Command::new(&setup_path)
+                            .spawn()
+                            .ok();
+                    }
+                    #[cfg(debug_assertions)]
+                    println!("Tray: open settings");
+                }
+                tray::TrayAction::Quit => {
+                    IpcClient::shutdown_server();
+                    #[cfg(debug_assertions)]
+                    println!("Tray: quit");
+                }
+            }
+        })
+    };
+    
+    tray::TrayIcon::new(on_action);
+    
     #[cfg(debug_assertions)]
     println!("Server ready");
     

@@ -1,6 +1,6 @@
 use crate::log::log;
 use crate::text_input_processor::IpcClientHandle;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::TextServices::*;
 use windows::Win32::UI::WindowsAndMessaging::HICON;
@@ -21,32 +21,25 @@ pub fn get_instance() -> HINSTANCE {
 }
 
 pub type SharedAsciiMode = Arc<AtomicBool>;
+pub type LangBarSinkRef = Arc<Mutex<Option<ITfLangBarItemSink>>>;
 
 #[implement(ITfLangBarItemButton, ITfSource)]
 pub struct LangBarItemButton {
     guid: GUID,
     ipc: IpcClientHandle,
-    lang_bar_item_sink: std::cell::RefCell<Option<ITfLangBarItemSink>>,
+    sink_ref: LangBarSinkRef,
     status: std::cell::Cell<u32>,
     ascii_mode: SharedAsciiMode,
 }
 
 impl LangBarItemButton {
-    pub fn new(guid: GUID, ipc: IpcClientHandle, ascii_mode: SharedAsciiMode) -> Self {
+    pub fn new(guid: GUID, ipc: IpcClientHandle, ascii_mode: SharedAsciiMode, sink_ref: LangBarSinkRef) -> Self {
         Self {
             guid,
             ipc,
-            lang_bar_item_sink: std::cell::RefCell::new(None),
+            sink_ref,
             status: std::cell::Cell::new(0),
             ascii_mode,
-        }
-    }
-
-    pub fn update_ascii_mode(&self) {
-        if let Some(ref sink) = *self.lang_bar_item_sink.borrow() {
-            unsafe {
-                let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
-            }
         }
     }
 }
@@ -60,7 +53,7 @@ impl ITfLangBarItem_Impl for LangBarItemButton_Impl {
         let info = unsafe { &mut *pInfo };
         info.clsidService = crate::text_input_processor::CLSID_TEXT_SERVICE;
         info.guidItem = self.guid;
-        info.dwStyle = TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_SHOWNINTRAY;
+        info.dwStyle = TF_LBI_STYLE_BTN_BUTTON;
         info.ulSort = 1;
         let desc: Vec<u16> = "Xime\0".encode_utf16().collect();
         for (i, c) in desc.iter().enumerate() {
@@ -81,16 +74,21 @@ impl ITfLangBarItem_Impl for LangBarItemButton_Impl {
         } else {
             self.status.set(self.status.get() | TF_LBI_STATUS_HIDDEN);
         }
-        if let Some(ref sink) = *self.lang_bar_item_sink.borrow() {
-            unsafe {
-                let _ = sink.OnUpdate(TF_LBI_STATUS);
-            }
-        }
+        self.update_sinks(TF_LBI_STATUS)?;
         Ok(())
     }
 
     fn GetTooltipString(&self) -> Result<BSTR> {
         Ok(BSTR::from("左键切换中/英"))
+    }
+}
+
+impl LangBarItemButton_Impl {
+    fn update_sinks(&self, dwflags: u32) -> Result<()> {
+        if let Some(ref sink) = *self.sink_ref.lock().unwrap() {
+            unsafe { sink.OnUpdate(dwflags)? };
+        }
+        Ok(())
     }
 }
 
@@ -109,7 +107,7 @@ impl ITfLangBarItemButton_Impl for LangBarItemButton_Impl {
                 if let Some(status) = response.status {
                     log(&format!("LangBarItem: ascii_mode={}", status.ascii_mode));
                     self.ascii_mode.store(status.ascii_mode, Ordering::Release);
-                    self.update_ascii_mode();
+                    self.update_sinks(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT)?;
                 }
             }
         }
@@ -142,7 +140,6 @@ impl ITfSource_Impl for LangBarItemButton_Impl {
     fn AdviseSink(&self, riid: *const GUID, punk: Ref<'_, IUnknown>) -> Result<u32> {
         let riid = unsafe { &*riid };
         
-        // ITfLangBarItemSink GUID
         let expected = GUID::from_values(
             0x1F45381, 0x0FEB, 0x4D89, [0xBF, 0x8D, 0x89, 0x9D, 0x73, 0x4E, 0x9B, 0x8E]
         );
@@ -151,12 +148,8 @@ impl ITfSource_Impl for LangBarItemButton_Impl {
             return Err(Error::from(HRESULT(0x80040201u32 as i32)));
         }
         
-        if self.lang_bar_item_sink.borrow().is_some() {
-            return Err(Error::from(HRESULT(0x80040202u32 as i32)));
-        }
-        
         let sink: ITfLangBarItemSink = punk.as_ref().unwrap().cast()?;
-        *self.lang_bar_item_sink.borrow_mut() = Some(sink);
+        *self.sink_ref.lock().unwrap() = Some(sink);
         
         Ok(LANGBAR_ITEM_COOKIE)
     }
@@ -165,7 +158,7 @@ impl ITfSource_Impl for LangBarItemButton_Impl {
         if dwCookie != LANGBAR_ITEM_COOKIE {
             return Err(Error::from(HRESULT(0x80040200u32 as i32)));
         }
-        *self.lang_bar_item_sink.borrow_mut() = None;
+        *self.sink_ref.lock().unwrap() = None;
         Ok(())
     }
 }
