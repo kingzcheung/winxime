@@ -2,3 +2,4 @@
 librime-rs-master
 Cargo.lock
 /data
+/*.log
