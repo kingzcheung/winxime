@@ -212,6 +212,7 @@ struct XimeEditSession {
     thread_mgr: Option<ITfThreadMgr>,
     composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
     composition_sink: ITfCompositionSink,
+    ipc: IpcClientHandle,
 }
 
 #[implement(ITfCompositionSink)]
@@ -267,7 +268,6 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
                         if range.SetText(ec, 0, &wide).is_ok() {
                             crate::log::log("DoEditSession: SetText succeeded");
                             
-                            // If there's commit text, shift composition start past it
                             if !commit_text.is_empty() {
                                 let commit_len = commit_text.chars().count() as i32;
                                 let mut moved = 0;
@@ -277,7 +277,6 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
                                 crate::log::log("DoEditSession: shift start done");
                             }
                             
-                            // Set cursor at end of preedit
                             if let Ok(cursor_range) = range.Clone() {
                                 let preedit_len = preedit_text.chars().count() as i32;
                                 let mut moved = 0;
@@ -293,6 +292,8 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
                                 context.SetSelection(ec, &selections).ok();
                                 let [TF_SELECTION { range, .. }] = selections;
                                 ManuallyDrop::into_inner(range);
+                                
+                                Self::update_caret_position_in_session(&context, ec, &self.ipc);
                             }
                         }
                     }
@@ -346,6 +347,30 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
 }
 
 impl XimeEditSession_Impl {
+    fn update_caret_position_in_session(context: &ITfContext, ec: u32, ipc: &IpcClientHandle) {
+        use std::mem::ManuallyDrop;
+        use std::ops::Deref;
+
+        unsafe {
+            let mut selection = [TF_SELECTION::default(); 1];
+            let mut selection_len = 0;
+            if context.GetSelection(ec, TF_DEFAULT_SELECTION, &mut selection, &mut selection_len).is_ok() {
+                if let Some(sel_range) = selection[0].range.deref() {
+                    if let Ok(view) = context.GetActiveView() {
+                        let mut rc = RECT::default();
+                        let mut clipped = BOOL::default();
+                        if view.GetTextExt(ec, sel_range, &mut rc, &mut clipped).is_ok() {
+                            log(&format!("update_caret_position_in_session: left={}, bottom={}", rc.left, rc.bottom));
+                            let _ = ipc.update_position(rc.left, rc.bottom);
+                        }
+                    }
+                }
+                let [TF_SELECTION { range, .. }] = selection;
+                ManuallyDrop::into_inner(range);
+            }
+        }
+    }
+
     fn start_composition(&self, context: &ITfContext, ec: u32, preedit: &str) {
         log(&format!("start_composition: preedit='{}'", preedit));
         use windows::Win32::UI::TextServices::{ITfInsertAtSelection, TF_IAS_QUERYONLY};
@@ -392,7 +417,6 @@ impl XimeEditSession_Impl {
                     match comp_range.SetText(ec, 0, &wide) {
                         Ok(_) => {
                             log("start_composition: SetText succeeded");
-                            // Set cursor at end of preedit
                             let preedit_len = preedit.chars().count() as i32;
                             let mut moved = 0;
                             comp_range.Collapse(ec, TF_ANCHOR_START).ok();
@@ -409,6 +433,8 @@ impl XimeEditSession_Impl {
                             ManuallyDrop::into_inner(range);
                             
                             *self.composition.lock().unwrap() = Some(comp);
+                            
+                            Self::update_caret_position_in_session(context, ec, &self.ipc);
                         }
                         Err(e) => {
                             log(&format!("start_composition: SetText failed: {:?}", e));
@@ -507,8 +533,8 @@ impl KeyEventSink {
         false
     }
 
-    fn update_caret_position(&self, context: &ITfContext) {
-        log("update_caret_position: getting caret rect");
+    fn update_caret_position_sync(&self, context: &ITfContext) {
+        log("update_caret_position_sync: getting caret rect");
 
         use windows::Win32::Foundation::RECT;
         use windows::Win32::UI::TextServices::{
@@ -576,13 +602,13 @@ impl KeyEventSink {
 
         let rect = session.rect();
         log(&format!(
-            "update_caret_position: left={}, bottom={}",
+            "update_caret_position_sync: left={}, bottom={}",
             rect.left, rect.bottom
         ));
 
         if self.ipc.is_connected() {
             let _ = self.ipc.update_position(rect.left, rect.bottom);
-            log("update_caret_position: sent to server");
+            log("update_caret_position_sync: sent to server");
         }
     }
 
@@ -601,6 +627,7 @@ impl KeyEventSink {
             thread_mgr: mgr,
             composition: self.composition.clone(),
             composition_sink,
+            ipc: self.ipc.clone(),
         };
         let session_itf: ITfEditSession = session.into();
         log(&format!(
@@ -674,6 +701,10 @@ impl KeyEventSink {
             return false;
         }
 
+        if let Some(ctx) = context {
+            self.update_caret_position_sync(ctx);
+        }
+
         let xk = librime_sys::vk_to_xk(code);
         let mods = librime_sys::get_key_modifiers();
         log(&format!("  -> calling process_key({}, {})", xk, mods));
@@ -689,9 +720,6 @@ impl KeyEventSink {
                     if context.is_some() { "Some" } else { "None" }
                 ));
                 if let Some(ctx) = context {
-                    if output.composing && response.context.is_some() {
-                        self.update_caret_position(ctx);
-                    }
                     log("  -> calling schedule_edit_session");
                     self.schedule_edit_session(ctx, output);
                     log("  -> schedule_edit_session returned");
