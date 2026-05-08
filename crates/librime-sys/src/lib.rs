@@ -543,6 +543,14 @@ pub const XK_Return: c_int = 65293;
 pub const XK_Escape: c_int = 65307;
 pub const XK_Delete: c_int = 65535;
 pub const XK_space: c_int = 32;
+pub const XK_Left: c_int = 65361;
+pub const XK_Up: c_int = 65362;
+pub const XK_Right: c_int = 65363;
+pub const XK_Down: c_int = 65364;
+pub const XK_Prior: c_int = 65365;
+pub const XK_Next: c_int = 65366;
+pub const XK_Home: c_int = 65360;
+pub const XK_End: c_int = 65367;
 
 // TSF virtual key codes
 pub const VK_A: u16 = 0x41;
@@ -622,6 +630,12 @@ pub fn vk_to_xk(vk: u16) -> c_int {
         VK_BACK => XK_BackSpace,
         VK_ESCAPE => XK_Escape,
         VK_DELETE => XK_Delete,
+        VK_LEFT => XK_Left,
+        VK_UP => XK_Up,
+        VK_RIGHT => XK_Right,
+        VK_DOWN => XK_Down,
+        VK_PRIOR => XK_Prior,
+        VK_NEXT => XK_Next,
         VK_A => XK_a,
         VK_B => XK_b,
         VK_C => XK_c,
@@ -648,6 +662,7 @@ pub fn vk_to_xk(vk: u16) -> c_int {
         VK_X => XK_x,
         VK_Y => XK_y,
         VK_Z => XK_z,
+        VK_0..=VK_9 => vk as c_int,
         _ => vk as c_int,
     }
 }

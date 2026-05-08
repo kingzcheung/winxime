@@ -124,6 +124,27 @@ fn process_request(
             status: None,
         },
 
+        IpcCommand::FocusIn => {
+            println!("FocusIn");
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: None,
+            }
+        }
+
+        IpcCommand::FocusOut => {
+            println!("FocusOut -> hiding window");
+            window.hide();
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: None,
+            }
+        }
+
         IpcCommand::ProcessKeyEvent => {
             let handled = match &request.data {
                 IpcRequestData::KeyEvent(key) => {
@@ -207,8 +228,9 @@ fn update_context(eng: &mut RimeEngine, context: &Arc<SharedInputContext>) {
         ctx.composition.preedit = eng.get_input().unwrap_or_default();
         ctx.commit_text = eng.get_commit().unwrap_or_default();
 
-        let candidates = eng.get_candidates();
-        ctx.candidates = candidates
+        let cand_list = eng.get_candidates();
+        ctx.candidates = cand_list
+            .candidates
             .iter()
             .map(|c| winxime_core::CandidateInfo {
                 text: c.text.clone(),
@@ -234,25 +256,27 @@ fn get_ipc_context(eng: &RimeEngine, commit: &Option<String>) -> Option<winxime_
         return None;
     }
 
+    let cand_list = eng.get_candidates();
+
     Some(winxime_ipc::Context {
         preedit: winxime_ipc::Text {
             str: eng.get_input().unwrap_or_default(),
         },
         commit: commit.clone(),
         candidates: winxime_ipc::CandidateInfo {
-            current_page: 0,
-            total_pages: 1,
-            highlighted: 0,
-            is_last_page: true,
-            candies: eng
-                .get_candidates()
+            current_page: cand_list.page_no as u32,
+            total_pages: (if cand_list.is_last_page { cand_list.page_no + 1 } else { cand_list.page_no + 2 }) as u32,
+            highlighted: cand_list.highlighted,
+            is_last_page: cand_list.is_last_page,
+            candies: cand_list
+                .candidates
                 .iter()
                 .map(|c| winxime_ipc::Text {
                     str: c.text.clone(),
                 })
                 .collect(),
-            comments: eng
-                .get_candidates()
+            comments: cand_list
+                .candidates
                 .iter()
                 .map(|c| winxime_ipc::Text {
                     str: c.comment.clone().unwrap_or_default(),

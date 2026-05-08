@@ -25,8 +25,10 @@ fn main() {
     let _ = std::fs::create_dir_all(&user_data_dir);
 
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
-        Ok(e) => {
+        Ok(mut e) => {
             println!("Rime engine initialized successfully");
+            e.set_option("_horizontal", true);
+            println!("Set _horizontal=true for horizontal candidate layout");
             let schemas = e.get_schema_list();
             println!("Available schemas: {:?}", schemas);
             if let Some(schema) = e.get_current_schema() {

@@ -177,7 +177,7 @@ impl Clone for IpcClientHandle {
 struct RimeOutput {
     commit: Option<String>,
     preedit: String,
-    candidates: Vec<String>,
+    _candidates: Vec<String>,
     composing: bool,
 }
 
@@ -194,7 +194,7 @@ impl RimeOutput {
         Self {
             commit,
             preedit: ctx.map(|c| c.preedit.str.clone()).unwrap_or_default(),
-            candidates: ctx
+            _candidates: ctx
                 .map(|c| c.candidates.candies.iter().map(|t| t.str.clone()).collect())
                 .unwrap_or_default(),
             composing: response
@@ -500,7 +500,7 @@ impl KeyEventSink {
             if (VK_X_0..=VK_X_9).contains(&code) {
                 return true;
             }
-            if code == VK_UP.0 || code == VK_DOWN.0 || code == VK_PRIOR.0 || code == VK_NEXT.0 {
+            if code == VK_UP.0 || code == VK_DOWN.0 || code == VK_LEFT.0 || code == VK_RIGHT.0 || code == VK_PRIOR.0 || code == VK_NEXT.0 {
                 return true;
             }
         }
@@ -623,12 +623,6 @@ impl KeyEventSink {
     fn handle_key_event(&self, context: Option<&ITfContext>, vk: VIRTUAL_KEY) -> bool {
         log(&format!("handle_key_event: vk={}", vk.0));
 
-        // Update caret position before processing key
-        if let Some(ctx) = context {
-            self.update_caret_position(ctx);
-        }
-
-        // Ensure IPC is connected
         if !self.ipc.is_connected() {
             log("  -> IPC not connected, attempting reconnect...");
             if self.ipc.connect().is_ok() {
@@ -695,6 +689,9 @@ impl KeyEventSink {
                     if context.is_some() { "Some" } else { "None" }
                 ));
                 if let Some(ctx) = context {
+                    if output.composing && response.context.is_some() {
+                        self.update_caret_position(ctx);
+                    }
                     log("  -> calling schedule_edit_session");
                     self.schedule_edit_session(ctx, output);
                     log("  -> schedule_edit_session returned");

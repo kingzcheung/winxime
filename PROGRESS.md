@@ -7,6 +7,15 @@
 - [x] IPC 架构重构完成
 - [x] Server 正常启动并监听 Named Pipe
 - [x] Rime engine 初始化成功，加载 wubi86_jidian schema
+- [x] 方向键导航候选词修复 (2026-05-08)
+
+## Bug 修复 (2026-05-08)
+- **问题**: 方向键 Left/Right 无法正确导航候选词
+- **原因**: `vk_to_xk()` 函数缺少方向键映射，Windows VK 直接传给 Rime，但 Rime 需要 X11 keysym
+- **修复**: 在 `librime-sys/src/lib.rs` 添加:
+  - XK_Left (65361), XK_Up (65362), XK_Right (65363), XK_Down (65364) 常量
+  - VK_LEFT/UP/RIGHT/DOWN -> XK_Left/Up/Right/Down 映射
+  - VK_PRIOR/NEXT -> XK_Prior/Next 映射（翻页键）
 
 ## 架构重构 (2026-05-07)
 
@@ -98,6 +107,7 @@ cargo run -p xtask -- run-dev
 2. ~~实现 winxime-server IPC Server~~ (已完成)
 3. ~~添加 winxime-config 配置模块~~ (已完成 2026-05-07)
 4. ~~测试配置加载~~ (Server 成功启动，wubi86_jidian schema 已加载)
-5. 测试按键处理（注册 DLL，测试端到端功能）
-6. 完善候选词窗口动态渲染
-7. 系统托盘图标
+5. ~~修复方向键导航~~ (已完成 2026-05-08 - VK 到 X11 keysym 映射)
+6. 测试端到端功能（注册 DLL，实际输入测试）
+7. 完善候选词窗口动态渲染（Direct2D Fluent Design）
+8. 系统托盘图标

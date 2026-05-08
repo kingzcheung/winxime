@@ -169,7 +169,7 @@ impl RimeEngine {
         }
     }
 
-    pub fn get_candidates(&self) -> Vec<Candidate> {
+    pub fn get_candidates(&self) -> CandidateList {
         unsafe {
             rime_struct!(ctx: RimeContext);
 
@@ -178,10 +178,20 @@ impl RimeEngine {
                     if let Some(free) = (*self.api).free_context {
                         free(&mut ctx);
                     }
-                    return Vec::new();
+                    return CandidateList {
+                        candidates: Vec::new(),
+                        highlighted: 0,
+                        page_no: 0,
+                        is_last_page: true,
+                    };
                 }
             } else {
-                return Vec::new();
+                return CandidateList {
+                    candidates: Vec::new(),
+                    highlighted: 0,
+                    page_no: 0,
+                    is_last_page: true,
+                };
             }
 
             let num = ctx.menu.num_candidates as usize;
@@ -194,11 +204,20 @@ impl RimeEngine {
                 candidates.push(Candidate { text, comment });
             }
 
+            let highlighted = ctx.menu.highlighted_candidate_index as usize;
+            let page_no = ctx.menu.page_no as usize;
+            let is_last_page = ctx.menu.is_last_page != FALSE;
+
             if let Some(free) = (*self.api).free_context {
                 free(&mut ctx);
             }
 
-            candidates
+            CandidateList {
+                candidates,
+                highlighted,
+                page_no,
+                is_last_page,
+            }
         }
     }
 
@@ -433,6 +452,14 @@ pub struct Composition {
 pub struct Candidate {
     pub text: String,
     pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CandidateList {
+    pub candidates: Vec<Candidate>,
+    pub highlighted: usize,
+    pub page_no: usize,
+    pub is_last_page: bool,
 }
 
 #[derive(Debug)]
