@@ -16,7 +16,7 @@ use windows::Win32::{
         },
         Dxgi::Common::{DXGI_ALPHA_MODE_PREMULTIPLIED, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
         Dxgi::{IDXGIDevice, IDXGIFactory2, IDXGISwapChain1, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_USAGE_RENDER_TARGET_OUTPUT, DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG},
-        Gdi::{BeginPaint, EndPaint, GetMonitorInfoW, InvalidateRect, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT},
+        Gdi::{BeginPaint, EndPaint, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT},
     },
     System::LibraryLoader::GetModuleHandleW,
     UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
@@ -282,7 +282,7 @@ impl RenderedView {
                     let ctx = Box::from_raw(ctx_ptr);
                     println!("  ctx.candidates: {} items", ctx.candidates.candies.len());
                     let model = CandidateModel::from(&*ctx);
-                    println!("  model.items: {} items", model.items.len());
+                    println!("  model.items: {:?}", model.items);
                     
                     let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                     if !this_ptr.is_null() {
@@ -291,9 +291,11 @@ impl RenderedView {
                         let view = (*this_ptr).view.borrow();
                         if let Some(view) = view.as_ref() {
                             let dpi = RenderedView::get_dpi_for_window(hwnd);
-                            println!("  calculating client rect at DPI {}", dpi);
+                            println!("  DPI: {}", dpi);
                             if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
-                                println!("  window size: {}x{}", metrics.hw_width, metrics.hw_height);
+                                println!("  metrics.width: {}, metrics.height: {}", metrics.width, metrics.height);
+                                println!("  metrics.hw_width: {}, metrics.hw_height: {}", metrics.hw_width, metrics.hw_height);
+                                println!("  metrics.item_widths: {:?}", metrics.item_widths);
                                 let _ = SetWindowPos(
                                     hwnd,
                                     Some(HWND_TOPMOST),
@@ -303,11 +305,13 @@ impl RenderedView {
                                     metrics.hw_height as i32,
                                     SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS,
                                 );
+                                if !model.items.is_empty() {
+                                    let _ = view.on_paint_with_metrics(&model, dpi, &metrics);
+                                }
                             }
                         }
                     }
-                    let _ = InvalidateRect(Some(hwnd), None, true);
-                    println!("  window invalidated for repaint");
+                    println!("  update complete");
                 }
                 LRESULT(0)
             }
@@ -514,9 +518,16 @@ impl RenderedView {
     }
 
     fn on_paint(&self, model: &CandidateModel) -> Result<(), String> {
+        let dpi = Self::get_dpi_for_window(self.hwnd);
+        let metrics = self.calculate_client_rect(model, dpi)?;
+        self.on_paint_with_metrics(model, dpi, &metrics)
+    }
+
+    fn on_paint_with_metrics(&self, model: &CandidateModel, dpi: f32, metrics: &RenderedMetrics) -> Result<(), String> {
         unsafe {
-            let dpi = Self::get_dpi_for_window(self.hwnd);
-            let metrics = self.calculate_client_rect(model, dpi)?;
+            println!("on_paint: dpi={}, width={}, height={}, hw_width={}, hw_height={}", 
+                dpi, metrics.width, metrics.height, metrics.hw_width, metrics.hw_height);
+            println!("on_paint: item_widths={:?}", metrics.item_widths);
 
             self.d2d_context.SetTarget(None);
             self.swapchain
@@ -678,6 +689,10 @@ let comment_brush = self.d2d_context
                 let selkey_width = metrics.selkey_widths.get(i).copied().unwrap_or(20.0);
                 let text_width = metrics.text_widths.get(i).copied().unwrap_or(40.0);
                 let comment_width = metrics.comment_widths.get(i).copied().unwrap_or(0.0);
+                
+                println!("  item {}: x={}, item_width={}, text='{}'", i, x, item_width, item);
+                println!("  bg_rect: left={}, right={}", blur_radius, metrics.width + blur_radius);
+                println!("  item_right={}", x + item_width);
 
                 let selkey_rect = D2D_RECT_F {
                     left: x + padding_x,

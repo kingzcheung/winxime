@@ -190,8 +190,8 @@ fn process_request(
                 window.hide();
             } else if let Some(ctx) = &ipc_ctx {
                 println!("  candies: {:?}", ctx.candidates.candies);
-                if ctx.candidates.candies.is_empty() && ctx.preedit.str.is_empty() {
-                    println!("  -> hide (empty)");
+                if ctx.candidates.candies.is_empty() {
+                    println!("  -> hide (no candidates)");
                     window.hide();
                 } else {
                     let pos = context.read(|c| (c.caret_x, c.caret_y));
