@@ -2,6 +2,17 @@ use librime_sys::*;
 use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::sync::Mutex;
+use std::io::Write;
+
+fn log_to_file(msg: &str) {
+    if let Ok(temp) = std::env::var("TEMP") {
+        let log_path = std::path::PathBuf::from(temp).join("winxime-rime.log");
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+            let _ = writeln!(file, "[rime] {}", msg);
+            let _ = file.flush();
+        }
+    }
+}
 
 static INIT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -52,18 +63,24 @@ impl RimeEngine {
             }
 
             // Initialize deployer
+            log_to_file("Initializing deployer...");
             if let Some(deployer_init) = (*api).deployer_initialize {
                 deployer_init(std::ptr::null_mut());
+                log_to_file("Deployer initialized");
             }
 
             // Deploy schemas
-            println!("Deploying Rime schemas...");
+            log_to_file("Deploying Rime schemas...");
             if let Some(deploy) = (*api).deploy {
-                if deploy() == FALSE {
-                    println!("Warning: Rime deploy returned false");
+                let deploy_result = deploy();
+                log_to_file(&format!("Deploy result: {}", deploy_result));
+                if deploy_result == FALSE {
+                    log_to_file("Warning: Rime deploy returned false");
                 } else {
-                    println!("Rime schemas deployed successfully");
+                    log_to_file("Rime schemas deployed successfully");
                 }
+            } else {
+                log_to_file("Warning: deploy function not available");
             }
 
             // Set notification handler for deploy/option events
@@ -72,13 +89,25 @@ impl RimeEngine {
             }
 
             let session = if let Some(create) = (*api).create_session {
-                create()
+                let sid = create();
+                log_to_file(&format!("Session created: {}", sid));
+                sid
             } else {
                 return Err(RimeError::ApiFunctionMissing("create_session"));
             };
 
             if session == 0 {
+                log_to_file("Session creation failed!");
                 return Err(RimeError::SessionCreateFailed);
+            }
+
+            // Check current schema
+            let mut schema_buf = [0i8; 256];
+            if let Some(get_schema) = (*api).get_current_schema {
+                if get_schema(session, schema_buf.as_mut_ptr(), schema_buf.len()) != FALSE {
+                    let schema_id = CStr::from_ptr(schema_buf.as_ptr()).to_string_lossy();
+                    log_to_file(&format!("Current schema: {}", schema_id));
+                }
             }
 
             Ok(Self {

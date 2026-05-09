@@ -265,22 +265,22 @@ impl RenderedView {
                 unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
             }
             WM_SHOW_CANDIDATE => {
-                println!("WM_SHOW_CANDIDATE received, hwnd={:?}", hwnd.0);
+                crate::log::log(&format!("WM_SHOW_CANDIDATE received, hwnd={:?}", hwnd.0));
                 let result = ShowWindow(hwnd, SW_SHOWNA);
-                println!("  ShowWindow(SW_SHOWNA) result: {:?}", result);
+                crate::log::log(&format!("ShowWindow(SW_SHOWNA) result: {:?}", result));
                 LRESULT(0)
             }
             WM_HIDE_CANDIDATE => {
-                println!("WM_HIDE_CANDIDATE received");
+                crate::log::log("WM_HIDE_CANDIDATE received");
                 let _ = ShowWindow(hwnd, SW_HIDE);
                 LRESULT(0)
             }
             WM_UPDATE_CANDIDATE => {
-                println!("WM_UPDATE_CANDIDATE received");
+                crate::log::log("WM_UPDATE_CANDIDATE received");
                 let ctx_ptr = wparam.0 as *mut Context;
                 if !ctx_ptr.is_null() {
                     let ctx = Box::from_raw(ctx_ptr);
-                    println!("  ctx.candidates: {} items", ctx.candidates.candies.len());
+                    crate::log::log(&format!("ctx.candidates: {} items", ctx.candidates.candies.len()));
                     let model = CandidateModel::from(&*ctx);
                     println!("  model.items: {:?}", model.items);
                     

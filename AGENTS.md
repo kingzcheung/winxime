@@ -4,13 +4,15 @@
 这是一个基于 rime 框架实现的Windows 五笔输入法，采用 Rust + TSF 构建。
 
 ## 快速开始
-- 构建： `./cargo build --quiet`
-- 测试： `./cargo test`
+- 开发构建： `.\rebuild.ps1` (构建+注册+启动服务器)
+- 打包 MSI： `.\msi-build.ps1` (生成安装包)
+- 卸载 MSI： `.\uninstall-msi.ps1` (完整卸载安装)
 
 ## 硬性规则（必须遵守，CI 会验证）
 - 所有命令使用 powershell
 - 修改完必须使用 `cargo build --quiet` 检查是否有错误
 - 代码中禁止出现`unwarp()` 和 `expect()` 方法
+- 禁止自己运行程序，禁止自己安装
 
 ## 工作规则
 - 每次只做一个功能点

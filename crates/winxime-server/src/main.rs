@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ipc_server;
+mod log;
 mod tray;
 mod ui;
 
@@ -14,21 +15,20 @@ use winxime_ipc::{check_server_running, IpcClient};
 use winxime_rime::RimeEngine;
 
 fn main() {
+    log::init_log();
+    log::log("Server starting");
     let args: Vec<String> = std::env::args().collect();
 
     if args.iter().any(|arg| arg == "/q" || arg == "/quit") {
         if check_server_running() {
             IpcClient::shutdown_server();
-            #[cfg(debug_assertions)]
-            println!("Server stopped");
         }
+        log::log("Server stopped via /q");
         return;
     }
 
     if check_server_running() {
-        #[cfg(debug_assertions)]
-        println!("Stopping existing server...");
-        
+        log::log("Stopping existing server...");
         IpcClient::shutdown_server();
         for _ in 0..10 {
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -37,60 +37,83 @@ fn main() {
             }
         }
         if check_server_running() {
-            #[cfg(debug_assertions)]
-            println!("Failed to stop, exiting");
+            log::log("Failed to stop existing server, exiting");
             return;
         }
+        log::log("Existing server stopped");
     }
-
-    #[cfg(debug_assertions)]
-    println!("Starting winxime-server...");
 
     unsafe {
         let _ = RegisterApplicationRestart(None, REGISTER_APPLICATION_RESTART_FLAGS(0));
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
 
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
-
-    let shared_data_dir = workspace_dir.join("librime").join("data");
-    let user_data_dir = workspace_dir.join("rime-data");
+    let (shared_data_dir, user_data_dir) = get_data_dirs();
+    log::log(&format!("Data dirs: shared={}, user={}", shared_data_dir.display(), user_data_dir.display()));
 
     if !shared_data_dir.exists() {
-        #[cfg(debug_assertions)]
-        eprintln!("Shared data not found!");
+        log::log(&format!("Shared data not found at {:?}", shared_data_dir));
         std::process::exit(1);
     }
+    log::log("Shared data dir exists");
 
     let _ = std::fs::create_dir_all(&user_data_dir);
 
+    log::log("Initializing Rime engine...");
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
         Ok(mut e) => {
             e.set_option("_horizontal", true);
-            #[cfg(debug_assertions)]
-            println!("Rime initialized");
+            log::log("Rime initialized successfully");
             Arc::new(std::sync::Mutex::new(e))
         }
         Err(e) => {
-            #[cfg(debug_assertions)]
-            eprintln!("Rime init failed: {}", e);
+            log::log(&format!("Rime init failed: {}", e));
             std::process::exit(1);
         }
     };
 
+    run_server(engine);
+}
+
+fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
+    #[cfg(debug_assertions)]
+    {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
+        (
+            workspace_dir.join("librime").join("data"),
+            workspace_dir.join("rime-data"),
+        )
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\winxime-server\\winxime-server.exe"));
+        let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\winxime-server"));
+        
+        // User data in AppData\Rime (same as Weasel/小狼毫)
+        let user_data_dir = std::env::var("APPDATA")
+            .ok()
+            .map(|p| std::path::PathBuf::from(p).join("Rime"))
+            .unwrap_or_else(|| exe_dir.join("rime-data"));
+        
+        (
+            exe_dir.join("data"),
+            user_data_dir,
+        )
+    }
+}
+
+fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
+    log::log("run_server: starting");
     let context = Arc::new(SharedInputContext::new());
-    
     let ascii_mode = Arc::new(AtomicBool::new(false));
     
-    #[cfg(debug_assertions)]
-    println!("Creating UI window...");
-    
+    log::log("Creating UI window...");
     let window = ui::CandidateWindow::new();
+    log::log("UI window created");
 
-    #[cfg(debug_assertions)]
-    println!("Starting IPC...");
-    
+    log::log("Starting IPC thread...");
     let engine_clone = engine.clone();
     let context_clone = context.clone();
     let window_clone = window.clone();
@@ -98,10 +121,9 @@ fn main() {
     std::thread::spawn(move || {
         ipc_server::run_ipc_server(engine_clone, context_clone, window_clone, ascii_mode_clone);
     });
+    log::log("IPC thread started");
 
-    #[cfg(debug_assertions)]
-    println!("Creating tray icon...");
-    
+    log::log("Creating tray icon...");
     let on_action = {
         let engine = engine.clone();
         Arc::new(move |action: tray::TrayAction| {
@@ -111,34 +133,28 @@ fn main() {
                     let current = eng.is_ascii_mode();
                     eng.set_option("ascii_mode", !current);
                     tray::update_tray_icon(!current);
-                    #[cfg(debug_assertions)]
-                    println!("Tray: toggled ascii_mode to {}", !current);
                 }
                 tray::TrayAction::OpenSettings => {
-                    let exe_path = std::env::current_exe().unwrap();
-                    let exe_dir = exe_path.parent().unwrap();
+                    let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\winxime-server\\winxime-server.exe"));
+                    let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\winxime-server"));
                     let setup_path = exe_dir.join("winxime-setup.exe");
                     if setup_path.exists() {
                         std::process::Command::new(&setup_path)
                             .spawn()
                             .ok();
                     }
-                    #[cfg(debug_assertions)]
-                    println!("Tray: open settings");
                 }
                 tray::TrayAction::Quit => {
                     IpcClient::shutdown_server();
-                    #[cfg(debug_assertions)]
-                    println!("Tray: quit");
                 }
             }
         })
     };
     
     tray::TrayIcon::new(on_action);
+    log::log("Tray icon created");
     
-    #[cfg(debug_assertions)]
-    println!("Server ready");
+    log::log("Server ready, entering message loop");
     
     unsafe {
         let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
@@ -147,4 +163,5 @@ fn main() {
             windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
         }
     }
+    log::log("Message loop exited");
 }

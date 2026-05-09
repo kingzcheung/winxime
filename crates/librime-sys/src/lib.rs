@@ -500,7 +500,7 @@ pub fn rime_get_api() -> Option<*const RimeApi> {
     use std::ffi::CString;
     use std::ptr;
     use windows::core::PCSTR;
-    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA, SetDllDirectoryW};
 
     static mut API_CACHE: *const RimeApi = ptr::null();
 
@@ -509,11 +509,17 @@ pub fn rime_get_api() -> Option<*const RimeApi> {
             return Some(API_CACHE);
         }
 
-        let lib_name = CString::new("rime.dll").unwrap();
+        let exe_path = std::env::current_exe().ok()?;
+        let exe_dir = exe_path.parent()?;
+        let exe_dir_wide: Vec<u16> = exe_dir.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
+        
+        let _ = SetDllDirectoryW(windows::core::PCWSTR(exe_dir_wide.as_ptr()));
+
+        let lib_name = CString::new("rime.dll").ok()?;
         let hmodule = LoadLibraryA(PCSTR(lib_name.as_ptr() as *const u8));
 
         if let Ok(hmodule) = hmodule {
-            let fn_name = CString::new("rime_get_api").unwrap();
+            let fn_name = CString::new("rime_get_api").ok()?;
             let proc = GetProcAddress(hmodule, PCSTR(fn_name.as_ptr() as *const u8));
 
             if let Some(proc) = proc {

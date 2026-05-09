@@ -1,0 +1,197 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Fragment>
+        <DirectoryRef Id="DataFolder">
+            <Directory Id="dirDC2CEA931EC60F104AFC345CFC839D76" Name="minimal" />
+            <Directory Id="dir7478ECCF5F3E00C9E558CE4926E9CD91" Name="opencc" />
+            <Directory Id="dirF48187364A2A747F74C1B60790A85FD8" Name="test" />
+        </DirectoryRef>
+    </Fragment>
+    <Fragment>
+        <ComponentGroup Id="DataFiles">
+            <Component Id="cmp76266F94BE11A59C2BACB093EDC5C0D4" Directory="DataFolder" Guid="*">
+                <File Id="filCD8EEBF56C1156F212DF8B8EBB961C81" KeyPath="yes" Source="$(var.DataDir)\default.custom.yaml" />
+            </Component>
+            <Component Id="cmp3304267FB8B3418D77D6E2BE16381AE3" Directory="DataFolder" Guid="*">
+                <File Id="fil143568CB34E95AE39C2E63C857CAD883" KeyPath="yes" Source="$(var.DataDir)\default.yaml" />
+            </Component>
+            <Component Id="cmp5AF6AB078D387BAF15AE89C46815E3AA" Directory="DataFolder" Guid="*">
+                <File Id="fil3F924F473454C6C5FF84990395AC82BE" KeyPath="yes" Source="$(var.DataDir)\numbers.schema.yaml" />
+            </Component>
+            <Component Id="cmpF1CD123493D15A05681889BF1C2A0751" Directory="DataFolder" Guid="*">
+                <File Id="fil4125772BF9527CBFF5E60B203C84E839" KeyPath="yes" Source="$(var.DataDir)\pinyin_simp.dict.yaml" />
+            </Component>
+            <Component Id="cmpD058667ED1CB9BD7188AD7345C3D339E" Directory="DataFolder" Guid="*">
+                <File Id="fil48FB9052B5B6A5A0BA5A6CE2249EC8F9" KeyPath="yes" Source="$(var.DataDir)\pinyin_simp.schema.yaml" />
+            </Component>
+            <Component Id="cmpCEDB4957DB3A487D0B7293C910C41B3C" Directory="DataFolder" Guid="*">
+                <File Id="fil09BA76A2816ED1C7583C38E04DEC2C5D" KeyPath="yes" Source="$(var.DataDir)\rime.lua" />
+            </Component>
+            <Component Id="cmpD32B293EE508BD795B80E417F99114C1" Directory="DataFolder" Guid="*">
+                <File Id="fil4973BA184F19CA34C1B40D285F31FF4D" KeyPath="yes" Source="$(var.DataDir)\squirrel.custom.yaml" />
+            </Component>
+            <Component Id="cmpA310111BDDCF0A438554C9CA8100A9D5" Directory="DataFolder" Guid="*">
+                <File Id="fil6505A627EC994C44985E53DD323D633B" KeyPath="yes" Source="$(var.DataDir)\trime.custom.yaml" />
+            </Component>
+            <Component Id="cmpD9BC7BBFD21DAE199FB6A924CFEBAD6B" Directory="DataFolder" Guid="*">
+                <File Id="fil10306F1A31B3CF9EFB1AC2B4049177B5" KeyPath="yes" Source="$(var.DataDir)\weasel.custom.yaml" />
+            </Component>
+            <Component Id="cmp8DE53E41320BDC8C6A3C672652F39B09" Directory="DataFolder" Guid="*">
+                <File Id="filD0D4AAC94A96762B6899B6EBDDD564A2" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian.dict.yaml" />
+            </Component>
+            <Component Id="cmp54A848B49D855F6428E800EA65E3819A" Directory="DataFolder" Guid="*">
+                <File Id="fil1380D4E13CFBB2263A8319E2F321415D" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian.schema.yaml" />
+            </Component>
+            <Component Id="cmp6D8B2B4B0FDD2B26EA182C957C97B4C1" Directory="DataFolder" Guid="*">
+                <File Id="fil4887C3191D53E34BB69762AE3748EA2E" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_extra.dict.yaml" />
+            </Component>
+            <Component Id="cmp31599D3111F2E96F5FA0B53BCCBF60B9" Directory="DataFolder" Guid="*">
+                <File Id="fil89CCB6F713C70C205ACD1307D2643A85" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_pinyin.schema.yaml" />
+            </Component>
+            <Component Id="cmpBEA5ACBA82765A92492C78A6CFE597EA" Directory="DataFolder" Guid="*">
+                <File Id="fil2E0AB3800D11F8CBB2B4263293FDD356" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_trad.schema.yaml" />
+            </Component>
+            <Component Id="cmp41A918D829B44D6A7EA1C920D61385D2" Directory="DataFolder" Guid="*">
+                <File Id="fil8CB218F4F2C2A4980F4D0F57B2B5D2F9" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_trad_pinyin.schema.yaml" />
+            </Component>
+            <Component Id="cmp75DA613D78D3FEF10E046BF5EEF67A75" Directory="DataFolder" Guid="*">
+                <File Id="fil8D8BE6B407000398863C847107950CE2" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_user.dict.yaml" />
+            </Component>
+            <Component Id="cmp9AFA99EDCC861241C95ECAF4D936E5AF" Directory="dirDC2CEA931EC60F104AFC345CFC839D76" Guid="*">
+                <File Id="fil4B22A88EE7EA539D4F1CE7EE8DED5ACA" KeyPath="yes" Source="$(var.DataDir)\minimal\cangjie5.dict.yaml" />
+            </Component>
+            <Component Id="cmp7C44F59F286E25D2F37DF4DFCAE23C12" Directory="dirDC2CEA931EC60F104AFC345CFC839D76" Guid="*">
+                <File Id="fil8B35CD41204F22E17B4BBD925CFC25D8" KeyPath="yes" Source="$(var.DataDir)\minimal\cangjie5.schema.yaml" />
+            </Component>
+            <Component Id="cmp681BC453F18689CFB8CC4C9D21C1879E" Directory="dirDC2CEA931EC60F104AFC345CFC839D76" Guid="*">
+                <File Id="fil0D06E06207E60540FBC20F730B4DEE57" KeyPath="yes" Source="$(var.DataDir)\minimal\default.yaml" />
+            </Component>
+            <Component Id="cmp16FBE50D2ED69CCDF855941FCD086ECF" Directory="dirDC2CEA931EC60F104AFC345CFC839D76" Guid="*">
+                <File Id="fil7B15A68C3183D772ABD6F12C52633B87" KeyPath="yes" Source="$(var.DataDir)\minimal\essay.txt" />
+            </Component>
+            <Component Id="cmpAF1466F66A12D42529C083D230101B66" Directory="dirDC2CEA931EC60F104AFC345CFC839D76" Guid="*">
+                <File Id="fil1D247E82C08308D308093ABC2A0D0955" KeyPath="yes" Source="$(var.DataDir)\minimal\luna_pinyin.dict.yaml" />
+            </Component>
+            <Component Id="cmp3C8AD65EB118A96CA3FF16E94B49146F" Directory="dirDC2CEA931EC60F104AFC345CFC839D76" Guid="*">
+                <File Id="filDC1FF971239FC0FCDED67EA8F7E2F04A" KeyPath="yes" Source="$(var.DataDir)\minimal\luna_pinyin.schema.yaml" />
+            </Component>
+            <Component Id="cmp39B7D89B1CA9DC3F024289BDAA4555B0" Directory="dirDC2CEA931EC60F104AFC345CFC839D76" Guid="*">
+                <File Id="filE75B0B92F351C34B8B3AAF10F46414A1" KeyPath="yes" Source="$(var.DataDir)\minimal\symbols.yaml" />
+            </Component>
+            <Component Id="cmpAE695A501B974A29311C1F117C269DDB" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filDB2D6B765BF9DA79879E353D758BDD7B" KeyPath="yes" Source="$(var.DataDir)\opencc\hk2s.json" />
+            </Component>
+            <Component Id="cmpA8EFB9D87463743783FA1C6C89D1FC48" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filD185987FCCD6A01AF873AD0C80525AE5" KeyPath="yes" Source="$(var.DataDir)\opencc\hk2t.json" />
+            </Component>
+            <Component Id="cmp1C8BDA3BCAE6799157BF495896F002A6" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil66F1F10AC63105400EC83607443DFC76" KeyPath="yes" Source="$(var.DataDir)\opencc\HKVariants.ocd2" />
+            </Component>
+            <Component Id="cmp9705D0F34B368200BF603FE1783741F0" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filC32C2798FC2227FB96AD274867732714" KeyPath="yes" Source="$(var.DataDir)\opencc\HKVariantsRev.ocd2" />
+            </Component>
+            <Component Id="cmp637E9EEB4A28407DEAFAFF4562DC824A" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filCEB8423FF23FD1CEB1FAE5D1B6F4258A" KeyPath="yes" Source="$(var.DataDir)\opencc\HKVariantsRevPhrases.ocd2" />
+            </Component>
+            <Component Id="cmp58F58238BB547C83FD2C8A979F38314E" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filC3D3A1A1B057CE432F505CF16B221EC0" KeyPath="yes" Source="$(var.DataDir)\opencc\jp2t.json" />
+            </Component>
+            <Component Id="cmp76FAEC7154DC9FE4C1BCDC51635B5615" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil665EE7DE10272A028BA15AD5AD8091A8" KeyPath="yes" Source="$(var.DataDir)\opencc\JPShinjitaiCharacters.ocd2" />
+            </Component>
+            <Component Id="cmpA1288E26152AF552572D7FA5AB54CAE8" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filCF787590429E5A2B8EFC0276D7EF0A89" KeyPath="yes" Source="$(var.DataDir)\opencc\JPShinjitaiPhrases.ocd2" />
+            </Component>
+            <Component Id="cmp6899BFBBEF4DB9C669324300A16B4BAC" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil76C21A3FB879E1087224B8C9EA740E75" KeyPath="yes" Source="$(var.DataDir)\opencc\JPVariants.ocd2" />
+            </Component>
+            <Component Id="cmpB2D353A332ACD58F04499DDCF84B43BA" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filD2E557F1D2E74D74BC43E8E41C53612B" KeyPath="yes" Source="$(var.DataDir)\opencc\JPVariantsRev.ocd2" />
+            </Component>
+            <Component Id="cmp4C73C58752945B8D11815DE8DDA83A46" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil55BBF7722DF28EF165C4FAD3A2AF03B1" KeyPath="yes" Source="$(var.DataDir)\opencc\s2hk.json" />
+            </Component>
+            <Component Id="cmp860D452355C4EDB011C3A1391DCBAD30" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filC341F7608E74D394FD8DDEB728B4B4A4" KeyPath="yes" Source="$(var.DataDir)\opencc\s2t.json" />
+            </Component>
+            <Component Id="cmpB6521BFE518BB95C414ACBE70CFB404F" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filECCDF860420B7B097BB8AF5F48E02CC6" KeyPath="yes" Source="$(var.DataDir)\opencc\s2tw.json" />
+            </Component>
+            <Component Id="cmp724D561F95421646D77E01207FBAEC3C" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil408417F885CE4DD4CFB56E9142157D66" KeyPath="yes" Source="$(var.DataDir)\opencc\s2twp.json" />
+            </Component>
+            <Component Id="cmp91534700FDE636D268D09E278C1DB52F" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil1B81E9ED81F2C3BA2A689C2C23317C47" KeyPath="yes" Source="$(var.DataDir)\opencc\STCharacters.ocd2" />
+            </Component>
+            <Component Id="cmpFA2ADEC93D3D2E7C9678A2EFC837F09C" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filB17E508C20F8DB47884E0C8696F01E61" KeyPath="yes" Source="$(var.DataDir)\opencc\STPhrases.ocd2" />
+            </Component>
+            <Component Id="cmp578FC81AA37E6934C9D7D2935D28EB2B" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filFF5CD9A9D32AAB4253149A9C2ABF73B4" KeyPath="yes" Source="$(var.DataDir)\opencc\t2hk.json" />
+            </Component>
+            <Component Id="cmp7CB0E12B682CB850411254B2701BA8FB" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filC94E3CD108CBFC43B513A36CDB31E1B0" KeyPath="yes" Source="$(var.DataDir)\opencc\t2jp.json" />
+            </Component>
+            <Component Id="cmp4BF7728F2115784E515E426337E49C94" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filC96051236EE4102556BAB999AC26BDB5" KeyPath="yes" Source="$(var.DataDir)\opencc\t2s.json" />
+            </Component>
+            <Component Id="cmp4E1DD723C73F83F3E96B1D2535E9E9CF" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil44221CC8BD222B9A7AA7647099406E3C" KeyPath="yes" Source="$(var.DataDir)\opencc\t2tw.json" />
+            </Component>
+            <Component Id="cmp519219C9D95ED63E259D679073E915D8" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filF061F7DFEA733C34EC492A46B3D7EBF1" KeyPath="yes" Source="$(var.DataDir)\opencc\TSCharacters.ocd2" />
+            </Component>
+            <Component Id="cmpDBCECB4FF4D3DAD65EF7934DD764FB65" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil52A57134CB5A00C4FCDDFA667E831026" KeyPath="yes" Source="$(var.DataDir)\opencc\TSPhrases.ocd2" />
+            </Component>
+            <Component Id="cmpC87E90C228D34B20F411FA9F4F0E79BF" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil566671644602009F82347E2F6A316A85" KeyPath="yes" Source="$(var.DataDir)\opencc\tw2s.json" />
+            </Component>
+            <Component Id="cmp6425B926861859367F21F49979B8B242" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil5581AA936A201ABCED9CD7A3916FA7EC" KeyPath="yes" Source="$(var.DataDir)\opencc\tw2sp.json" />
+            </Component>
+            <Component Id="cmp29773A634FC4C282D820F6D9D91A7288" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filD24E4C5BD07864929479F45542765BF9" KeyPath="yes" Source="$(var.DataDir)\opencc\tw2t.json" />
+            </Component>
+            <Component Id="cmp01FF6A3E5AEA208BE19EF5D2C5BCE4A5" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil30A636A3B6EC5BFCA4ECA5B35E2511DB" KeyPath="yes" Source="$(var.DataDir)\opencc\TWPhrases.ocd2" />
+            </Component>
+            <Component Id="cmpF0862E22DD5FFCF2052A45944A40923A" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filB55FA5F354F53A577F2AE94569DBB276" KeyPath="yes" Source="$(var.DataDir)\opencc\TWPhrasesRev.ocd2" />
+            </Component>
+            <Component Id="cmpBF4ABA851FAE893BF4F74664D144B65D" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil6523CB83F36506B298BB418B1FDBE57F" KeyPath="yes" Source="$(var.DataDir)\opencc\TWVariants.ocd2" />
+            </Component>
+            <Component Id="cmp2195B1806F7CAF0C9D25A8C0FEB9280E" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="filC7897F88297BDFC76FF6F6B6DF66D05F" KeyPath="yes" Source="$(var.DataDir)\opencc\TWVariantsRev.ocd2" />
+            </Component>
+            <Component Id="cmpD6B7C6304D3ABB50EE1322BBB42D5EAE" Directory="dir7478ECCF5F3E00C9E558CE4926E9CD91" Guid="*">
+                <File Id="fil14F7266762E36A8C14B2E11A12D34CE0" KeyPath="yes" Source="$(var.DataDir)\opencc\TWVariantsRevPhrases.ocd2" />
+            </Component>
+            <Component Id="cmp7E7099B490A8B791A4C723F2420CBF4B" Directory="dirF48187364A2A747F74C1B60790A85FD8" Guid="*">
+                <File Id="filA50D6880B4F4C651F4BE09BDCBF1B414" KeyPath="yes" Source="$(var.DataDir)\test\config_circular_dependency_test.yaml" />
+            </Component>
+            <Component Id="cmp2174F4D37E4FFACE62C5819CCA2DFE62" Directory="dirF48187364A2A747F74C1B60790A85FD8" Guid="*">
+                <File Id="filE4F64720E8B918AB70E0214696200946" KeyPath="yes" Source="$(var.DataDir)\test\config_compiler_test.yaml" />
+            </Component>
+            <Component Id="cmp1DA6CF2CE317EE19599B36850EADEA2E" Directory="dirF48187364A2A747F74C1B60790A85FD8" Guid="*">
+                <File Id="filD2D04542F60D1015DCE5D8E8FA0146ED" KeyPath="yes" Source="$(var.DataDir)\test\config_dependency_test.yaml" />
+            </Component>
+            <Component Id="cmp9ECF7E65FBDB089B20BBCC0B0EFEAFF1" Directory="dirF48187364A2A747F74C1B60790A85FD8" Guid="*">
+                <File Id="fil548ECF795850706E738154CAEB6968DA" KeyPath="yes" Source="$(var.DataDir)\test\config_merge_test.yaml" />
+            </Component>
+            <Component Id="cmp6312CA3889A05666F4FB5D2F555EDF4C" Directory="dirF48187364A2A747F74C1B60790A85FD8" Guid="*">
+                <File Id="fil079243D3A62B6701C69BC30B7F158A7C" KeyPath="yes" Source="$(var.DataDir)\test\config_optional_reference_test.yaml" />
+            </Component>
+            <Component Id="cmp0B1706F4F55A0BBDA94906165C2C21A1" Directory="dirF48187364A2A747F74C1B60790A85FD8" Guid="*">
+                <File Id="fil3CBC763C8665B851A503A0A06CF3F07D" KeyPath="yes" Source="$(var.DataDir)\test\config_test.yaml" />
+            </Component>
+            <Component Id="cmpF8BDA4224F8B60DA8589418B0DA20E08" Directory="dirF48187364A2A747F74C1B60790A85FD8" Guid="*">
+                <File Id="fil278B713A1F0A7DC76DFAD95CF5D479E5" KeyPath="yes" Source="$(var.DataDir)\test\dictionary_test.dict.yaml" />
+            </Component>
+            <Component Id="cmpF060E1E9936A63B17B773B1DDA95947C" Directory="dirF48187364A2A747F74C1B60790A85FD8" Guid="*">
+                <File Id="fil39972BC04C0F7A742639D07302977F5A" KeyPath="yes" Source="$(var.DataDir)\test\starcraft.yaml" />
+            </Component>
+        </ComponentGroup>
+    </Fragment>
+</Wix>

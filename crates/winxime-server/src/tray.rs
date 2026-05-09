@@ -7,7 +7,7 @@ use windows::Win32::{
         Shell::{NIM_ADD, NIM_DELETE, NIM_MODIFY, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIF_STATE, NIS_HIDDEN, Shell_NotifyIconW, NOTIFYICONDATAW, NOTIFY_ICON_STATE},
         WindowsAndMessaging::{
             AppendMenuW, CreateIconFromResource, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-            LoadIconW, PostQuitMessage,
+            LoadIconW, PostMessageW, PostQuitMessage,
             RegisterClassW,
             WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WM_USER, WM_SETTINGCHANGE,
             WNDCLASSW, IDI_APPLICATION, IDC_ARROW, LoadCursorW,
@@ -23,6 +23,9 @@ const EN_LIGHT_ICO: &[u8] = include_bytes!("../../../resource/trayicon/en_light.
 const EN_DARK_ICO: &[u8] = include_bytes!("../../../resource/trayicon/en_dark.ico");
 
 pub const WM_TRAY_EVENT: u32 = WM_USER + 100;
+const WM_TRAY_UPDATE: u32 = WM_USER + 101;
+const WM_TRAY_SHOW: u32 = WM_USER + 102;
+const WM_TRAY_HIDE: u32 = WM_USER + 103;
 
 const TRAY_ID: u32 = 1;
 const MENU_ID_TOGGLE: u32 = 1001;
@@ -112,7 +115,8 @@ impl TrayIcon {
                     nid.szTip[i] = *c;
                 }
             }
-            let _ = Shell_NotifyIconW(NIM_ADD, &nid);
+            let result = Shell_NotifyIconW(NIM_ADD, &nid);
+            crate::log::log(&format!("Shell_NotifyIconW NIM_ADD result: {:?}", result));
         }
     }
     
@@ -130,6 +134,18 @@ impl TrayIcon {
         match msg {
             WM_TRAY_EVENT => {
                 Self::handle_tray_event(lparam.0 as u32);
+                LRESULT(0)
+            }
+            WM_TRAY_UPDATE => {
+                do_update_icon(wparam.0 != 0);
+                LRESULT(0)
+            }
+            WM_TRAY_SHOW => {
+                do_show_icon();
+                LRESULT(0)
+            }
+            WM_TRAY_HIDE => {
+                do_hide_icon();
                 LRESULT(0)
             }
             WM_COMMAND => {
@@ -206,6 +222,14 @@ pub fn update_tray_icon(is_ascii: bool) {
     unsafe {
         TRAY_IS_ASCII = is_ascii;
         if let Some(hwnd) = TRAY_HWND {
+            let _ = PostMessageW(Some(hwnd), WM_TRAY_UPDATE, WPARAM(if is_ascii { 1 } else { 0 }), LPARAM(0));
+        }
+    }
+}
+
+fn do_update_icon(is_ascii: bool) {
+    unsafe {
+        if let Some(hwnd) = TRAY_HWND {
             let hicon = load_icon_from_ico(get_icon_for_mode(is_ascii));
             let tip_str = if is_ascii { "EN\0" } else { "中\0" };
             let tip: Vec<u16> = tip_str.encode_utf16().collect();
@@ -229,6 +253,14 @@ pub fn update_tray_icon(is_ascii: bool) {
 pub fn show_icon() {
     unsafe {
         if let Some(hwnd) = TRAY_HWND {
+            let _ = PostMessageW(Some(hwnd), WM_TRAY_SHOW, WPARAM(0), LPARAM(0));
+        }
+    }
+}
+
+fn do_show_icon() {
+    unsafe {
+        if let Some(hwnd) = TRAY_HWND {
             let mut nid = NOTIFYICONDATAW::default();
             nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
             nid.hWnd = hwnd;
@@ -243,6 +275,14 @@ pub fn show_icon() {
 
 /// 隐藏托盘图标（切换到其他输入法时）
 pub fn hide_icon() {
+    unsafe {
+        if let Some(hwnd) = TRAY_HWND {
+            let _ = PostMessageW(Some(hwnd), WM_TRAY_HIDE, WPARAM(0), LPARAM(0));
+        }
+    }
+}
+
+fn do_hide_icon() {
     unsafe {
         if let Some(hwnd) = TRAY_HWND {
             let mut nid = NOTIFYICONDATAW::default();

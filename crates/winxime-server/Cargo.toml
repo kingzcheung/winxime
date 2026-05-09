@@ -16,6 +16,7 @@ winxime-core = { path = "../winxime-core" }
 winxime-config = { path = "../winxime-config" }
 serde_json.workspace = true
 log = "0.4"
+time = "0.3"
 interprocess = "2.4"
 widestring = "1.0"
 windows = { version = "0.62.2", features = [

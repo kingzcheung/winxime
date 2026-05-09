@@ -52,8 +52,10 @@
 -->
 <?if $(sys.BUILDARCH) = x64 or $(sys.BUILDARCH) = arm64 ?>
     <?define PlatformProgramFilesFolder = "ProgramFiles64Folder" ?>
+    <?define PlatformSystemFolder = "System64Folder" ?>
 <?else ?>
     <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
+    <?define PlatformSystemFolder = "SystemFolder" ?>
 <?endif ?>
 
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
@@ -75,6 +77,7 @@
             Compressed='yes'
             InstallScope='perMachine'
             SummaryCodepage='1252'
+            Platform='x64'
             />
 
         <MajorUpgrade
@@ -85,105 +88,77 @@
         <Property Id='DiskPrompt' Value='winxime-server Installation'/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
+            <!-- System folder for TSF DLL -->
+            <Directory Id='$(var.PlatformSystemFolder)' Name='System32'>
+                <Component Id='tsf_dll_system' Guid='{D1E2F3A4-B5C6-7D8E-9F0A-1B2C3D4E5F6A}'>
+                    <File
+                        Id='dll_system'
+                        Name='winxime_tsf.dll'
+                        DiskId='1'
+                        Source='$(var.CargoTargetBinDir)\winxime_tsf.dll'
+                        KeyPath='yes'/>
+                </Component>
+            </Directory>
+            
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
                 <Directory Id='APPLICATIONFOLDER' Name='winxime-server'>
-                    <!--
-                      Disabling the license sidecar file in the installer is a two step process:
-
-                      1. Comment out or remove the `Component` tag along with its contents.
-                      2. Comment out or remove the `ComponentRef` tag with the "License" Id
-                         attribute value further down in this file.
-                    -->
-                    <!--<Component Id='License' Guid='*'>
-                        <File Id='LicenseFile'
-                            DiskId='1'
-                            Source='License.rtf'
-                            KeyPath='yes'/>
-                    </Component>-->
-                    
-                    <Directory Id='Bin' Name='bin'>
-                        <Component Id='Path' Guid='{90828F1C-6BF1-487E-8319-8A71FF3D68DD}' KeyPath='yes'>
-                            <Environment
-                                Id='PATH'
-                                Name='PATH'
-                                Value='[Bin]'
-                                Permanent='no'
-                                Part='last'
-                                Action='set'
-                                System='yes'/>
-                        </Component>
-                        <Component Id='binary0' Guid='*'>
-                            <File
-                                Id='exe0'
-                                Name='winxime-server.exe'
-                                DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\winxime-server.exe'
-                                KeyPath='yes'/>
-                        </Component>
-                        <Component Id='binary1' Guid='*'>
-                            <File
-                                Id='exe1'
-                                Name='winxime-setup.exe'
-                                DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\winxime-setup.exe'
-                                KeyPath='yes'/>
-                        </Component>
-                        <Component Id='binary2' Guid='*'>
-                            <File
-                                Id='exe2'
-                                Name='winxime-tsf-register.exe'
-                                DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\winxime-tsf-register.exe'
-                                KeyPath='yes'/>
-                        </Component>
-                    </Directory>
-                    
-                    <!-- TSF DLL in root folder (required) -->
-                    <Component Id='tsf_dll' Guid='*'>
+                    <Component Id='Path' Guid='{90828F1C-6BF1-487E-8319-8A71FF3D68DD}' KeyPath='yes'>
+                        <Environment
+                            Id='PATH'
+                            Name='PATH'
+                            Value='[APPLICATIONFOLDER]'
+                            Permanent='no'
+                            Part='last'
+                            Action='set'
+                            System='yes'/>
+                    </Component>
+                    <Component Id='binary0' Guid='*'>
                         <File
-                            Id='dll0'
-                            Name='winxime_tsf.dll'
+                            Id='exe0'
+                            Name='winxime-server.exe'
                             DiskId='1'
-                            Source='$(var.CargoTargetBinDir)\winxime_tsf.dll'
+                            Source='$(var.CargoTargetBinDir)\winxime-server.exe'
+                            KeyPath='yes'/>
+                        <RegistryKey Root='HKLM' Key='Software\Microsoft\Windows\CurrentVersion\Run'>
+                            <RegistryValue Type='string' Name='XimeServer' Value='[#exe0]'/>
+                        </RegistryKey>
+                    </Component>
+                    <Component Id='binary1' Guid='*'>
+                        <File
+                            Id='exe1'
+                            Name='winxime-setup.exe'
+                            DiskId='1'
+                            Source='$(var.CargoTargetBinDir)\winxime-setup.exe'
+                            KeyPath='yes'/>
+                    </Component>
+                    <Component Id='binary2' Guid='*'>
+                        <File
+                            Id='exe2'
+                            Name='winxime-tsf-register.exe'
+                            DiskId='1'
+                            Source='$(var.CargoTargetBinDir)\winxime-tsf-register.exe'
+                            KeyPath='yes'/>
+                    </Component>
+                    <Component Id='icon_file' Guid='*'>
+                        <File
+                            Id='icon0'
+                            Name='icon.ico'
+                            DiskId='1'
+                            Source='resource\icon.ico'
+                            KeyPath='yes'/>
+                    </Component>
+                    <Component Id='rime_dll' Guid='*'>
+                        <File
+                            Id='dll1'
+                            Name='rime.dll'
+                            DiskId='1'
+                            Source='$(var.CargoTargetBinDir)\rime.dll'
                             KeyPath='yes'/>
                     </Component>
                     
-                    <!-- Rime library -->
-<Component Id='rime_dll' Guid='*'>
-                            <File
-                                Id='dll1'
-                                Name='rime.dll'
-                                DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\rime.dll'
-                                KeyPath='yes'/>
-                        </Component>
-                    
-                    <!-- Data folder -->
+                    <!-- Data folder - use heat harvested files -->
                     <Directory Id='DataFolder' Name='data'>
-                        <Component Id='DataFiles' Guid='*'>
-                            <File
-                                Id='data0'
-                                Name='default.yaml'
-                                DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\data\default.yaml'
-                                KeyPath='yes'/>
-                        </Component>
-                        <Component Id='DataFile1' Guid='*'>
-                            <File
-                                Id='data1'
-                                Name='wubi86_jidian.schema.yaml'
-                                DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\data\wubi86_jidian.schema.yaml'
-                                KeyPath='yes'/>
-                        </Component>
-                        <Component Id='DataFile2' Guid='*'>
-                            <File
-                                Id='data2'
-                                Name='wubi86_jidian.dict.yaml'
-                                DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\data\wubi86_jidian.dict.yaml'
-                                KeyPath='yes'/>
-                        </Component>
+                        <Directory Id='DataOpencc' Name='opencc'/>
                     </Directory>
                 </Directory>
             </Directory>
@@ -207,11 +182,11 @@
             <ComponentRef Id='binary0'/>
             <ComponentRef Id='binary1'/>
             <ComponentRef Id='binary2'/>
-            <ComponentRef Id='tsf_dll'/>
+            <ComponentRef Id='icon_file'/>
+            <ComponentRef Id='tsf_dll_system'/>
             <ComponentRef Id='rime_dll'/>
-            <ComponentRef Id='DataFiles'/>
-            <ComponentRef Id='DataFile1'/>
-            <ComponentRef Id='DataFile2'/>
+            <!-- Data files harvested by heat -->
+            <ComponentGroupRef Id='DataFiles'/>
 
             <Feature
                 Id='Environment'
@@ -247,9 +222,13 @@
         -->
         <!--<Property Id='ARPHELPLINK' Value='ChangeMe'/>-->
 
+        <Property Id='WIXUI_INSTALLDIR' Value='APPLICATIONFOLDER'/>
+        
         <UI>
-            <!-- Disable UI for simple installation -->
+            <UIRef Id='WixUI_InstallDir'/>
         </UI>
+        
+        <WixVariable Id='WixUILicenseRtf' Value='crates\winxime-server\wix\License.rtf'/>
         
         <!-- Binary for TSF registration helper -->
         <Binary Id='tsfreg' SourceFile='$(var.CargoTargetBinDir)\winxime-tsf-register.exe'/>
@@ -257,21 +236,14 @@
         <!-- Custom actions for TSF registration/unregistration -->
         <CustomAction Id='RegisterTSF' 
             BinaryKey='tsfreg'
-            ExeCommand='-r "[APPLICATIONFOLDER]winxime_tsf.dll"'
+            ExeCommand='-register-only "[APPLICATIONFOLDER]icon.ico"'
             Execute='deferred'
             Impersonate='no'
             Return='check'/>
         
-        <CustomAction Id='EnableTIP' 
-            BinaryKey='tsfreg'
-            ExeCommand='-i'
-            Execute='deferred'
-            Impersonate='yes'
-            Return='check'/>
-        
         <CustomAction Id='UnregisterTSF' 
             BinaryKey='tsfreg'
-            ExeCommand='-u'
+            ExeCommand='-unregister-only'
             Execute='deferred'
             Impersonate='no'
             Return='check'/>
@@ -281,12 +253,19 @@
             ExeCommand='-s'
             Execute='immediate'
             Impersonate='yes'
-            Return='check'/>
+            Return='ignore'/>
+        
+        <CustomAction Id='StartServer' 
+            FileKey='exe0'
+            ExeCommand=''
+            Execute='commit'
+            Impersonate='yes'
+            Return='asyncNoWait'/>
         
         <InstallExecuteSequence>
             <Custom Action='StopServer' Before='InstallValidate' />
             <Custom Action='RegisterTSF' After='InstallFiles'>NOT Installed</Custom>
-            <Custom Action='EnableTIP' After='RegisterTSF'>NOT Installed</Custom>
+            <Custom Action='StartServer' After='RegisterTSF'>NOT Installed</Custom>
             <Custom Action='UnregisterTSF' Before='RemoveFiles'>Installed AND REMOVE="ALL"</Custom>
         </InstallExecuteSequence>
         
