@@ -27,6 +27,29 @@
 - [x] 状态同步：输入法启动/切换时正确显示当前中/英状态
 - [x] **ITfCompartmentEventSink 实现（监听输入法切换，已打开应用立即生效）**
 
+### 2026-05-09 新增
+- [x] **ITfThreadMgrEventSink 实现（修复已打开应用切换输入法不生效问题）**
+  - 问题：从其他输入法切换到当前输入法时，已打开的应用不触发 StartSession
+  - 原因：缺少 `ITfThreadMgrEventSink::OnSetFocus` 接口实现
+  - 解决：添加 `ITfThreadMgrEventSink` 接口，在文档焦点变化时触发 start_session
+
+- [x] **架构重构：XimeTextService 直接实现 ITfKeyEventSink**
+  - 参考 windows-chewing-tsf 项目架构
+  - 移除独立的 KeyEventSink 结构
+  - 在 Activate 时一次性注册，永不重新注册
+
+- [x] **修复按键双重处理 bug (P0)**
+  - 问题：OnTestKeyDown 和 OnKeyDown 都调用 process_key，按键被处理两次
+  - 修复：OnTestKeyDown 只做 should_handle_key 检查，不调用 process_key
+
+- [x] **修复 OnSetFocus 焦点处理 (P0)**
+  - 问题：两个分支做相同事情，没有区分焦点丢失/获得
+  - 修复：pdimfocus.is_null() → focus_out + 清除 composition；非 null → focus_in + start_session
+
+- [x] **移除所有 unwrap() 调用**
+  - winxime-tsf 和 winxime-core 已零 unwrap/expect
+  - 改用 `lock().unwrap_or_else(|e| e.into_inner())` 容忍 mutex 中毒
+
 ## 已验证
 - [x] 候选栏第一个字母位置正确
 

@@ -46,7 +46,7 @@ impl SharedInputContext {
         F: FnOnce(&mut InputContext) -> R,
     {
         let result = {
-            let mut guard = self.inner.lock().unwrap();
+            let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             f(&mut guard)
         };
         self.dirty.store(true, Ordering::Release);
@@ -57,7 +57,7 @@ impl SharedInputContext {
     where
         F: FnOnce(&mut InputContext),
     {
-        let mut guard = self.inner.lock().unwrap();
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         f(&mut guard);
         self.dirty.store(true, Ordering::Release);
     }
@@ -66,7 +66,7 @@ impl SharedInputContext {
     where
         F: FnOnce(&InputContext) -> R,
     {
-        let guard = self.inner.lock().unwrap();
+        let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         f(&guard)
     }
 

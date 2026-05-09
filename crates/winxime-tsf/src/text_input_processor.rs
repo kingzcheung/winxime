@@ -52,7 +52,7 @@ impl IpcClientHandle {
 
     pub fn connect(&self) -> std::result::Result<(), winxime_ipc::IpcError> {
         log("IpcClientHandle::connect() called");
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if guard.client.is_some() {
             log("  -> already connected");
             return Ok(());
@@ -64,13 +64,20 @@ impl IpcClientHandle {
         Ok(())
     }
 
+    pub fn disconnect(&self) {
+        log("IpcClientHandle::disconnect() called");
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        guard.client = None;
+        guard.session_id = 0;
+    }
+
     pub fn is_connected(&self) -> bool {
-        let r = self.state.lock().unwrap().client.is_some();
+        let r = self.state.lock().unwrap_or_else(|e| e.into_inner()).client.is_some();
         r
     }
 
     pub fn start_session(&self) -> (u32, Option<IpcResponse>) {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
                 command: IpcCommand::StartSession,
@@ -88,6 +95,8 @@ impl IpcClientHandle {
                 }
                 Err(e) => {
                     log(&format!("start_session: send_request FAILED: {:?}", e));
+                    guard.client = None;
+                    guard.session_id = 0;
                 }
             }
         } else {
@@ -97,7 +106,7 @@ impl IpcClientHandle {
     }
 
     pub fn process_key(&self, keycode: i32, modifiers: i32) -> Option<IpcResponse> {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -112,6 +121,8 @@ impl IpcClientHandle {
                 }
                 Err(e) => {
                     log(&format!("process_key: send_request FAILED: {:?}", e));
+                    guard.client = None;
+                    guard.session_id = 0;
                 }
             }
         } else {
@@ -121,7 +132,7 @@ impl IpcClientHandle {
     }
 
     pub fn select_candidate(&self, index: usize) -> Option<IpcResponse> {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -136,7 +147,7 @@ impl IpcClientHandle {
     }
 
     pub fn change_page(&self, backward: bool) -> Option<IpcResponse> {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -151,7 +162,7 @@ impl IpcClientHandle {
     }
 
     pub fn update_position(&self, x: i32, y: i32) {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -164,7 +175,7 @@ impl IpcClientHandle {
     }
 
     pub fn toggle_ascii_mode(&self) -> Option<IpcResponse> {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -179,7 +190,8 @@ impl IpcClientHandle {
     }
 
     pub fn focus_in(&self) {
-        let mut guard = self.state.lock().unwrap();
+        log("IPC::focus_in() called");
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -187,12 +199,20 @@ impl IpcClientHandle {
                 session_id,
                 data: IpcRequestData::None,
             };
-            let _ = client.send_oneway(&request);
+            log(&format!("  -> sending FocusIn request (session_id={})", session_id));
+            if client.send_oneway(&request).is_ok() {
+                log("  -> FocusIn sent successfully");
+            } else {
+                log("  -> FocusIn send FAILED");
+            }
+        } else {
+            log("  -> no client, cannot send FocusIn");
         }
     }
 
     pub fn focus_out(&self) {
-        let mut guard = self.state.lock().unwrap();
+        log("IPC::focus_out() called");
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -200,31 +220,54 @@ impl IpcClientHandle {
                 session_id,
                 data: IpcRequestData::None,
             };
-            let _ = client.send_oneway(&request);
+            log(&format!("  -> sending FocusOut request (session_id={})", session_id));
+            if client.send_oneway(&request).is_ok() {
+                log("  -> FocusOut sent successfully");
+            } else {
+                log("  -> FocusOut send FAILED");
+            }
+        } else {
+            log("  -> no client, cannot send FocusOut");
         }
     }
 
     pub fn show_tray_icon(&self) {
-        let mut guard = self.state.lock().unwrap();
+        log("IPC::show_tray_icon() called");
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
                 command: IpcCommand::ShowTrayIcon,
                 session_id: 0,
                 data: IpcRequestData::None,
             };
-            let _ = client.send_oneway(&request);
+            log("  -> sending ShowTrayIcon request");
+            if client.send_oneway(&request).is_ok() {
+                log("  -> ShowTrayIcon sent successfully");
+            } else {
+                log("  -> ShowTrayIcon send FAILED");
+            }
+        } else {
+            log("  -> no client");
         }
     }
 
     pub fn hide_tray_icon(&self) {
-        let mut guard = self.state.lock().unwrap();
+        log("IPC::hide_tray_icon() called");
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
                 command: IpcCommand::HideTrayIcon,
                 session_id: 0,
                 data: IpcRequestData::None,
             };
-            let _ = client.send_oneway(&request);
+            log("  -> sending HideTrayIcon request");
+            if client.send_oneway(&request).is_ok() {
+                log("  -> HideTrayIcon sent successfully");
+            } else {
+                log("  -> HideTrayIcon send FAILED");
+            }
+        } else {
+            log("  -> no client");
         }
     }
 }
@@ -287,7 +330,7 @@ struct CompositionSink {
 impl ITfCompositionSink_Impl for CompositionSink_Impl {
     fn OnCompositionTerminated(&self, _ecwrite: u32, _pcomposition: Ref<'_, ITfComposition>) -> Result<()> {
         log("OnCompositionTerminated: composition terminated");
-        *self.composition.lock().unwrap() = None;
+        *self.composition.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(())
     }
 }
@@ -318,7 +361,7 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
 
         if self.output.composing {
             crate::log::log("DoEditSession: composing mode");
-            let comp = self.composition.lock().unwrap().clone();
+            let comp = self.composition.lock().unwrap_or_else(|e| e.into_inner()).clone();
 
             if let Some(ref composition) = comp {
                 crate::log::log("DoEditSession: update existing composition");
@@ -370,7 +413,7 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
             crate::log::log(&format!("DoEditSession: committing '{}' and ending composition", commit_text));
             
             // Replace composition text with commit text first
-            let comp = self.composition.lock().unwrap().clone();
+            let comp = self.composition.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if let Some(ref composition) = comp {
                 unsafe {
                     if let Ok(range) = composition.GetRange() {
@@ -496,7 +539,7 @@ impl XimeEditSession_Impl {
                             let [TF_SELECTION { range, .. }] = selections;
                             ManuallyDrop::into_inner(range);
                             
-                            *self.composition.lock().unwrap() = Some(comp);
+                            *self.composition.lock().unwrap_or_else(|e| e.into_inner()) = Some(comp);
                             
                             Self::update_caret_position_in_session(context, ec, &self.ipc);
                         }
@@ -514,7 +557,7 @@ impl XimeEditSession_Impl {
 
     fn update_composition_text(&self, _context: &ITfContext, ec: u32, preedit: &str) {
         log(&format!("update_composition_text: preedit='{}'", preedit));
-        let comp = self.composition.lock().unwrap();
+        let comp = self.composition.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref composition) = *comp {
             unsafe {
                 if let Ok(range) = composition.GetRange() {
@@ -529,7 +572,7 @@ impl XimeEditSession_Impl {
     }
 
     fn end_composition(&self, ec: u32) {
-        if let Some(comp) = self.composition.lock().unwrap().take() {
+        if let Some(comp) = self.composition.lock().unwrap_or_else(|e| e.into_inner()).take() {
             unsafe {
                 comp.EndComposition(ec).ok();
             }
@@ -537,54 +580,13 @@ impl XimeEditSession_Impl {
     }
 }
 
-#[implement(ITfKeyEventSink)]
-pub struct KeyEventSink {
-    ipc: IpcClientHandle,
-    composing: std::sync::atomic::AtomicBool,
-    thread_mgr: std::sync::Mutex<Option<ITfThreadMgr>>,
-    client_id: std::sync::atomic::AtomicU32,
-    composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
-    ascii_mode: crate::language_bar::SharedAsciiMode,
-    lang_bar_sink_ref: crate::language_bar::LangBarSinkRef,
-}
-
-impl KeyEventSink {
-    pub fn new(ipc: IpcClientHandle, ascii_mode: crate::language_bar::SharedAsciiMode, sink_ref: crate::language_bar::LangBarSinkRef) -> Self {
-        Self {
-            ipc,
-            composing: std::sync::atomic::AtomicBool::new(false),
-            thread_mgr: std::sync::Mutex::new(None),
-            client_id: std::sync::atomic::AtomicU32::new(0),
-            composition: Arc::new(std::sync::Mutex::new(None)),
-            ascii_mode,
-            lang_bar_sink_ref: sink_ref,
-        }
-    }
-
-    pub fn set_thread_mgr(&self, mgr: Option<ITfThreadMgr>) {
-        *self.thread_mgr.lock().unwrap() = mgr;
-    }
-
-    pub fn set_client_id(&self, id: u32) {
-        self.client_id
-            .store(id, std::sync::atomic::Ordering::Release);
-    }
-
-    fn update_lang_bar(&self) {
-        if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap() {
-            unsafe {
-                let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
-            }
-        }
-    }
-
+impl XimeTextService_Impl {
     fn is_composing(&self) -> bool {
-        self.composing.load(std::sync::atomic::Ordering::Acquire)
+        self.composing.get()
     }
 
     fn set_composing(&self, val: bool) {
-        self.composing
-            .store(val, std::sync::atomic::Ordering::Release);
+        self.composing.set(val);
     }
 
     fn should_handle_key(&self, vk: VIRTUAL_KEY) -> bool {
@@ -607,6 +609,14 @@ impl KeyEventSink {
             }
         }
         false
+    }
+
+    fn update_lang_bar(&self) {
+        if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
+            unsafe {
+                let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
+            }
+        }
     }
 
     fn update_caret_position_sync(&self, context: &ITfContext) {
@@ -669,7 +679,7 @@ impl KeyEventSink {
             }
         }
 
-        let tid = self.client_id.load(std::sync::atomic::Ordering::Acquire);
+        let tid = self.client_id.get();
         let session = SelectionRect::new(context.clone()).into_object();
 
         let _ = unsafe {
@@ -690,8 +700,8 @@ impl KeyEventSink {
 
     fn schedule_edit_session(&self, context: &ITfContext, output: RimeOutput) {
         log("schedule_edit_session: called");
-        let tid = self.client_id.load(std::sync::atomic::Ordering::Acquire);
-        let mgr = self.thread_mgr.lock().unwrap().clone();
+        let tid = self.client_id.get();
+        let mgr = self.thread_mgr.borrow().clone();
 
         let composition_sink_impl = CompositionSink {
             composition: self.composition.clone(),
@@ -808,7 +818,7 @@ impl KeyEventSink {
     }
 }
 
-impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
+impl ITfKeyEventSink_Impl for XimeTextService_Impl {
     fn OnSetFocus(&self, _fforeground: BOOL) -> Result<()> {
         Ok(())
     }
@@ -821,26 +831,8 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
     ) -> Result<BOOL> {
         let vk = VIRTUAL_KEY(wparam.0 as u16);
         log(&format!("OnTestKeyDown: vk={}", vk.0));
-        if !self.should_handle_key(vk) {
-            log("  -> not handling");
-            return Ok(BOOL(0));
-        }
-
-        if !self.ipc.is_connected() {
-            log("  -> IPC not connected");
-            return Ok(BOOL(0));
-        }
-
-        let xk = librime_sys::vk_to_xk(vk.0);
-        let mods = librime_sys::get_key_modifiers();
-        log(&format!("  -> process_key({}, {})", xk, mods));
-        let handled = self
-            .ipc
-            .process_key(xk, mods)
-            .map(|r| r.success)
-            .unwrap_or(false);
-        log(&format!("  -> result: {}", handled));
-
+        let handled = self.should_handle_key(vk);
+        log(&format!("  -> should_handle_key: {}", handled));
         Ok(BOOL(if handled { 1 } else { 0 }))
     }
 
@@ -907,13 +899,13 @@ impl ITfKeyEventSink_Impl for KeyEventSink_Impl {
     }
 }
 
-#[implement(ITfTextInputProcessor, ITfActiveLanguageProfileNotifySink, ITfThreadFocusSink)]
+#[implement(ITfTextInputProcessor, ITfActiveLanguageProfileNotifySink, ITfThreadFocusSink, ITfThreadMgrEventSink, ITfKeyEventSink)]
 pub struct XimeTextService {
     thread_mgr: std::cell::RefCell<Option<ITfThreadMgr>>,
     client_id: std::cell::Cell<u32>,
     ipc: IpcClientHandle,
-    key_sink: std::cell::RefCell<Option<ITfKeyEventSink>>,
-    keystroke_mgr: std::cell::RefCell<Option<ITfKeystrokeMgr>>,
+    composing: std::cell::Cell<bool>,
+    composition: Arc<std::sync::Mutex<Option<ITfComposition>>>,
     lang_bar_mgr: std::cell::RefCell<Option<ITfLangBarItemMgr>>,
     ascii_mode: crate::language_bar::SharedAsciiMode,
     lang_bar_sink_ref: crate::language_bar::LangBarSinkRef,
@@ -922,6 +914,7 @@ pub struct XimeTextService {
     profile_source: std::cell::RefCell<Option<ITfSource>>,
     thread_focus_sink_cookie: std::cell::Cell<u32>,
     thread_focus_source: std::cell::RefCell<Option<ITfSource>>,
+    thread_mgr_event_sink_cookie: std::cell::Cell<u32>,
 }
 
 pub const GUID_LANG_BAR_ITEM: GUID = GUID_LBI_INPUTMODE;
@@ -937,8 +930,8 @@ impl XimeTextService {
             thread_mgr: std::cell::RefCell::new(None),
             client_id: std::cell::Cell::new(0),
             ipc,
-            key_sink: std::cell::RefCell::new(None),
-            keystroke_mgr: std::cell::RefCell::new(None),
+            composing: std::cell::Cell::new(false),
+            composition: Arc::new(std::sync::Mutex::new(None)),
             lang_bar_mgr: std::cell::RefCell::new(None),
             ascii_mode: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             lang_bar_sink_ref: Arc::new(std::sync::Mutex::new(None)),
@@ -947,6 +940,7 @@ impl XimeTextService {
             profile_source: std::cell::RefCell::new(None),
             thread_focus_sink_cookie: std::cell::Cell::new(TF_INVALID_COOKIE),
             thread_focus_source: std::cell::RefCell::new(None),
+            thread_mgr_event_sink_cookie: std::cell::Cell::new(TF_INVALID_COOKIE),
         }
     }
 
@@ -1002,22 +996,19 @@ impl XimeTextService_Impl {
             Err(e) => log(&format!("IPC connection failed: {:?}", e)),
         }
 
-        let sink_impl = KeyEventSink::new(self.ipc.clone(), self.ascii_mode.clone(), self.lang_bar_sink_ref.clone());
-        sink_impl.set_client_id(tid);
-        sink_impl.set_thread_mgr(ptim.cloned());
-        log("KeyEventSink created with IPC handle");
-
-        let key_sink_itf: ITfKeyEventSink = sink_impl.into();
-
         if let Some(thread_mgr) = ptim {
+            // Register ITfKeyEventSink directly (self implements ITfKeyEventSink)
             if let Ok(kmgr) = thread_mgr.cast::<ITfKeystrokeMgr>() {
                 log("Got ITfKeystrokeMgr, attempting AdviseKeyEventSink...");
-                if unsafe { kmgr.AdviseKeyEventSink(tid, &key_sink_itf, true).is_ok() } {
-                    log("AdviseKeyEventSink succeeded");
-                    *self.keystroke_mgr.borrow_mut() = Some(kmgr);
-                    *self.key_sink.borrow_mut() = Some(key_sink_itf);
-                } else {
-                    log("AdviseKeyEventSink failed");
+                use windows_core::ComObjectInterface;
+                let key_sink_ref = ComObjectInterface::<ITfKeyEventSink>::as_interface_ref(self);
+                let key_sink: ITfKeyEventSink = key_sink_ref.to_owned();
+                unsafe {
+                    if kmgr.AdviseKeyEventSink(tid, &key_sink, true).is_ok() {
+                        log("AdviseKeyEventSink succeeded");
+                    } else {
+                        log("AdviseKeyEventSink failed");
+                    }
                 }
             } else {
                 log("Failed to get ITfKeystrokeMgr");
@@ -1072,9 +1063,21 @@ impl XimeTextService_Impl {
                     if let Ok(cookie) = source.AdviseSink(&ITfThreadFocusSink::IID, &thread_focus_sink) {
                         log(&format!("Thread focus sink registered, cookie={}", cookie));
                         self.thread_focus_sink_cookie.set(cookie);
-                        *self.thread_focus_source.borrow_mut() = Some(source);
+                        *self.thread_focus_source.borrow_mut() = Some(source.clone());
                     } else {
                         log("Failed to AdviseSink for thread focus");
+                    }
+                }
+                
+                // Register ITfThreadMgrEventSink (for document focus changes)
+                let thread_mgr_event_sink_ref = ComObjectInterface::<ITfThreadMgrEventSink>::as_interface_ref(self);
+                let thread_mgr_event_sink: ITfThreadMgrEventSink = thread_mgr_event_sink_ref.to_owned();
+                unsafe {
+                    if let Ok(cookie) = source.AdviseSink(&ITfThreadMgrEventSink::IID, &thread_mgr_event_sink) {
+                        log(&format!("ThreadMgrEventSink registered, cookie={}", cookie));
+                        self.thread_mgr_event_sink_cookie.set(cookie);
+                    } else {
+                        log("Failed to AdviseSink for ThreadMgrEventSink");
                     }
                 }
             } else {
@@ -1111,9 +1114,24 @@ impl XimeTextService_Impl {
             self.thread_focus_sink_cookie.set(TF_INVALID_COOKIE);
         }
         
-        if let Some(kmgr) = self.keystroke_mgr.borrow_mut().take() {
-            unsafe {
-                let _ = kmgr.UnadviseKeyEventSink(self.client_id.get());
+        // Unregister thread mgr event sink
+        if self.thread_mgr_event_sink_cookie.get() != TF_INVALID_COOKIE {
+            if let Some(thread_mgr) = self.thread_mgr.borrow().as_ref() {
+                if let Ok(source) = thread_mgr.cast::<ITfSource>() {
+                    unsafe {
+                        let _ = source.UnadviseSink(self.thread_mgr_event_sink_cookie.get());
+                    }
+                }
+            }
+            self.thread_mgr_event_sink_cookie.set(TF_INVALID_COOKIE);
+        }
+        
+        // UnadviseKeyEventSink using thread_mgr
+        if let Some(thread_mgr) = self.thread_mgr.borrow().as_ref() {
+            if let Ok(kmgr) = thread_mgr.cast::<ITfKeystrokeMgr>() {
+                unsafe {
+                    let _ = kmgr.UnadviseKeyEventSink(self.client_id.get());
+                }
             }
         }
 
@@ -1127,9 +1145,10 @@ impl XimeTextService_Impl {
             }
         }
 
-        *self.key_sink.borrow_mut() = None;
         *self.thread_mgr.borrow_mut() = None;
         self.client_id.set(0);
+        self.composing.set(false);
+        *self.composition.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(())
     }
 }
@@ -1152,19 +1171,26 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
         log(&format!("ITfActiveLanguageProfileNotifySink::OnActivated: clsid={:?}, profile={:?}, activated={}", 
             clsid_ref, profile_ref, factivated.0));
         
-        // Check if this is our text service being activated
         let our_clsid = crate::class_factory::CLSID_XIME;
+        log(&format!("  -> our_clsid = {:?}", our_clsid));
+        
         if let Some(clsid_val) = clsid_ref {
+            log(&format!("  -> clsid_val = {:?}", clsid_val));
+            log(&format!("  -> clsid_val == our_clsid? {}", clsid_val == &our_clsid));
             if clsid_val != &our_clsid {
                 log("  -> Not our TIP, ignoring");
                 return Ok(());
             }
+            log("  -> clsid matches our TIP!");
+        } else {
+            log("  -> clsid_ref is None");
         }
+        
+        log(&format!("  -> factivated.as_bool() = {}", factivated.as_bool()));
         
         if factivated.as_bool() {
             log("  -> Our TIP is being activated!");
             
-            // Ensure IPC connected
             if !self.ipc.is_connected() {
                 log("  -> IPC not connected, attempting reconnect...");
                 if self.ipc.connect().is_err() {
@@ -1174,41 +1200,12 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
                 log("  -> Reconnected!");
             }
             
-            // Ensure key event sink is registered
-            if self.key_sink.borrow().is_none() {
-                log("  -> Key sink not registered, re-registering...");
-                if let Some(thread_mgr) = self.thread_mgr.borrow().as_ref() {
-                    if let Ok(kmgr) = thread_mgr.cast::<ITfKeystrokeMgr>() {
-                        let sink_impl = KeyEventSink::new(self.ipc.clone(), self.ascii_mode.clone(), self.lang_bar_sink_ref.clone());
-                        sink_impl.set_client_id(self.client_id.get());
-                        sink_impl.set_thread_mgr(Some(thread_mgr.clone()));
-                        
-                        let key_sink_itf: ITfKeyEventSink = sink_impl.into();
-                        let tid = self.client_id.get();
-                        
-                        unsafe {
-                            if kmgr.AdviseKeyEventSink(tid, &key_sink_itf, true).is_ok() {
-                                log("  -> Key sink re-registered successfully");
-                                *self.keystroke_mgr.borrow_mut() = Some(kmgr);
-                                *self.key_sink.borrow_mut() = Some(key_sink_itf);
-                            } else {
-                                log("  -> Key sink re-registration failed");
-                            }
-                        }
-                    }
-                }
-            } else {
-                log("  -> Key sink already registered");
-            }
-            
-            // Get current status from server
             if let Some(response) = self.ipc.start_session().1 {
                 if let Some(status) = response.status {
                     log(&format!("  -> ascii_mode from server: {}", status.ascii_mode));
                     self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                     
-                    // Update language bar
-                    if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap() {
+                    if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
                         unsafe {
                             let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
                         }
@@ -1216,7 +1213,6 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
                 }
             }
             
-            // Show tray icon when activated
             self.ipc.show_tray_icon();
         } else {
             log("  -> Our TIP is being deactivated");
@@ -1248,7 +1244,7 @@ impl ITfThreadFocusSink_Impl for XimeTextService_Impl {
                 self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                 
                 // Update language bar
-                if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap() {
+                if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
                     unsafe {
                         let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
                     }
@@ -1268,6 +1264,70 @@ impl ITfThreadFocusSink_Impl for XimeTextService_Impl {
         // Hide UI when thread loses focus
         self.ipc.hide_tray_icon();
         
+        Ok(())
+    }
+}
+
+impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
+    fn OnInitDocumentMgr(&self, _pdim: Ref<'_, ITfDocumentMgr>) -> Result<()> {
+        Ok(())
+    }
+
+    fn OnUninitDocumentMgr(&self, _pdim: Ref<'_, ITfDocumentMgr>) -> Result<()> {
+        Ok(())
+    }
+
+    fn OnSetFocus(
+        &self,
+        pdimfocus: Ref<'_, ITfDocumentMgr>,
+        _pdimprevfocus: Ref<'_, ITfDocumentMgr>,
+    ) -> Result<()> {
+        log(&format!("ITfThreadMgrEventSink::OnSetFocus (pdimfocus.is_null={})", pdimfocus.is_null()));
+        
+        if pdimfocus.is_null() {
+            log("  -> Focus lost (pdimfocus is null)");
+            if self.ipc.is_connected() {
+                self.ipc.focus_out();
+            }
+            self.composing.set(false);
+            return Ok(());
+        }
+        
+        log("  -> Focus gained (pdimfocus is valid)");
+        
+        if !self.ipc.is_connected() {
+            log("  -> IPC not connected, attempting reconnect...");
+            if self.ipc.connect().is_err() {
+                log("  -> Reconnect failed");
+                return Ok(());
+            }
+            log("  -> Reconnected!");
+        }
+        
+        if let Some(response) = self.ipc.start_session().1 {
+            if let Some(status) = response.status {
+                log(&format!("  -> ascii_mode from server: {}", status.ascii_mode));
+                self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                
+                if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
+                    unsafe {
+                        let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
+                    }
+                }
+            }
+        }
+        
+        self.ipc.show_tray_icon();
+        self.ipc.focus_in();
+        
+        Ok(())
+    }
+
+    fn OnPushContext(&self, _pic: Ref<'_, ITfContext>) -> Result<()> {
+        Ok(())
+    }
+
+    fn OnPopContext(&self, _pic: Ref<'_, ITfContext>) -> Result<()> {
         Ok(())
     }
 }

@@ -85,7 +85,7 @@ impl ITfLangBarItem_Impl for LangBarItemButton_Impl {
 
 impl LangBarItemButton_Impl {
     fn update_sinks(&self, dwflags: u32) -> Result<()> {
-        if let Some(ref sink) = *self.sink_ref.lock().unwrap() {
+        if let Some(ref sink) = *self.sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
             unsafe { sink.OnUpdate(dwflags)? };
         }
         Ok(())
@@ -148,8 +148,9 @@ impl ITfSource_Impl for LangBarItemButton_Impl {
             return Err(Error::from(HRESULT(0x80040201u32 as i32)));
         }
         
-        let sink: ITfLangBarItemSink = punk.as_ref().unwrap().cast()?;
-        *self.sink_ref.lock().unwrap() = Some(sink);
+        let punk_ref = punk.as_ref().ok_or_else(|| Error::from(HRESULT(0x80004005u32 as i32)))?;
+        let sink: ITfLangBarItemSink = punk_ref.cast()?;
+        *self.sink_ref.lock().unwrap_or_else(|e| e.into_inner()) = Some(sink);
         
         Ok(LANGBAR_ITEM_COOKIE)
     }
@@ -158,7 +159,7 @@ impl ITfSource_Impl for LangBarItemButton_Impl {
         if dwCookie != LANGBAR_ITEM_COOKIE {
             return Err(Error::from(HRESULT(0x80040200u32 as i32)));
         }
-        *self.sink_ref.lock().unwrap() = None;
+        *self.sink_ref.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(())
     }
 }
