@@ -7,8 +7,9 @@ license = "GPL-3.0"
 repository.workspace = true
 
 [dependencies]
-slint = "1.8"
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
 winxime-config = { path = "../winxime-config" }
-
-[build-dependencies]
-slint-build = "1.8"
+anyhow = "1.0"

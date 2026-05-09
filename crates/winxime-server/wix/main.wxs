@@ -62,16 +62,16 @@
 
     <Product
         Id='*'
-        Name='winxime-server'
+        Name='Xime'
         UpgradeCode='C82D0C18-FE61-4F32-BB15-1D87BC5912A2'
-        Manufacturer='winxime team'
+        Manufacturer='Xime team'
         Language='1033'
         Codepage='1252'
         Version='$(var.Version)'>
 
         <Package Id='*'
             Keywords='Installer'
-            Manufacturer='winxime team'
+            Manufacturer='Xime team'
             InstallerVersion='450'
             Languages='1033'
             Compressed='yes'
@@ -85,7 +85,19 @@
             DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.'/>
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
-        <Property Id='DiskPrompt' Value='winxime-server Installation'/>
+        <Property Id='DiskPrompt' Value='Xime Installation'/>
+        
+        <!-- Icon for start menu shortcut -->
+        <Icon Id='SetupIcon' SourceFile='resource\icon.ico'/>
+        
+        <!-- Property to control "Launch on exit" checkbox -->
+        <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='打开 Xime 设置'/>
+        <CustomAction Id='LaunchSettings' 
+            FileKey='exe1'
+            ExeCommand=''
+            Execute='immediate'
+            Impersonate='yes'
+            Return='asyncNoWait'/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <!-- System folder for TSF DLL -->
@@ -100,8 +112,22 @@
                 </Component>
             </Directory>
             
+            <!-- Start Menu shortcut -->
+            <Directory Id='ProgramMenuFolder'>
+                <Directory Id='ApplicationProgramsFolder' Name='Xime'>
+                    <Component Id='ApplicationShortcut' Guid='{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}'>
+                        <Shortcut Id='XimeSettingsShortcut'
+                            Name='Xime 设置'
+                            Target='[APPLICATIONFOLDER]winxime-setup.exe'
+                            WorkingDirectory='APPLICATIONFOLDER'
+                            Icon='SetupIcon'/>
+                        <RegistryValue Root='HKCU' Key='Software\Xime' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
+                    </Component>
+                </Directory>
+            </Directory>
+            
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
-                <Directory Id='APPLICATIONFOLDER' Name='winxime-server'>
+                <Directory Id='APPLICATIONFOLDER' Name='Xime'>
                     <Component Id='Path' Guid='{90828F1C-6BF1-487E-8319-8A71FF3D68DD}' KeyPath='yes'>
                         <Environment
                             Id='PATH'
@@ -185,6 +211,7 @@
             <ComponentRef Id='icon_file'/>
             <ComponentRef Id='tsf_dll_system'/>
             <ComponentRef Id='rime_dll'/>
+            <ComponentRef Id='ApplicationShortcut'/>
             <!-- Data files harvested by heat -->
             <ComponentGroupRef Id='DataFiles'/>
 
@@ -226,6 +253,7 @@
         
         <UI>
             <UIRef Id='WixUI_InstallDir'/>
+            <Publish Dialog='ExitDialog' Control='Finish' Event='DoAction' Value='LaunchSettings'>WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
         </UI>
         
         <WixVariable Id='WixUILicenseRtf' Value='crates\winxime-server\wix\License.rtf'/>
