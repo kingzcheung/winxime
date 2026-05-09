@@ -1,118 +1,71 @@
-use gpui::*;
-use gpui_component::{
-    h_flex, v_flex,
-    label::Label,
-    setting::{SettingGroup, SettingItem, SettingField, NumberFieldOptions},
-};
+use gpui::{prelude::FluentBuilder, ParentElement, IntoElement, *};
+use crate::components::{Radio};
 
-pub fn render(cx: &mut Context<super::SettingsApp>) -> impl IntoElement {
-    v_flex()
+fn primary() -> Hsla {
+    hsla(0.63, 0.65, 0.67, 1.0)
+}
+
+pub fn render() -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(16.0))
+        .p(px(16.0))
         .w_full()
-        .p_4()
-        .gap_4()
         .child(
-            Label::new("输入方案")
-                .text_size(px(18.0))
-                .font_weight(FontWeight::SEMIBOLD)
+            div()
+                .text_size(px(20.0))
+                .font_weight(FontWeight::BOLD)
+                .text_color(rgb(0xe0e0e0))
+                .child("输入方案")
         )
         .child(
-            SettingGroup::new()
-                .title("基础设置")
-                .items(vec![
-                    SettingItem::new(
-                        "当前方案",
-                        SettingField::dropdown(
-                            vec![
-                                ("五笔86极点".into(), "wubi86_jidian".into()),
-                                ("五笔86".into(), "wubi86".into()),
-                                ("五笔98".into(), "wubi98".into()),
-                            ],
-                            |_| "wubi86_jidian".into(),
-                            |val, _| {
-                                println!("方案切换: {}", val);
-                            },
-                        )
-                    )
-                    .description("选择输入方案"),
-                    SettingItem::new(
-                        "字体大小",
-                        SettingField::number_input(
-                            NumberFieldOptions {
-                                min: 12.0,
-                                max: 30.0,
-                                step: 2.0,
-                                ..Default::default()
-                            },
-                            |_| 18.0,
-                            |val, _| {
-                                println!("字体大小: {}", val);
-                            },
-                        )
-                    )
-                    .description("候选栏字体大小"),
-                    SettingItem::new(
-                        "候选数量",
-                        SettingField::number_input(
-                            NumberFieldOptions {
-                                min: 1.0,
-                                max: 10.0,
-                                step: 1.0,
-                                ..Default::default()
-                            },
-                            |_| 5.0,
-                            |val, _| {
-                                println!("候选数量: {}", val);
-                            },
-                        )
-                    )
-                    .description("候选栏显示的候选词数量"),
-                    SettingItem::new(
-                        "显示编码提示",
-                        SettingField::switch(
-                            |_| true,
-                            |val, _| {
-                                println!("显示编码: {}", val);
-                            },
-                        )
-                    )
-                    .description("在候选词旁显示编码"),
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(12.0))
+                .p(px(16.0))
+                .rounded(px(12.0))
+                .bg(hsla(0.0, 0.0, 0.1, 0.6))
+                .border_1()
+                .border_color(rgb(0x303030))
+                .child(
+                    div()
+                        .text_size(px(14.0))
+                        .text_color(rgb(0x808080))
+                        .child("选择输入方案")
+                )
+                .children(vec![
+                    render_radio_item("五笔86极点", 0, true),
+                    render_radio_item("五笔86", 1, false),
+                    render_radio_item("五笔98", 2, false),
                 ])
         )
+        .into_any_element()
+}
+
+fn render_radio_item(label: impl Into<String>, index: usize, checked: bool) -> impl IntoElement {
+    let label = label.into();
+    div()
+        .id(("schema", index))
+        .flex()
+        .items_center()
+        .gap(px(12.0))
+        .py(px(8.0))
+        .px(px(12.0))
+        .rounded(px(8.0))
+        .cursor_pointer()
+        .hover(|style: StyleRefinement| style.bg(hsla(0.0, 0.0, 0.15, 0.5)))
+        .when(checked, |this: Stateful<Div>| {
+            this.border_1()
+                .border_color(primary())
+                .bg(hsla(0.63, 0.4, 0.4, 0.1))
+        })
+        .child(Radio::new(checked))
         .child(
-            SettingGroup::new()
-                .title("外观")
-                .items(vec![
-                    SettingItem::new(
-                        "配色主题",
-                        SettingField::dropdown(
-                            vec![
-                                ("默认".into(), "default".into()),
-                                ("深色".into(), "dark".into()),
-                                ("浅色".into(), "light".into()),
-                            ],
-                            |_| "default".into(),
-                            |val, _| {
-                                println!("主题: {}", val);
-                            },
-                        )
-                    )
-                    .description("候选栏配色方案"),
-                    SettingItem::new(
-                        "圆角大小",
-                        SettingField::number_input(
-                            NumberFieldOptions {
-                                min: 0.0,
-                                max: 12.0,
-                                step: 1.0,
-                                ..Default::default()
-                            },
-                            |_| 8.0,
-                            |val, _| {
-                                println!("圆角: {}", val);
-                            },
-                        )
-                    )
-                    .description("候选栏窗口圆角"),
-                ])
+            div()
+                .text_size(px(14.0))
+                .text_color(if checked { primary() } else { hsla(0.0, 0.0, 0.9, 1.0) })
+                .child(label)
         )
 }

@@ -120,10 +120,31 @@ msiexec /i target\wix\winxime-server-0.1.0-x86_64.msi
    - `SIGNPATH_API_TOKEN`
    - `SIGNPATH_ORGANIZATION_ID`
 
+## 设计决策
+
+### winxime-setup 配置交互方案 (2026-05-09)
+参考项目分析：
+- **weasel (小狼毫)**：`WeaselDeployer.exe` 通过 IPC + librime API 交互
+  - `StartMaintenance()` → Server 暂停服务
+  - 修改 Rime 配置文件
+  - `rime->deploy()` → 重新部署
+  - `EndMaintenance()` → 恢复服务
+- **windows-chewing-tsf**：注册表 + 自动重载
+  - 配置存储在 `HKCU\Software\ChewingTextService`
+  - TSF DLL 通过 `reload_if_needed()` 检测变化
+
+**最终方案**：采用 `xime.custom.yaml` 配置文件方式
+- 配置路径：`%APPDATA%\Xime\xime.custom.yaml`
+- winxime-setup 修改配置文件
+- winxime-server 通过 librime API 加载，定期检测变化重载
+- 交互方式（待定）：文件监听 或 IPC `ReloadConfig` 命令
+- UI 设计要符合 fluent design
+
 ## 下一步
+- [ ] 完善 winxime-setup UI 层
+- [ ] 实现 xime.custom.yaml 配置读写
+- [ ] Server 配置加载与重载机制
 - [ ] 测试任务栏中/英切换功能
 - [ ] SignPath 组织注册和项目配置
 - [ ] 测试 MSI 安装流程
 - [ ] 移除调试日志 (release 版本)
-- [ ] 设置保存功能
-- [ ] 系统托盘图标

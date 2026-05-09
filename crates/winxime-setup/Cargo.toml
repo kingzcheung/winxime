@@ -7,9 +7,9 @@ license = "GPL-3.0"
 repository.workspace = true
 
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+gpui = { package = "gpui-unofficial", version = "1.1.7" }
+gpui-platform = { package = "gpui-platform-gpui-unofficial", version = "1.1.7" }
 winxime-config = { path = "../winxime-config" }
 anyhow = "1.0"
+windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+raw-window-handle = "0.6"

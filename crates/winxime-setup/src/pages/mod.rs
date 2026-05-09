@@ -1,23 +1,12 @@
-mod input_schema;
-mod clipboard;
-mod hotkeys;
-mod smart_suggestion;
-mod dictionary;
+pub mod input_schema;
+pub mod appearance;
+pub mod clipboard;
+pub mod hotkeys;
+pub mod smart_suggestion;
+pub mod dictionary;
 
-use gpui::*;
-use gpui_component::{
-    h_flex, v_flex,
-    button::Button,
-    scrollable::Scrollable,
-    setting::{
-        Settings, SettingPage, SettingGroup, SettingItem, SettingField,
-        NumberFieldOptions,
-    },
-    sidebar::{
-        Sidebar, SidebarHeader, SidebarGroup, SidebarMenu, SidebarMenuItem,
-    },
-    Icon, IconName,
-};
+use gpui::{prelude::FluentBuilder, ParentElement, IntoElement, *};
+use crate::components::{TitleBar};
 
 pub struct SettingsApp {
     current_page: usize,
@@ -25,63 +14,87 @@ pub struct SettingsApp {
 
 impl SettingsApp {
     pub fn new() -> Self {
-        Self { current_page: 0 }
+        Self { 
+            current_page: 0,
+        }
     }
 }
 
 impl Render for SettingsApp {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let pages = vec![
-            ("输入方案", IconName::Keyboard),
-            ("剪切板", IconName::ClipboardList),
-            ("快捷键", IconName::Keyboard),
-            ("智能联想", IconName::Brain),
-            ("词库管理", IconName::BookOpen),
-        ];
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        window.set_background_appearance(WindowBackgroundAppearance::Blurred);
+        
+        let pages = ["输入方案", "外观", "剪切板", "快捷键", "智能联想", "词库管理"];
+        let current = self.current_page;
+        
+        let sidebar = div()
+            .w(px(213.0))
+            .h_full()
+            .bg(rgb(0x0d0d0d))
+            .flex()
+            .flex_col()
+            .gap(px(2.0))
+            .p(px(8.0))
+            .children(
+                pages
+                    .iter()
+                    .enumerate()
+                    .map(|(i, name)| {
+                        let is_current = i == current;
+                        let view = cx.entity();
+                        div()
+                            .id(("menu", i))
+                            .py(px(10.0))
+                            .px(px(12.0))
+                            .rounded(px(8.0))
+                            .when(is_current, |this: Stateful<Div>| this.bg(rgb(0x2d2d2d)))
+                            .when(!is_current, |this: Stateful<Div>| {
+                                this.cursor_pointer()
+                                    .hover(|style: StyleRefinement| style.bg(rgb(0x1a1a1a)))
+                            })
+                            .text_size(px(13.0))
+                            .text_color(if is_current { rgb(0xe0e0e0) } else { rgb(0x808080) })
+                            .on_click(move |_, window: &mut Window, cx: &mut App| {
+                                cx.update_entity(&view, |app: &mut SettingsApp, cx: &mut Context<SettingsApp>| {
+                                    app.current_page = i;
+                                    cx.notify();
+                                });
+                            })
+                            .child(name.to_string())
+                    })
+            );
 
-        h_flex()
+        let content = match self.current_page {
+            0 => input_schema::render(),
+            1 => appearance::render(),
+            2 => clipboard::render(),
+            3 => hotkeys::render(),
+            4 => smart_suggestion::render(),
+            5 => dictionary::render(),
+            _ => input_schema::render(),
+        };
+
+        div()
+            .flex()
+            .flex_col()
             .size_full()
-            .bg(cx.theme().background)
+            .bg(hsla(0.0, 0.0, 0.05, 0.85))
+            .child(TitleBar::render(window))
             .child(
-                Sidebar::new()
-                    .width(200)
-                    .header(
-                        SidebarHeader::new()
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .child(Icon::new(IconName::Settings))
-                                    .child("Xime 设置")
-                            )
-                    )
+                div()
+                    .id("content-area")
+                    .flex()
+                    .flex_1()
+                    .h_full()
+                    .overflow_hidden()
+                    .child(sidebar)
                     .child(
-                        SidebarGroup::new()
-                            .child(
-                                SidebarMenu::new()
-                                    .children(pages.iter().enumerate().map(|(i, (name, icon))| {
-                                        SidebarMenuItem::new(name)
-                                            .icon(*icon)
-                                            .active(i == self.current_page)
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.current_page = i;
-                                                cx.notify();
-                                            }))
-                                    }))
-                            )
+                        div()
+                            .id("content-scroll")
+                            .flex_1()
+                            .overflow_y_scroll()
+                            .child(content)
                     )
             )
-            .child(self.render_content(cx))
-    }
-
-    fn render_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        Scrollable::new(v_flex().flex_1().size_full())
-            .child(match self.current_page {
-                0 => input_schema::render(cx),
-                1 => clipboard::render(cx),
-                2 => hotkeys::render(cx),
-                3 => smart_suggestion::render(cx),
-                4 => dictionary::render(cx),
-                _ => input_schema::render(cx),
-            })
     }
 }
