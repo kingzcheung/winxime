@@ -4,24 +4,56 @@ mod pages;
 use gpui::*;
 use gpui_platform::application;
 use pages::SettingsApp;
+use rust_embed::RustEmbed;
+use std::borrow::Cow;
+
+#[derive(RustEmbed)]
+#[folder = "$CARGO_MANIFEST_DIR/assets"]
+#[include = "image/*.png"]
+struct Assets;
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        if path.is_empty() {
+            return Ok(None);
+        }
+        Assets::get(path)
+            .map(|x| Some(x.data))
+            .ok_or_else(|| anyhow::anyhow!("Asset not found"))
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        Ok(Assets::iter()
+            .filter_map(|p| {
+                if p.starts_with(path) {
+                    Some(p.into())
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+}
 
 fn main() {
-    application().run(|cx: &mut App| {
-        let _ = cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::centered(
-                    Size { width: px(800.0), height: px(640.0) },
-                    cx,
-                )),
-                titlebar: Some(TitlebarOptions {
-                    title: Some("Xime 设置".into()),
-                    appears_transparent: true,
-                    traffic_light_position: None,
-                }),
-                is_resizable: false,
-                ..Default::default()
-            },
-            |_window: &mut Window, cx: &mut App| cx.new(|_| SettingsApp::new()),
-        );
-    });
+    application()
+        .with_assets(Assets)
+        .run(|cx: &mut App| {
+            let _ = cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::centered(
+                        Size { width: px(800.0), height: px(640.0) },
+                        cx,
+                    )),
+                    titlebar: Some(TitlebarOptions {
+                        title: Some("Xime 设置".into()),
+                        appears_transparent: true,
+                        traffic_light_position: None,
+                    }),
+                    is_resizable: false,
+                    ..Default::default()
+                },
+                |_window: &mut Window, cx: &mut App| cx.new(|_| SettingsApp::new()),
+            );
+        });
 }

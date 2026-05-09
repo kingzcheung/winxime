@@ -14,7 +14,7 @@ impl IntoElement for Button {
     type Element = Stateful<Div>;
 
     fn into_element(self) -> Self::Element {
-        let primary = hsla(0.63, 0.65, 0.67, 1.0);
+        let primary = rgb(0x8F73E2);
         
         div()
             .id(self.label.clone())
@@ -25,7 +25,7 @@ impl IntoElement for Button {
             .text_color(white())
             .text_size(px(14.0))
             .cursor_pointer()
-            .hover(|style| style.bg(hsla(0.63, 0.65, 0.55, 1.0)))
+            .hover(|style| style.bg(rgb(0x7A5FD0)))
             .child(self.label)
     }
 }

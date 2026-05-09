@@ -14,7 +14,7 @@ impl IntoElement for NumberInput {
     type Element = Div;
 
     fn into_element(self) -> Self::Element {
-        let primary = hsla(0.63, 0.65, 0.67, 1.0);
+        let primary = rgb(0x8F73E2);
         
         div()
             .flex()
@@ -23,7 +23,7 @@ impl IntoElement for NumberInput {
             .w(px(140.0))
             .h(px(36.0))
             .rounded(px(12.0))
-            .bg(hsla(0.0, 0.0, 0.15, 0.8))
+            .bg(rgb(0x262626))
             .border_1()
             .border_color(rgb(0x404040))
             .child(
@@ -35,7 +35,7 @@ impl IntoElement for NumberInput {
                     .justify_center()
                     .rounded(px(10.0))
                     .cursor_pointer()
-                    .hover(|style| style.bg(hsla(0.0, 0.0, 0.25, 0.6)))
+                    .hover(|style| style.bg(rgb(0x404040)))
                     .text_size(px(16.0))
                     .text_color(rgb(0x808080))
                     .child("-")
@@ -61,7 +61,7 @@ impl IntoElement for NumberInput {
                     .justify_center()
                     .rounded(px(10.0))
                     .cursor_pointer()
-                    .hover(|style| style.bg(hsla(0.0, 0.0, 0.25, 0.6)))
+                    .hover(|style| style.bg(rgb(0x404040)))
                     .text_size(px(16.0))
                     .text_color(rgb(0x808080))
                     .child("+")

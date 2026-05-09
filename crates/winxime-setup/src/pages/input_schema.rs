@@ -1,10 +1,6 @@
 use gpui::{prelude::FluentBuilder, ParentElement, IntoElement, *};
 use crate::components::{Radio};
 
-fn primary() -> Hsla {
-    hsla(0.63, 0.65, 0.67, 1.0)
-}
-
 pub fn render() -> AnyElement {
     div()
         .flex()
@@ -26,7 +22,7 @@ pub fn render() -> AnyElement {
                 .gap(px(12.0))
                 .p(px(16.0))
                 .rounded(px(12.0))
-                .bg(hsla(0.0, 0.0, 0.1, 0.6))
+                .bg(rgb(0x1a1a1a))
                 .border_1()
                 .border_color(rgb(0x303030))
                 .child(
@@ -46,6 +42,7 @@ pub fn render() -> AnyElement {
 
 fn render_radio_item(label: impl Into<String>, index: usize, checked: bool) -> impl IntoElement {
     let label = label.into();
+    let primary = rgb(0x8F73E2);
     div()
         .id(("schema", index))
         .flex()
@@ -55,17 +52,17 @@ fn render_radio_item(label: impl Into<String>, index: usize, checked: bool) -> i
         .px(px(12.0))
         .rounded(px(8.0))
         .cursor_pointer()
-        .hover(|style: StyleRefinement| style.bg(hsla(0.0, 0.0, 0.15, 0.5)))
+        .hover(|style: StyleRefinement| style.bg(rgb(0x262626)))
         .when(checked, |this: Stateful<Div>| {
             this.border_1()
-                .border_color(primary())
-                .bg(hsla(0.63, 0.4, 0.4, 0.1))
+                .border_color(primary)
+                .bg(rgb(0x3d2d5d))
         })
         .child(Radio::new(checked))
         .child(
             div()
                 .text_size(px(14.0))
-                .text_color(if checked { primary() } else { hsla(0.0, 0.0, 0.9, 1.0) })
+                .text_color(if checked { primary } else { rgb(0xe6e6e6) })
                 .child(label)
         )
 }

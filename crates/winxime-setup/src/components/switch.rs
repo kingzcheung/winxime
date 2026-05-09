@@ -15,7 +15,7 @@ impl IntoElement for Switch {
 
     fn into_element(self) -> Self::Element {
         let checked = self.checked;
-        let primary = hsla(0.63, 0.65, 0.67, 1.0);
+        let primary = rgb(0x8F73E2);
         let toggle_width = px(44.0);
         let toggle_height = px(24.0);
         let knob_size = px(18.0);
@@ -33,7 +33,7 @@ impl IntoElement for Switch {
                     .pr(padding)
             })
             .when(!checked, |this: Div| {
-                this.bg(hsla(0.0, 0.0, 0.3, 1.0))
+                this.bg(rgb(0x4d4d4d))
                     .justify_start()
                     .pl(padding)
             })
