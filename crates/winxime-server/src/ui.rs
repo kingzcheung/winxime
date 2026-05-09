@@ -43,6 +43,7 @@ const WINDOW_CLASS: &str = "WinximeCandidateWindow";
 const ROW_SPACING: f32 = 4.0;
 const COL_SPACING: f32 = 8.0;
 const MARGIN: f32 = 6.0;
+const MIN_WIDTH: f32 = 120.0;
 
 #[derive(Debug, Clone)]
 struct RenderedMetrics {
@@ -482,7 +483,7 @@ impl RenderedView {
 
             let cand_per_row = model.cand_per_row as usize;
             
-            let mut max_row_width = 0.0f32;
+            let mut max_row_width = MIN_WIDTH;
             for row_start in (0..model.items.len()).step_by(cand_per_row) {
                 let row_end = std::cmp::min(row_start + cand_per_row, model.items.len());
                 let row_width: f32 = item_widths[row_start..row_end].iter().copied().sum::<f32>()
