@@ -1,10 +1,6 @@
 use gpui::{ParentElement, IntoElement, *};
 use crate::components::{Switch, NumberInput};
 
-fn primary() -> Hsla {
-    hsla(0.63, 0.65, 0.67, 1.0)
-}
-
 pub fn render() -> AnyElement {
     div()
         .flex()
@@ -26,7 +22,7 @@ pub fn render() -> AnyElement {
                 .gap(px(12.0))
                 .p(px(20.0))
                 .rounded(px(16.0))
-                .bg(hsla(0.0, 0.0, 0.1, 0.6))
+                .bg(rgb(0x1a1a1a))
                 .border_1()
                 .border_color(rgb(0x303030))
                 .child(render_item("字体大小", "候选栏字体大小", NumberInput::new(18.0)))
@@ -40,7 +36,7 @@ pub fn render() -> AnyElement {
                 .gap(px(12.0))
                 .p(px(20.0))
                 .rounded(px(16.0))
-                .bg(hsla(0.0, 0.0, 0.1, 0.6))
+                .bg(rgb(0x1a1a1a))
                 .border_1()
                 .border_color(rgb(0x303030))
                 .child(render_item("圆角大小", "候选栏窗口圆角", NumberInput::new(8.0)))
