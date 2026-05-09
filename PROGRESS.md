@@ -28,6 +28,11 @@
 - [x] **ITfCompartmentEventSink 实现（监听输入法切换，已打开应用立即生效）**
 
 ### 2026-05-09 新增
+- [x] **修复候选栏背景截断问题**
+  - 问题：候选词少于5个时背景右边被截断
+  - 原因：没有设置最小宽度
+  - 解决：添加 MIN_WIDTH = 120.0 常量
+
 - [x] **ITfThreadMgrEventSink 实现（修复已打开应用切换输入法不生效问题）**
   - 问题：从其他输入法切换到当前输入法时，已打开的应用不触发 StartSession
   - 原因：缺少 `ITfThreadMgrEventSink::OnSetFocus` 接口实现
