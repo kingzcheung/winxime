@@ -44,6 +44,7 @@ const ROW_SPACING: f32 = 4.0;
 const COL_SPACING: f32 = 8.0;
 const MARGIN: f32 = 6.0;
 const MIN_WIDTH: f32 = 120.0;
+const BLUR_RADIUS: f32 = 8.0;
 
 #[derive(Debug, Clone)]
 struct RenderedMetrics {
@@ -471,8 +472,8 @@ impl RenderedView {
                 return Ok(RenderedMetrics {
                     width: 100.0,
                     height: 30.0,
-                    hw_width: 100.0 * scale + 25.0,
-                    hw_height: 30.0 * scale + 25.0,
+                    hw_width: ((100.0 + BLUR_RADIUS * 2.0) * scale).ceil(),
+                    hw_height: ((30.0 + BLUR_RADIUS * 2.0) * scale).ceil(),
                     item_height: 20.0,
                     item_widths: Vec::new(),
                     selkey_widths: Vec::new(),
@@ -495,8 +496,8 @@ impl RenderedView {
             let rows = (items_len / cand_per_row as f32).ceil().max(1.0);
             let height = rows * item_height + (rows - 1.0) * ROW_SPACING + 2.0 * MARGIN;
 
-            let hw_width = (max_row_width * scale + 25.0).ceil();
-            let hw_height = (height * scale + 25.0).ceil();
+            let hw_width = ((max_row_width + BLUR_RADIUS * 2.0) * scale).ceil();
+            let hw_height = ((height + BLUR_RADIUS * 2.0) * scale).ceil();
 
             Ok(RenderedMetrics {
                 width: max_row_width,
@@ -545,7 +546,7 @@ impl RenderedView {
 
             self.d2d_context.BeginDraw();
 
-            let blur_radius = 8.0;
+            let blur_radius = BLUR_RADIUS;
             let corner_radius = 10.0;
 
             let bg_brush = self.d2d_context
@@ -635,10 +636,10 @@ impl RenderedView {
 
             let bg_rounded_rect = D2D1_ROUNDED_RECT {
                 rect: D2D_RECT_F {
-                    left: 0.0,
-                    top: 0.0,
-                    right: metrics.width,
-                    bottom: metrics.height,
+                    left: blur_radius,
+                    top: blur_radius,
+                    right: metrics.width + blur_radius,
+                    bottom: metrics.height + blur_radius,
                 },
                 radiusX: corner_radius,
                 radiusY: corner_radius,
@@ -647,10 +648,10 @@ impl RenderedView {
 
             let border_rounded_rect = D2D1_ROUNDED_RECT {
                 rect: D2D_RECT_F {
-                    left: 0.5,
-                    top: 0.5,
-                    right: metrics.width - 0.5,
-                    bottom: metrics.height - 0.5,
+                    left: blur_radius + 0.5,
+                    top: blur_radius + 0.5,
+                    right: metrics.width + blur_radius - 0.5,
+                    bottom: metrics.height + blur_radius - 0.5,
                 },
                 radiusX: corner_radius,
                 radiusY: corner_radius,
@@ -662,8 +663,8 @@ let comment_brush = self.d2d_context
                 .map_err(|e| format!("CreateSolidColorBrush comment failed: {:?}", e))?;
 
             let mut col = 0usize;
-            let mut x = MARGIN;
-            let mut y = MARGIN;
+            let mut x = MARGIN + blur_radius;
+            let mut y = MARGIN + blur_radius;
             let padding_x = 6.0;
             let padding_y = 4.0;
 
@@ -778,7 +779,7 @@ let comment_brush = self.d2d_context
                 col += 1;
                 if col >= model.cand_per_row as usize {
                     col = 0;
-                    x = MARGIN;
+                    x = MARGIN + blur_radius;
                     y += metrics.item_height + ROW_SPACING;
                 } else {
                     x += item_width + COL_SPACING;
