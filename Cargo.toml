@@ -16,8 +16,8 @@ members = [
 version = "0.1.0"
 edition = "2021"
 authors = ["winxime team"]
-license = "MIT"
-repository = "https://github.com/winxime/winxime"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/ximeiorg/winxime"
 
 [workspace.dependencies]
 librime-sys = { path = "crates/librime-sys" }

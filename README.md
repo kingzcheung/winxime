@@ -81,4 +81,6 @@ target\wix\xime-0.1.0.msi
 
 ## 许可证
 
-MIT
+GPL-3.0-or-later
+
+本项目链接 librime (BSD-3-Clause)、opencc (Apache-2.0)、yaml-cpp (MIT)、leveldb (BSD-3-Clause) 等库。
