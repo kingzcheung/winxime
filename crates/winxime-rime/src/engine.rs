@@ -83,6 +83,17 @@ impl RimeEngine {
                 log_to_file("Warning: deploy function not available");
             }
 
+            // Deploy UI config file (xime.yaml)
+            log_to_file("Deploying xime.yaml...");
+            if let Some(deploy_config) = (*api).deploy_config_file {
+                let config_file = CString::new("xime.yaml").unwrap_or_default();
+                let version_key = CString::new("config_version").unwrap_or_default();
+                let result = deploy_config(config_file.as_ptr(), version_key.as_ptr());
+                log_to_file(&format!("Deploy xime.yaml result: {}", result));
+            } else {
+                log_to_file("Warning: deploy_config_file not available");
+            }
+
             // Set notification handler for deploy/option events
             if let Some(set_handler) = (*api).set_notification_handler {
                 set_handler(Some(rime_notification_callback), std::ptr::null_mut());

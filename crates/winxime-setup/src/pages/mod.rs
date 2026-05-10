@@ -17,9 +17,11 @@ pub struct SettingsApp {
 
 impl SettingsApp {
     pub fn new(cx: &mut Context<Self>) -> Self {
+        let settings = cx.new(|cx| SettingsState::new(cx));
+        
         Self { 
             current_page: 0,
-            settings: cx.new(|cx| SettingsState::new(cx)),
+            settings,
         }
     }
 }
@@ -44,6 +46,7 @@ impl Render for SettingsApp {
         let pages = ["输入方案", "外观", "剪切板", "快捷键", "智能联想", "词库管理", "关于"];
         let current = self.current_page;
         let settings = self.settings.clone();
+        let settings_for_title = settings.clone();
         let colors = cx.read_entity(&settings, |state, _| state.colors());
         
         let sidebar = div()
@@ -112,7 +115,7 @@ impl Render for SettingsApp {
             .flex()
             .flex_col()
             .size_full()
-            .child(TitleBar::render(window, &colors))
+            .child(TitleBar::render(settings_for_title, &colors, cx))
             .child(
                 div()
                     .id("content-area")

@@ -149,13 +149,19 @@ impl SettingsItem {
 
 pub struct SettingsGroup {
     title: String,
+    description: Option<String>,
     items: Vec<SettingsItem>,
     colors: ThemeColors,
 }
 
 impl SettingsGroup {
     pub fn new(title: impl Into<String>, colors: ThemeColors) -> Self {
-        Self { title: title.into(), items: vec![], colors }
+        Self { title: title.into(), description: None, items: vec![], colors }
+    }
+
+    pub fn description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
     }
 
     pub fn items(mut self, items: Vec<SettingsItem>) -> Self {
@@ -180,11 +186,24 @@ impl IntoElement for SettingsGroup {
             .border_color(self.colors.border)
             .child(
                 div()
-                    .text_size(px(16.0))
-                    .font_weight(FontWeight::BOLD)
-                    .text_color(self.colors.foreground)
-                    .pb(px(8.0))
-                    .child(self.title)
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.0))
+                    .child(
+                        div()
+                            .text_size(px(16.0))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(self.colors.foreground)
+                            .child(self.title)
+                    )
+                    .when_some(self.description, |this, desc| {
+                        this.child(
+                            div()
+                                .text_size(px(12.0))
+                                .text_color(self.colors.foreground_muted)
+                                .child(desc)
+                        )
+                    })
             )
             .children(self.items.iter().map(|item| item.render(&self.colors)))
     }

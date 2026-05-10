@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod config;
 mod ipc_server;
 mod log;
 mod tray;
@@ -58,6 +59,7 @@ fn main() {
     log::log("Shared data dir exists");
 
     let _ = std::fs::create_dir_all(&user_data_dir);
+    ensure_user_config_files(&user_data_dir);
 
     log::log("Initializing Rime engine...");
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
@@ -81,17 +83,81 @@ fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
         let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
         (
-            workspace_dir.join("librime").join("data"),
-            workspace_dir.join("rime-data"),
+            workspace_dir.join("config"),
+            workspace_dir.join("target").join("debug").join("user-data"),
         )
     }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\winxime\\winxime-server.exe"));
+        let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\winxime"));
+        
+        let user_data_dir = std::env::var("APPDATA")
+            .ok()
+            .map(|p| std::path::PathBuf::from(p).join("Rime"))
+            .unwrap_or_else(|| exe_dir.join("user-data"));
+        
+        (
+            exe_dir.join("config"),
+            user_data_dir,
+        )
+    }
+}
+
+fn get_config_source_dir() -> std::path::PathBuf {
+    get_data_dirs().0
+}
+
+fn ensure_user_config_files(user_data_dir: &std::path::Path) {
+    if !user_data_dir.exists() {
+        std::fs::create_dir_all(user_data_dir).ok();
+    }
+    
+    let config_source_dir = get_config_source_dir();
+    
+    let xime_yaml = user_data_dir.join("xime.yaml");
+    if !xime_yaml.exists() {
+        let source = config_source_dir.join("xime.yaml");
+        if source.exists() {
+            std::fs::copy(&source, &xime_yaml).ok();
+        }
+    }
+    
+    let default_custom = user_data_dir.join("default.custom.yaml");
+    if !default_custom.exists() {
+        std::fs::write(&default_custom, 
+r#"customization:
+  distribution_code_name: Xime
+  distribution_version: 1.0
+  generator: "Rime::SwitcherSettings"
+  rime_version: 1.16.1
+
+patch:
+  schema_list:
+    - schema: wubi86_jidian
+"#).ok();
+    }
+    
+    let xime_custom = user_data_dir.join("xime.custom.yaml");
+    if !xime_custom.exists() {
+        std::fs::write(&xime_custom, 
+r#"customization:
+  distribution_code_name: Xime
+  distribution_version: 1.0
+  generator: "Xime::ConfigManager"
+  rime_version: 1.16.1
+
+patch: {}
+"#).ok();
+    }
+}
 
     #[cfg(not(debug_assertions))]
     {
         let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\winxime-server\\winxime-server.exe"));
         let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\winxime-server"));
         
-        // User data in AppData\Rime (same as Weasel/小狼毫)
         let user_data_dir = std::env::var("APPDATA")
             .ok()
             .map(|p| std::path::PathBuf::from(p).join("Rime"))
@@ -101,6 +167,22 @@ fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
             exe_dir.join("data"),
             user_data_dir,
         )
+    }
+}
+
+fn ensure_user_config_files(user_data_dir: &std::path::Path) {
+    if !user_data_dir.exists() {
+        std::fs::create_dir_all(user_data_dir).ok();
+    }
+    
+    let default_custom = user_data_dir.join("default.custom.yaml");
+    if !default_custom.exists() {
+        std::fs::write(&default_custom, "# default.custom.yaml\npatch:\n  schema_list:\n    - schema: wubi86_jidian\n").ok();
+    }
+    
+    let xime_custom = user_data_dir.join("xime.custom.yaml");
+    if !xime_custom.exists() {
+        std::fs::write(&xime_custom, "customization:\n  distribution_code_name: Xime\n  distribution_version: 1.0.0\n  generator: \"Xime::ConfigManager\"\npatch:\n  style:\n    color_scheme: lavender_purple\n").ok();
     }
 }
 

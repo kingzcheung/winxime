@@ -130,4 +130,20 @@ impl IpcClient {
             false
         }
     }
+
+    pub fn reload_config() -> bool {
+        if let Ok(mut client) = Self::connect() {
+            let request = crate::IpcRequest {
+                command: crate::IpcCommand::ReloadConfig,
+                session_id: 0,
+                data: crate::IpcRequestData::None,
+            };
+            match client.send_request(&request) {
+                Ok(response) => response.success,
+                Err(_) => false,
+            }
+        } else {
+            false
+        }
+    }
 }

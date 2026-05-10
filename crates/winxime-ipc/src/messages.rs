@@ -96,6 +96,7 @@ pub enum IpcCommand {
     ToggleAsciiMode,
     ShowTrayIcon,
     HideTrayIcon,
+    ReloadConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -147,15 +147,32 @@ msiexec /i target\wix\winxime-server-0.1.0-x86_64.msi
 - UI 设计要符合 fluent design
 
 ## 下一步
-- [ ] winxime-setup UI 完善进度
+- [x] winxime-setup UI 完善进度
   - [x] 状态管理模块
   - [x] 基础组件回调
   - [x] 关于页面
   - [x] 菜单图标
-  - [ ] 实现配置持久化 (保存到 xime.custom.yaml)
-  - [ ] 配置项分组细化
-- [ ] 实现 xime.custom.yaml 配置读写
-- [ ] Server 配置加载与重载机制
+  - [x] 实现配置持久化 (保存到 xime.custom.yaml)
+  - [x] 配置项分组细化
+  - [x] 标题栏全局部署按钮
+- [x] 实现 xime.custom.yaml 配置读写
+  - [x] librime-sys levers API 绑定
+  - [x] RimeConfigManager (UI 配置管理)
+  - [x] SchemaManager (输入方案管理)
+  - [x] deploy_all() (重新部署功能)
+  - [x] 自动创建用户配置文件 (%APPDATA%\Rime)
+- [x] Server 配置加载
+  - [x] winxime-server/config.rs 模块
+  - [x] config_open("xime") 读取 build/xime.yaml
+  - [x] 应用到 CandidateModel (字体、颜色)
+- [x] 部署功能优化
+   - [x] 标题栏全局部署按钮
+   - [x] 部署结果反馈（标题栏显示消息）
+- [x] Server 配置重载机制
+   - [x] IPC ReloadConfig 命令 (winxime-ipc)
+   - [x] ipc_server.rs 处理 ReloadConfig → eng.deploy()
+   - [x] winxime-setup 部署后调用 IpcClient::reload_config()
+- [ ] 词库管理功能 (导入/导出/同步)
 - [ ] 测试任务栏中/英切换功能
 - [ ] SignPath 组织注册和项目配置
 - [ ] 测试 MSI 安装流程

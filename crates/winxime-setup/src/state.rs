@@ -1,5 +1,7 @@
 use gpui::*;
 use crate::theme::{SystemTheme, ThemeColors};
+use crate::rime_config::{RimeConfigManager, SchemaManager, deploy_all};
+use winxime_ipc::IpcClient;
 
 pub struct SettingsState {
     pub appearance: AppearanceState,
@@ -7,6 +9,8 @@ pub struct SettingsState {
     pub clipboard: ClipboardState,
     pub smart_suggestion: SmartSuggestionState,
     pub system_theme: SystemTheme,
+    pub deploy_message: Option<String>,
+    pub schemas_loaded: bool,
 }
 
 impl SettingsState {
@@ -17,11 +21,130 @@ impl SettingsState {
             clipboard: ClipboardState::default(),
             smart_suggestion: SmartSuggestionState::default(),
             system_theme: SystemTheme::detect(),
+            deploy_message: None,
+            schemas_loaded: false,
+        }
+    }
+
+    pub fn load_schemas(&mut self, cx: &mut Context<Self>) {
+        if self.schemas_loaded {
+            return;
+        }
+        if let Ok(manager) = SchemaManager::new() {
+            let schemas = manager.get_schema_list();
+            self.input_schema.available_schemas = schemas;
+            self.schemas_loaded = true;
+            cx.notify();
+        }
+    }
+
+    fn load_appearance_config_safe() -> AppearanceState {
+        AppearanceState::default()
+    }
+
+    fn load_schema_config_safe() -> InputSchemaState {
+        InputSchemaState::default()
+    }
+
+    fn load_appearance_config() -> AppearanceState {
+        if let Ok(manager) = RimeConfigManager::new() {
+            AppearanceState {
+                font_size: manager.get_double("style/font_size").unwrap_or(14.0),
+                candidate_count: manager.get_int("style/candidate_count").unwrap_or(5),
+                show_code_hint: manager.get_bool("style/show_code_hint").unwrap_or(false),
+                corner_radius: manager.get_double("style/corner_radius").unwrap_or(8.0),
+            }
+        } else {
+            AppearanceState::default()
+        }
+    }
+
+    fn load_schema_config() -> InputSchemaState {
+        if let Ok(manager) = SchemaManager::new() {
+            let schemas = manager.get_schema_list();
+            InputSchemaState {
+                selected_schema: 0,
+                available_schemas: schemas,
+            }
+        } else {
+            InputSchemaState::default()
         }
     }
 
     pub fn colors(&self) -> ThemeColors {
         ThemeColors::from_theme(&self.system_theme)
+    }
+
+    pub fn save_appearance(&self) -> Result<(), String> {
+        let manager = RimeConfigManager::new()?;
+        
+        manager.set_double("style/font_size", self.appearance.font_size)?;
+        manager.set_int("style/candidate_count", self.appearance.candidate_count)?;
+        manager.set_bool("style/show_code_hint", self.appearance.show_code_hint)?;
+        manager.set_double("style/corner_radius", self.appearance.corner_radius)?;
+        
+        manager.save()?;
+        
+        Ok(())
+    }
+
+    pub fn save_schema(&self) -> Result<(), String> {
+        if self.input_schema.selected_schema < self.input_schema.available_schemas.len() {
+            let selected_id = &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
+            
+            let manager = RimeConfigManager::new()?;
+            manager.set_string("default_schema", selected_id)?;
+            manager.save()?;
+            
+            let schema_manager = SchemaManager::new()?;
+            schema_manager.set_schema_list(&[selected_id])?;
+            schema_manager.save()?;
+        }
+        Ok(())
+    }
+
+    pub fn save_clipboard(&self) -> Result<(), String> {
+        let manager = RimeConfigManager::new()?;
+        
+        manager.set_bool("clipboard/enabled", self.clipboard.enabled)?;
+        manager.set_int("clipboard/history_count", self.clipboard.history_count)?;
+        manager.set_int("clipboard/retention_days", self.clipboard.retention_days)?;
+        
+        manager.save()?;
+        
+        Ok(())
+    }
+
+    pub fn save_smart_suggestion(&self) -> Result<(), String> {
+        let manager = RimeConfigManager::new()?;
+        
+        manager.set_bool("smart_suggestion/enabled", self.smart_suggestion.enabled)?;
+        manager.set_int("smart_suggestion/suggestion_count", self.smart_suggestion.suggestion_count)?;
+        manager.set_bool("smart_suggestion/prefer_common_words", self.smart_suggestion.prefer_common_words)?;
+        manager.set_bool("smart_suggestion/record_user_frequency", self.smart_suggestion.record_user_frequency)?;
+        manager.set_bool("smart_suggestion/auto_adjust_frequency", self.smart_suggestion.auto_adjust_frequency)?;
+        manager.set_int("smart_suggestion/learning_threshold", self.smart_suggestion.learning_threshold)?;
+        
+        manager.save()?;
+        
+        Ok(())
+    }
+
+    pub fn deploy(&mut self) -> Result<(), String> {
+        let result = deploy_all();
+        match &result {
+            Ok(_) => {
+                if IpcClient::reload_config() {
+                    self.deploy_message = Some("部署成功！配置已重载。".to_string());
+                } else {
+                    self.deploy_message = Some("部署成功！(服务器未运行，配置将在下次启动时生效)".to_string());
+                }
+            }
+            Err(e) => {
+                self.deploy_message = Some(format!("部署失败: {}", e));
+            }
+        }
+        result
     }
 }
 
@@ -36,6 +159,7 @@ pub struct AppearanceState {
 #[derive(Clone, Default)]
 pub struct InputSchemaState {
     pub selected_schema: usize,
+    pub available_schemas: Vec<crate::rime_config::SchemaInfo>,
 }
 
 #[derive(Clone, Default)]

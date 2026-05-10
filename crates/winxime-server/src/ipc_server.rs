@@ -272,6 +272,18 @@ fn process_request(
             }
         }
 
+        IpcCommand::ReloadConfig => {
+            println!("ReloadConfig requested");
+            let deploy_result = eng.deploy();
+            println!("  deploy result: {}", deploy_result);
+            IpcResponse {
+                success: deploy_result,
+                session_id: request.session_id,
+                context: None,
+                status: Some(get_ipc_status(&eng)),
+            }
+        }
+
         _ => IpcResponse {
             success: false,
             session_id: request.session_id,

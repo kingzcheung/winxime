@@ -4,20 +4,33 @@ use crate::state::SettingsState;
 use crate::pages::SettingsApp;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
-    let (selected, colors, is_dark) = cx.read_entity(&settings, |state, _| {
-        (state.input_schema.selected_schema, state.colors(), state.system_theme.is_dark())
+    let schemas_loaded = cx.read_entity(&settings, |state, _| state.schemas_loaded);
+    
+    if !schemas_loaded {
+        cx.update_entity(&settings, |state: &mut SettingsState, cx| {
+            if let Ok(manager) = crate::rime_config::SchemaManager::new() {
+                state.input_schema.available_schemas = manager.get_schema_list();
+                state.schemas_loaded = true;
+                cx.notify();
+            }
+        });
+    }
+    
+    let (selected, schemas, colors) = cx.read_entity(&settings, |state, _| {
+        (state.input_schema.selected_schema, state.input_schema.available_schemas.clone(), state.colors())
     });
     
-    let schemas = ["五笔86极点", "五笔86", "五笔98"];
+    let settings_clone = settings.clone();
     
-    let items: Vec<AnyElement> = schemas
+    let schema_items: Vec<AnyElement> = schemas
         .iter()
         .enumerate()
-        .map(|(i, name)| {
+        .map(|(i, schema)| {
             let is_selected = i == selected;
-            let settings_clone = settings.clone();
+            let settings_item = settings_clone.clone();
             let primary = colors.primary.clone();
-            let is_dark_clone = is_dark;
+            let surface_variant = colors.surface_variant.clone();
+            let radio_colors = colors.clone();
             
             div()
                 .id(("schema", i))
@@ -28,30 +41,27 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 .px(px(12.0))
                 .rounded(px(8.0))
                 .cursor_pointer()
-                .hover(|style: StyleRefinement| {
-                    if is_dark_clone {
-                        style.bg(rgb(0x262626))
-                    } else {
-                        style.bg(rgb(0xf5f5f5))
-                    }
-                })
-                .when(is_selected, |this: Stateful<Div>| {
+                .hover(|style| style.bg(surface_variant))
+                .when(is_selected, |this| {
                     this.border_1()
                         .border_color(primary.clone())
-                        .bg(if is_dark_clone { rgb(0x3d2d5d) } else { rgb(0xe8e0f8) })
+                        .bg(colors.selection)
                 })
                 .on_click(move |_event, _window, cx| {
-                    settings_clone.update(cx, |s: &mut SettingsState, cx| {
+                    settings_item.update(cx, |s: &mut SettingsState, cx| {
                         s.input_schema.selected_schema = i;
+                        if let Err(e) = s.save_schema() {
+                            eprintln!("Auto-save schema failed: {}", e);
+                        }
                         cx.notify();
                     });
                 })
-                .child(Radio::new(is_selected))
+                .child(Radio::new(is_selected).theme(radio_colors))
                 .child(
                     div()
                         .text_size(px(14.0))
                         .text_color(if is_selected { primary } else { colors.foreground })
-                        .child(name.to_string())
+                        .child(schema.name.clone())
                 )
                 .into_any_element()
         })
@@ -84,9 +94,17 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                     div()
                         .text_size(px(14.0))
                         .text_color(colors.foreground_muted)
-                        .child("选择输入方案")
+                        .child("选择默认输入方案")
                 )
-                .children(items)
+                .when(schemas.is_empty(), |this| {
+                    this.child(
+                        div()
+                            .text_size(px(14.0))
+                            .text_color(colors.foreground_muted)
+                            .child("未找到输入方案，请先部署")
+                    )
+                })
+                .when(!schemas.is_empty(), |this| this.children(schema_items))
         )
         .into_any_element()
 }

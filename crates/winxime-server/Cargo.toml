@@ -14,6 +14,7 @@ winxime-ipc = { path = "../winxime-ipc" }
 winxime-rime = { path = "../winxime-rime" }
 winxime-core = { path = "../winxime-core" }
 winxime-config = { path = "../winxime-config" }
+librime-sys = { path = "../librime-sys" }
 serde_json.workspace = true
 log = "0.4"
 time = "0.3"

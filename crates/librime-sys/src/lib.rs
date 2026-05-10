@@ -537,6 +537,24 @@ pub fn rime_get_api() -> Option<*const RimeApi> {
     None
 }
 
+pub fn rime_get_levers_api() -> Option<*const RimeLeversApi> {
+    let api = rime_get_api()?;
+    unsafe {
+        let find_module = (*api).find_module?;
+        let module_name_c = std::ffi::CString::new("levers").ok()?;
+        let levers_module = find_module(module_name_c.as_ptr());
+        if levers_module.is_null() {
+            return None;
+        }
+        let get_api = (*levers_module).get_api?;
+        let levers_api_ptr = get_api();
+        if levers_api_ptr.is_null() {
+            return None;
+        }
+        Some(levers_api_ptr as *const RimeLeversApi)
+    }
+}
+
 pub const RIME_MODIFIER_SHIFT: c_int = 1 << 0;
 pub const RIME_MODIFIER_LOCK: c_int = 1 << 1;
 pub const RIME_MODIFIER_CTRL: c_int = 1 << 2;
@@ -695,4 +713,92 @@ pub fn get_key_modifiers() -> c_int {
 
 extern "system" {
     fn GetAsyncKeyState(vKey: c_int) -> i16;
+}
+
+#[repr(C)]
+pub struct RimeCustomSettings {
+    pub placeholder: c_char,
+}
+
+#[repr(C)]
+pub struct RimeSwitcherSettings {
+    pub placeholder: c_char,
+}
+
+#[repr(C)]
+pub struct RimeSchemaInfo {
+    pub placeholder: c_char,
+}
+
+#[repr(C)]
+pub struct RimeUserDictIterator {
+    pub ptr: *mut c_void,
+    pub i: usize,
+}
+
+#[repr(C)]
+pub struct RimeLeversApi {
+    pub data_size: c_int,
+
+    pub custom_settings_init: Option<
+        unsafe extern "C" fn(config_id: *const c_char, generator_id: *const c_char) -> *mut RimeCustomSettings,
+    >,
+    pub custom_settings_destroy: Option<unsafe extern "C" fn(settings: *mut RimeCustomSettings)>,
+    pub load_settings: Option<unsafe extern "C" fn(settings: *mut RimeCustomSettings) -> Bool>,
+    pub save_settings: Option<unsafe extern "C" fn(settings: *mut RimeCustomSettings) -> Bool>,
+    pub customize_bool: Option<
+        unsafe extern "C" fn(settings: *mut RimeCustomSettings, key: *const c_char, value: Bool) -> Bool,
+    >,
+    pub customize_int: Option<
+        unsafe extern "C" fn(settings: *mut RimeCustomSettings, key: *const c_char, value: c_int) -> Bool,
+    >,
+    pub customize_double: Option<
+        unsafe extern "C" fn(settings: *mut RimeCustomSettings, key: *const c_char, value: f64) -> Bool,
+    >,
+    pub customize_string: Option<
+        unsafe extern "C" fn(settings: *mut RimeCustomSettings, key: *const c_char, value: *const c_char) -> Bool,
+    >,
+    pub is_first_run: Option<unsafe extern "C" fn(settings: *mut RimeCustomSettings) -> Bool>,
+    pub settings_is_modified: Option<unsafe extern "C" fn(settings: *mut RimeCustomSettings) -> Bool>,
+    pub settings_get_config: Option<
+        unsafe extern "C" fn(settings: *mut RimeCustomSettings, config: *mut RimeConfig) -> Bool,
+    >,
+
+    pub switcher_settings_init: Option<unsafe extern "C" fn() -> *mut RimeSwitcherSettings>,
+    pub get_available_schema_list: Option<
+        unsafe extern "C" fn(settings: *mut RimeSwitcherSettings, list: *mut RimeSchemaList) -> Bool,
+    >,
+    pub get_selected_schema_list: Option<
+        unsafe extern "C" fn(settings: *mut RimeSwitcherSettings, list: *mut RimeSchemaList) -> Bool,
+    >,
+    pub schema_list_destroy: Option<unsafe extern "C" fn(list: *mut RimeSchemaList)>,
+    pub get_schema_id: Option<unsafe extern "C" fn(info: *mut RimeSchemaInfo) -> *const c_char>,
+    pub get_schema_name: Option<unsafe extern "C" fn(info: *mut RimeSchemaInfo) -> *const c_char>,
+    pub get_schema_version: Option<unsafe extern "C" fn(info: *mut RimeSchemaInfo) -> *const c_char>,
+    pub get_schema_author: Option<unsafe extern "C" fn(info: *mut RimeSchemaInfo) -> *const c_char>,
+    pub get_schema_description: Option<unsafe extern "C" fn(info: *mut RimeSchemaInfo) -> *const c_char>,
+    pub get_schema_file_path: Option<unsafe extern "C" fn(info: *mut RimeSchemaInfo) -> *const c_char>,
+    pub select_schemas: Option<
+        unsafe extern "C" fn(settings: *mut RimeSwitcherSettings, schema_id_list: *const *const c_char, count: c_int) -> Bool,
+    >,
+    pub get_hotkeys: Option<unsafe extern "C" fn(settings: *mut RimeSwitcherSettings) -> *const c_char>,
+    pub set_hotkeys: Option<
+        unsafe extern "C" fn(settings: *mut RimeSwitcherSettings, hotkeys: *const c_char) -> Bool,
+    >,
+
+    pub user_dict_iterator_init: Option<unsafe extern "C" fn(iter: *mut RimeUserDictIterator) -> Bool>,
+    pub user_dict_iterator_destroy: Option<unsafe extern "C" fn(iter: *mut RimeUserDictIterator)>,
+    pub next_user_dict: Option<unsafe extern "C" fn(iter: *mut RimeUserDictIterator) -> *const c_char>,
+    pub backup_user_dict: Option<unsafe extern "C" fn(dict_name: *const c_char) -> Bool>,
+    pub restore_user_dict: Option<unsafe extern "C" fn(snapshot_file: *const c_char) -> Bool>,
+    pub export_user_dict: Option<
+        unsafe extern "C" fn(dict_name: *const c_char, text_file: *const c_char) -> c_int,
+    >,
+    pub import_user_dict: Option<
+        unsafe extern "C" fn(dict_name: *const c_char, text_file: *const c_char) -> c_int,
+    >,
+
+    pub customize_item: Option<
+        unsafe extern "C" fn(settings: *mut RimeCustomSettings, key: *const c_char, value: *mut RimeConfig) -> Bool,
+    >,
 }

@@ -21,6 +21,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 settings_clone.update(cx, |s: &mut SettingsState, cx| {
                                     s.clipboard.enabled = val;
+                                    if let Err(e) = s.save_clipboard() {
+                                        eprintln!("Auto-save clipboard failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }
@@ -31,6 +34,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 settings_clone2.update(cx, |s: &mut SettingsState, cx| {
                                     s.clipboard.history_count = val as i32;
+                                    if let Err(e) = s.save_clipboard() {
+                                        eprintln!("Auto-save clipboard failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }
@@ -41,6 +47,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 settings_clone3.update(cx, |s: &mut SettingsState, cx| {
                                     s.clipboard.retention_days = val as i32;
+                                    if let Err(e) = s.save_clipboard() {
+                                        eprintln!("Auto-save clipboard failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }

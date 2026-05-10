@@ -33,6 +33,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 s1.update(cx, |s: &mut SettingsState, cx| {
                                     s.smart_suggestion.enabled = val;
+                                    if let Err(e) = s.save_smart_suggestion() {
+                                        eprintln!("Auto-save smart_suggestion failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }
@@ -43,6 +46,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 s2.update(cx, |s: &mut SettingsState, cx| {
                                     s.smart_suggestion.suggestion_count = val as i32;
+                                    if let Err(e) = s.save_smart_suggestion() {
+                                        eprintln!("Auto-save smart_suggestion failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }
@@ -53,6 +59,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 s3.update(cx, |s: &mut SettingsState, cx| {
                                     s.smart_suggestion.prefer_common_words = val;
+                                    if let Err(e) = s.save_smart_suggestion() {
+                                        eprintln!("Auto-save smart_suggestion failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }
@@ -68,6 +77,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 s4.update(cx, |s: &mut SettingsState, cx| {
                                     s.smart_suggestion.record_user_frequency = val;
+                                    if let Err(e) = s.save_smart_suggestion() {
+                                        eprintln!("Auto-save smart_suggestion failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }
@@ -78,6 +90,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 s5.update(cx, |s: &mut SettingsState, cx| {
                                     s.smart_suggestion.auto_adjust_frequency = val;
+                                    if let Err(e) = s.save_smart_suggestion() {
+                                        eprintln!("Auto-save smart_suggestion failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }
@@ -88,6 +103,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             move |val, _window, cx| {
                                 s6.update(cx, |s: &mut SettingsState, cx| {
                                     s.smart_suggestion.learning_threshold = val as i32;
+                                    if let Err(e) = s.save_smart_suggestion() {
+                                        eprintln!("Auto-save smart_suggestion failed: {}", e);
+                                    }
                                     cx.notify();
                                 });
                             }

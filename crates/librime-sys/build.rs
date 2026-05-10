@@ -27,6 +27,17 @@ fn main() {
     if rime_dll.exists() {
         println!("cargo:rustc-link-search=native={}", dist_lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=rime");
+        
+        // Copy rime.dll to target directories for both debug and release
+        let profiles = ["debug", "release"];
+        for profile in &profiles {
+            let target_dir = workspace_dir.join("target").join(profile);
+            let target_rime_dll = target_dir.join("rime.dll");
+            if target_dir.exists() {
+                std::fs::copy(&rime_dll, &target_rime_dll).ok();
+                println!("cargo:warning=Copied rime.dll to target/{}", profile);
+            }
+        }
     } else {
         panic!(
             "librime build failed: rime.dll not found at {}",
@@ -39,45 +50,8 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 }
 
-fn copy_rime_data(workspace_dir: &Path, librime_dir: &Path) {
-    let minimal_dir = librime_dir.join("data").join("minimal");
-    let target_data_dir = workspace_dir.join("target").join("debug").join("data");
-
-    if !minimal_dir.exists() {
-        println!("cargo:warning=minimal data directory not found, skipping copy");
-        return;
-    }
-
-    println!("cargo:warning=Copying minimal rime data to target...");
-    std::fs::create_dir_all(&target_data_dir).ok();
-
-    let essential_files = ["default.yaml", "essay.txt", "symbols.yaml"];
-    for file in &essential_files {
-        let src = minimal_dir.join(file);
-        let dst = target_data_dir.join(file);
-        if src.exists() {
-            std::fs::copy(&src, &dst).ok();
-            println!("cargo:warning=Copied: {}", file);
-        }
-    }
-
-    let opencc_src = librime_dir.join("share").join("opencc");
-    let opencc_dst = target_data_dir.join("opencc");
-
-    if opencc_src.exists() {
-        std::fs::create_dir_all(&opencc_dst).ok();
-        for entry in
-            std::fs::read_dir(&opencc_src).unwrap_or_else(|_| panic!("Failed to read opencc dir"))
-        {
-            let entry = entry.unwrap();
-            let src_path = entry.path();
-            if src_path.is_file() {
-                let dst_path = opencc_dst.join(entry.file_name());
-                std::fs::copy(&src_path, &dst_path).ok();
-            }
-        }
-        println!("cargo:warning=Copied opencc configuration files");
-    }
+fn copy_rime_data(_workspace_dir: &Path, _librime_dir: &Path) {
+    // opencc is not needed - rime works without it
 }
 
 fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {

@@ -7070,6 +7070,7 @@ name = "winxime-server"
 version = "0.1.0"
 dependencies = [
  "interprocess",
+ "librime-sys",
  "log",
  "serde_json",
  "time",
@@ -7090,11 +7091,13 @@ dependencies = [
  "anyhow",
  "gpui-platform-gpui-unofficial",
  "gpui-unofficial",
+ "librime-sys",
  "raw-window-handle",
  "rust-embed",
  "windows 0.61.3",
  "winres",
  "winxime-config",
+ "winxime-ipc",
 ]
 
 [[package]]

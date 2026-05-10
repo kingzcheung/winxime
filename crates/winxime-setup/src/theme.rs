@@ -66,6 +66,7 @@ pub struct ThemeColors {
     pub disabled: Hsla,
     pub error: Hsla,
     pub on_error: Hsla,
+    pub selection: Hsla,
 }
 
 impl ThemeColors {
@@ -85,6 +86,7 @@ impl ThemeColors {
                 disabled: rgb(0x4d4d4d).into(),
                 error: rgb(0xc42b1c).into(),
                 on_error: rgb(0xffffff).into(),
+                selection: rgb(0x3a2a5a).into(),
             }
         } else {
             Self {
@@ -101,6 +103,7 @@ impl ThemeColors {
                 disabled: rgb(0xaaaaaa).into(),
                 error: rgb(0xc42b1c).into(),
                 on_error: rgb(0xffffff).into(),
+                selection: rgb(0xe8e0f8).into(),
             }
         }
     }

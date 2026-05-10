@@ -33,6 +33,7 @@ use windows_core::{w, HSTRING, Interface, PCWSTR};
 use windows_numerics::Vector2;
 
 use winxime_ipc::Context;
+use crate::config::UiConfig;
 
 pub const WM_SHOW_CANDIDATE: u32 = WM_USER + 1;
 pub const WM_HIDE_CANDIDATE: u32 = WM_USER + 2;
@@ -82,6 +83,9 @@ pub struct CandidateModel {
 
 impl From<&Context> for CandidateModel {
     fn from(ctx: &Context) -> Self {
+        let config = UiConfig::load();
+        let (bg_color, border_color, fg_color, selkey_color, comment_color, highlight_bg_color, highlight_fg_color) = config.get_colors();
+        
         Self {
             items: ctx.candidates.candies.iter().map(|c| c.str.clone()).collect(),
             comments: ctx.candidates.comments.iter().map(|c| c.str.clone()).collect(),
@@ -89,17 +93,17 @@ impl From<&Context> for CandidateModel {
             total_pages: ctx.candidates.total_pages,
             current_page: ctx.candidates.current_page + 1,
             current_sel: ctx.candidates.highlighted as usize,
-            font_family: HSTRING::from("Microsoft YaHei UI"),
-            font_size: 14.0,
-            cand_per_row: 5,
+            font_family: config.font_family,
+            font_size: config.font_size,
+            cand_per_row: config.candidate_count,
             use_cursor: true,
-            selkey_color: D2D1_COLOR_F { r: 0.4, g: 0.4, b: 0.4, a: 1.0 },
-            fg_color: D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 },
-            comment_color: D2D1_COLOR_F { r: 0.5, g: 0.5, b: 0.5, a: 0.7 },
-            bg_color: D2D1_COLOR_F { r: 0.95, g: 0.95, b: 0.95, a: 0.85 },
-            highlight_fg_color: D2D1_COLOR_F { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
-            highlight_bg_color: D2D1_COLOR_F { r: 0.56, g: 0.45, b: 0.89, a: 0.9 },
-            border_color: D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.05 },
+            selkey_color,
+            fg_color,
+            comment_color,
+            bg_color,
+            highlight_fg_color,
+            highlight_bg_color,
+            border_color,
         }
     }
 }
