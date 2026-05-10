@@ -2,6 +2,7 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct Button {
     label: String,
     on_click: Option<Arc<dyn Fn(&mut Window, &mut App) + 'static>>,

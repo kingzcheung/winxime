@@ -1,5 +1,6 @@
 use gpui::*;
 
+#[derive(Clone)]
 pub struct Label {
     text: String,
 }

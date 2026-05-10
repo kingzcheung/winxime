@@ -4,8 +4,8 @@ use crate::state::SettingsState;
 use crate::pages::SettingsApp;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
-    let (font_size, candidate_count, show_code_hint, corner_radius) = cx.read_entity(&settings, |state, _| {
-        (state.appearance.font_size, state.appearance.candidate_count, state.appearance.show_code_hint, state.appearance.corner_radius)
+    let (font_size, candidate_count, show_code_hint, corner_radius, colors) = cx.read_entity(&settings, |state, _| {
+        (state.appearance.font_size, state.appearance.candidate_count, state.appearance.show_code_hint, state.appearance.corner_radius, state.colors())
     });
     
     let settings_clone = settings.clone();
@@ -13,9 +13,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
     let settings_clone3 = settings.clone();
     let settings_clone4 = settings.clone();
     
-    SettingsPage::new("外观")
+    SettingsPage::new("外观", colors.clone())
         .group(
-            SettingsGroup::new("候选栏设置")
+            SettingsGroup::new("候选栏设置", colors.clone())
                 .items(vec![
                     SettingsItem::new("字体大小", 
                         SettingsControl::number_input_with(font_size, 
@@ -50,7 +50,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 ])
         )
         .group(
-            SettingsGroup::new("窗口样式")
+            SettingsGroup::new("窗口样式", colors.clone())
                 .items(vec![
                     SettingsItem::new("圆角大小", 
                         SettingsControl::number_input_with(corner_radius,

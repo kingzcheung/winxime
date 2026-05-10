@@ -4,7 +4,9 @@ use crate::state::SettingsState;
 use crate::pages::SettingsApp;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
-    let selected = cx.read_entity(&settings, |state, _| state.input_schema.selected_schema);
+    let (selected, colors, is_dark) = cx.read_entity(&settings, |state, _| {
+        (state.input_schema.selected_schema, state.colors(), state.system_theme.is_dark())
+    });
     
     let schemas = ["五笔86极点", "五笔86", "五笔98"];
     
@@ -14,7 +16,8 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
         .map(|(i, name)| {
             let is_selected = i == selected;
             let settings_clone = settings.clone();
-            let primary = rgb(0x8F73E2);
+            let primary = colors.primary.clone();
+            let is_dark_clone = is_dark;
             
             div()
                 .id(("schema", i))
@@ -25,11 +28,17 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 .px(px(12.0))
                 .rounded(px(8.0))
                 .cursor_pointer()
-                .hover(|style: StyleRefinement| style.bg(rgb(0x262626)))
+                .hover(|style: StyleRefinement| {
+                    if is_dark_clone {
+                        style.bg(rgb(0x262626))
+                    } else {
+                        style.bg(rgb(0xf5f5f5))
+                    }
+                })
                 .when(is_selected, |this: Stateful<Div>| {
                     this.border_1()
-                        .border_color(primary)
-                        .bg(rgb(0x3d2d5d))
+                        .border_color(primary.clone())
+                        .bg(if is_dark_clone { rgb(0x3d2d5d) } else { rgb(0xe8e0f8) })
                 })
                 .on_click(move |_event, _window, cx| {
                     settings_clone.update(cx, |s: &mut SettingsState, cx| {
@@ -41,7 +50,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 .child(
                     div()
                         .text_size(px(14.0))
-                        .text_color(if is_selected { primary } else { rgb(0xe6e6e6) })
+                        .text_color(if is_selected { primary } else { colors.foreground })
                         .child(name.to_string())
                 )
                 .into_any_element()
@@ -58,7 +67,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
             div()
                 .text_size(px(20.0))
                 .font_weight(FontWeight::BOLD)
-                .text_color(rgb(0xe0e0e0))
+                .text_color(colors.foreground)
                 .child("输入方案")
         )
         .child(
@@ -68,13 +77,13 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 .gap(px(12.0))
                 .p(px(16.0))
                 .rounded(px(12.0))
-                .bg(rgb(0x1a1a1a))
+                .bg(colors.surface)
                 .border_1()
-                .border_color(rgb(0x303030))
+                .border_color(colors.border)
                 .child(
                     div()
                         .text_size(px(14.0))
-                        .text_color(rgb(0x808080))
+                        .text_color(colors.foreground_muted)
                         .child("选择输入方案")
                 )
                 .children(items)

@@ -1,6 +1,7 @@
 mod components;
 mod pages;
 mod state;
+mod theme;
 
 use gpui::*;
 use gpui_platform::application;

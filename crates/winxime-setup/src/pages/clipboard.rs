@@ -4,17 +4,17 @@ use crate::state::SettingsState;
 use crate::pages::SettingsApp;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
-    let (enabled, history_count, retention_days) = cx.read_entity(&settings, |state, _| {
-        (state.clipboard.enabled, state.clipboard.history_count, state.clipboard.retention_days)
+    let (enabled, history_count, retention_days, colors) = cx.read_entity(&settings, |state, _| {
+        (state.clipboard.enabled, state.clipboard.history_count, state.clipboard.retention_days, state.colors())
     });
     
     let settings_clone = settings.clone();
     let settings_clone2 = settings.clone();
     let settings_clone3 = settings.clone();
     
-    SettingsPage::new("剪切板")
+    SettingsPage::new("剪切板", colors.clone())
         .group(
-            SettingsGroup::new("剪切板功能")
+            SettingsGroup::new("剪切板功能", colors.clone())
                 .items(vec![
                     SettingsItem::new("启用剪切板", 
                         SettingsControl::switch_with(enabled,

@@ -1,10 +1,12 @@
 use gpui::*;
+use crate::theme::{SystemTheme, ThemeColors};
 
 pub struct SettingsState {
     pub appearance: AppearanceState,
     pub input_schema: InputSchemaState,
     pub clipboard: ClipboardState,
     pub smart_suggestion: SmartSuggestionState,
+    pub system_theme: SystemTheme,
 }
 
 impl SettingsState {
@@ -14,7 +16,12 @@ impl SettingsState {
             input_schema: InputSchemaState::default(),
             clipboard: ClipboardState::default(),
             smart_suggestion: SmartSuggestionState::default(),
+            system_theme: SystemTheme::detect(),
         }
+    }
+
+    pub fn colors(&self) -> ThemeColors {
+        ThemeColors::from_theme(&self.system_theme)
     }
 }
 

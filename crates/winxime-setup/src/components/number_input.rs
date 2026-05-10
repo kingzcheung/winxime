@@ -2,12 +2,18 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct NumberInput {
     value: f64,
     min: f64,
     max: f64,
     step: f64,
     on_change: Option<Arc<dyn Fn(f64, &mut Window, &mut App) + 'static>>,
+    bg: Option<Hsla>,
+    border_color: Option<Hsla>,
+    text_color: Option<Hsla>,
+    btn_hover_bg: Option<Hsla>,
+    disabled_color: Option<Hsla>,
 }
 
 impl NumberInput {
@@ -18,6 +24,11 @@ impl NumberInput {
             max: 100.0,
             step: 1.0,
             on_change: None,
+            bg: None,
+            border_color: None,
+            text_color: None,
+            btn_hover_bg: None,
+            disabled_color: None,
         }
     }
     
@@ -40,6 +51,15 @@ impl NumberInput {
         self.on_change = Some(Arc::new(callback));
         self
     }
+    
+    pub fn theme(mut self, bg: Hsla, border: Hsla, text: Hsla, hover: Hsla, disabled: Hsla) -> Self {
+        self.bg = Some(bg);
+        self.border_color = Some(border);
+        self.text_color = Some(text);
+        self.btn_hover_bg = Some(hover);
+        self.disabled_color = Some(disabled);
+        self
+    }
 }
 
 impl IntoElement for NumberInput {
@@ -47,6 +67,12 @@ impl IntoElement for NumberInput {
 
     fn into_element(self) -> Self::Element {
         let primary = rgb(0x8F73E2);
+        let bg = self.bg.unwrap_or(rgb(0x262626).into());
+        let border = self.border_color.unwrap_or(rgb(0x404040).into());
+        let text = self.text_color.unwrap_or(rgb(0xe0e0e0).into());
+        let hover_bg = self.btn_hover_bg.unwrap_or(rgb(0x404040).into());
+        let disabled = self.disabled_color.unwrap_or(rgb(0x808080).into());
+        
         let value = self.value;
         let min = self.min;
         let max = self.max;
@@ -60,9 +86,9 @@ impl IntoElement for NumberInput {
             .w(px(140.0))
             .h(px(36.0))
             .rounded(px(12.0))
-            .bg(rgb(0x262626))
+            .bg(bg)
             .border_1()
-            .border_color(rgb(0x404040))
+            .border_color(border)
             .child(
                 div()
                     .id("dec-btn")
@@ -73,13 +99,13 @@ impl IntoElement for NumberInput {
                     .justify_center()
                     .rounded(px(10.0))
                     .cursor_pointer()
-                    .hover(|style| style.bg(rgb(0x404040)))
+                    .hover(|style| style.bg(hover_bg))
                     .text_size(px(16.0))
                     .when(value > min, |this: Stateful<Div>| {
-                        this.text_color(rgb(0xe0e0e0))
+                        this.text_color(text)
                     })
                     .when(value <= min, |this: Stateful<Div>| {
-                        this.text_color(rgb(0x808080))
+                        this.text_color(disabled)
                     })
                     .when_some(on_change.clone(), |this: Stateful<Div>, cb| {
                         this.on_click(move |_, window, cx| {
@@ -111,13 +137,13 @@ impl IntoElement for NumberInput {
                     .justify_center()
                     .rounded(px(10.0))
                     .cursor_pointer()
-                    .hover(|style| style.bg(rgb(0x404040)))
+                    .hover(|style| style.bg(hover_bg))
                     .text_size(px(16.0))
                     .when(value < max, |this: Stateful<Div>| {
-                        this.text_color(rgb(0xe0e0e0))
+                        this.text_color(text)
                     })
                     .when(value >= max, |this: Stateful<Div>| {
-                        this.text_color(rgb(0x808080))
+                        this.text_color(disabled)
                     })
                     .when_some(on_change, |this: Stateful<Div>, cb| {
                         this.on_click(move |_, window, cx| {

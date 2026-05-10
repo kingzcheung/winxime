@@ -44,6 +44,7 @@ impl Render for SettingsApp {
         let pages = ["输入方案", "外观", "剪切板", "快捷键", "智能联想", "词库管理", "关于"];
         let current = self.current_page;
         let settings = self.settings.clone();
+        let colors = cx.read_entity(&settings, |state, _| state.colors());
         
         let sidebar = div()
             .w(px(213.0))
@@ -100,10 +101,10 @@ impl Render for SettingsApp {
             0 => input_schema::render(settings, cx),
             1 => appearance::render(settings, cx),
             2 => clipboard::render(settings, cx),
-            3 => hotkeys::render(),
+            3 => hotkeys::render(settings, cx),
             4 => smart_suggestion::render(settings, cx),
-            5 => dictionary::render(),
-            6 => about::render(),
+            5 => dictionary::render(settings, cx),
+            6 => about::render(settings, cx),
             _ => input_schema::render(settings, cx),
         };
 
@@ -111,8 +112,7 @@ impl Render for SettingsApp {
             .flex()
             .flex_col()
             .size_full()
-            .bg(hsla(0.0, 0.0, 0.05, 0.85))
-            .child(TitleBar::render(window))
+            .child(TitleBar::render(window, &colors))
             .child(
                 div()
                     .id("content-area")
@@ -126,6 +126,7 @@ impl Render for SettingsApp {
                             .id("content-scroll")
                             .flex_1()
                             .overflow_y_scroll()
+                            .bg(colors.background)
                             .child(content)
                     )
             )

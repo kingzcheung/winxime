@@ -4,7 +4,7 @@ use crate::state::SettingsState;
 use crate::pages::SettingsApp;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
-    let (enabled, suggestion_count, prefer_common_words, record_user_frequency, auto_adjust_frequency, learning_threshold) = 
+    let (enabled, suggestion_count, prefer_common_words, record_user_frequency, auto_adjust_frequency, learning_threshold, colors) = 
         cx.read_entity(&settings, |state, _| {
             (
                 state.smart_suggestion.enabled,
@@ -13,6 +13,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 state.smart_suggestion.record_user_frequency,
                 state.smart_suggestion.auto_adjust_frequency,
                 state.smart_suggestion.learning_threshold,
+                state.colors(),
             )
         });
     
@@ -23,9 +24,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
     let s5 = settings.clone();
     let s6 = settings.clone();
     
-    SettingsPage::new("智能联想")
+    SettingsPage::new("智能联想", colors.clone())
         .group(
-            SettingsGroup::new("联想功能")
+            SettingsGroup::new("联想功能", colors.clone())
                 .items(vec![
                     SettingsItem::new("启用智能联想", 
                         SettingsControl::switch_with(enabled,
@@ -60,7 +61,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 ])
         )
         .group(
-            SettingsGroup::new("学习功能")
+            SettingsGroup::new("学习功能", colors.clone())
                 .items(vec![
                     SettingsItem::new("记录用户词频", 
                         SettingsControl::switch_with(record_user_frequency,

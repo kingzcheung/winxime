@@ -1,14 +1,15 @@
 use gpui::*;
+use crate::theme::ThemeColors;
 
 pub struct TitleBar;
 
 impl TitleBar {
-    pub fn render(_window: &mut Window) -> impl IntoElement {
+    pub fn render(_window: &mut Window, colors: &ThemeColors) -> impl IntoElement {
         div()
             .flex()
             .w_full()
             .h(px(40.0))
-.child(
+            .child(
                 div()
                     .w(px(213.0))
                     .h(px(40.0))
@@ -25,9 +26,10 @@ impl TitleBar {
                     .id("drag-region")
                     .flex_1()
                     .h(px(40.0))
+                    .bg(colors.background)
                     .window_control_area(WindowControlArea::Drag)
             )
-            .child(Self::close_button())
+            .child(Self::close_button(colors.foreground, colors.background))
     }
 
     fn logo() -> impl IntoElement {
@@ -58,7 +60,7 @@ impl TitleBar {
             )
     }
 
-    fn close_button() -> impl IntoElement {
+    fn close_button(text_color: Hsla, bg: Hsla) -> impl IntoElement {
         div()
             .id("close-btn")
             .flex()
@@ -66,8 +68,9 @@ impl TitleBar {
             .justify_center()
             .w(px(46.0))
             .h(px(40.0))
+            .bg(bg)
             .text_size(px(14.0))
-            .text_color(rgb(0xe0e0e0))
+            .text_color(text_color)
             .cursor_pointer()
             .hover(|style| style.bg(rgb(0xc42b1c)))
             .on_click(|_event, window, _cx| {

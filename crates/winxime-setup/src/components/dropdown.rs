@@ -1,5 +1,6 @@
 use gpui::*;
 
+#[derive(Clone)]
 pub struct Dropdown {
     selected_label: String,
 }

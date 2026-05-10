@@ -1,13 +1,16 @@
 use gpui::*;
 use crate::components::{SettingsPage, SettingsGroup, SettingsItem};
+use crate::state::SettingsState;
+use crate::pages::SettingsApp;
 
-pub fn render() -> AnyElement {
+pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
+    let colors = cx.read_entity(&settings, |state, _| state.colors());
     let config = winxime_config::XimeConfig::default();
     let path_str = config.user_data_dir().to_string_lossy().to_string();
 
-    SettingsPage::new("词库管理")
+    SettingsPage::new("词库管理", colors.clone())
         .group(
-            SettingsGroup::new("词库操作")
+            SettingsGroup::new("词库操作", colors.clone())
                 .items(vec![
                     SettingsItem::new("导入词库", SettingsItem::button("导入"))
                         .description("从文件导入用户词库"),
@@ -18,7 +21,7 @@ pub fn render() -> AnyElement {
                 ])
         )
         .group(
-            SettingsGroup::new("词库信息")
+            SettingsGroup::new("词库信息", colors.clone())
                 .items(vec![
                     SettingsItem::new("词库路径", SettingsItem::label(path_str))
                         .description("用户词库存储位置"),
@@ -27,7 +30,7 @@ pub fn render() -> AnyElement {
                 ])
         )
         .group(
-            SettingsGroup::new("添加词条")
+            SettingsGroup::new("添加词条", colors.clone())
                 .items(vec![
                     SettingsItem::new("添加词条", SettingsItem::button("添加"))
                         .description("手动添加新的词条"),
