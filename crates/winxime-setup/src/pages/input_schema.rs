@@ -9,7 +9,14 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
     if !schemas_loaded {
         cx.update_entity(&settings, |state: &mut SettingsState, cx| {
             if let Ok(manager) = crate::rime_config::SchemaManager::new() {
-                state.input_schema.available_schemas = manager.get_schema_list();
+                let schemas = manager.get_schema_list();
+                let selected_schema = manager.get_selected_schema()
+                    .and_then(|selected_id| {
+                        schemas.iter().position(|s| s.schema_id == selected_id)
+                    })
+                    .unwrap_or(0);
+                state.input_schema.available_schemas = schemas;
+                state.input_schema.selected_schema = selected_schema;
                 state.schemas_loaded = true;
                 cx.notify();
             }

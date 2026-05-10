@@ -153,39 +153,6 @@ patch: {}
     }
 }
 
-    #[cfg(not(debug_assertions))]
-    {
-        let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\winxime-server\\winxime-server.exe"));
-        let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\winxime-server"));
-        
-        let user_data_dir = std::env::var("APPDATA")
-            .ok()
-            .map(|p| std::path::PathBuf::from(p).join("Rime"))
-            .unwrap_or_else(|| exe_dir.join("rime-data"));
-        
-        (
-            exe_dir.join("data"),
-            user_data_dir,
-        )
-    }
-}
-
-fn ensure_user_config_files(user_data_dir: &std::path::Path) {
-    if !user_data_dir.exists() {
-        std::fs::create_dir_all(user_data_dir).ok();
-    }
-    
-    let default_custom = user_data_dir.join("default.custom.yaml");
-    if !default_custom.exists() {
-        std::fs::write(&default_custom, "# default.custom.yaml\npatch:\n  schema_list:\n    - schema: wubi86_jidian\n").ok();
-    }
-    
-    let xime_custom = user_data_dir.join("xime.custom.yaml");
-    if !xime_custom.exists() {
-        std::fs::write(&xime_custom, "customization:\n  distribution_code_name: Xime\n  distribution_version: 1.0.0\n  generator: \"Xime::ConfigManager\"\npatch:\n  style:\n    color_scheme: lavender_purple\n").ok();
-    }
-}
-
 fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
     log::log("run_server: starting");
     let context = Arc::new(SharedInputContext::new());

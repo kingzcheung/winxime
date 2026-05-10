@@ -62,8 +62,13 @@ impl SettingsState {
     fn load_schema_config() -> InputSchemaState {
         if let Ok(manager) = SchemaManager::new() {
             let schemas = manager.get_schema_list();
+            let selected_schema = manager.get_selected_schema()
+                .and_then(|selected_id| {
+                    schemas.iter().position(|s| s.schema_id == selected_id)
+                })
+                .unwrap_or(0);
             InputSchemaState {
-                selected_schema: 0,
+                selected_schema,
                 available_schemas: schemas,
             }
         } else {

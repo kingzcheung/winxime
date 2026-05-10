@@ -443,6 +443,25 @@ impl SchemaManager {
             Ok(())
         }
     }
+    
+    pub fn get_selected_schema(&self) -> Option<String> {
+        unsafe {
+            let get_selected = (*self.api).get_selected_schema_list?;
+            let mut list = RimeSchemaList { size: 0, list: ptr::null_mut() };
+            if get_selected(self.settings, &mut list) == FALSE || list.size == 0 || list.list.is_null() {
+                return None;
+            }
+            let schema_id_ptr = (*list.list).schema_id;
+            if schema_id_ptr.is_null() {
+                return None;
+            }
+            let schema_id = CStr::from_ptr(schema_id_ptr).to_string_lossy().to_string();
+            if let Some(destroy) = (*self.api).schema_list_destroy {
+                destroy(&mut list);
+            }
+            Some(schema_id)
+        }
+    }
 }
 
 impl Drop for SchemaManager {
