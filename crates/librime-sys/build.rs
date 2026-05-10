@@ -24,11 +24,25 @@ fn main() {
         build_librime(&librime_dir, workspace_dir);
     }
 
-    if rime_dll.exists() {
+    let possible_dll_locations = [
+        dist_lib_dir.join("rime.dll"),
+        dist_dir.join("bin").join("rime.dll"),
+        librime_dir.join("build").join("Release").join("rime.dll"),
+        librime_dir.join("build").join("bin").join("Release").join("rime.dll"),
+        librime_dir.join("build").join("lib").join("Release").join("rime.dll"),
+    ];
+
+    let found_dll = possible_dll_locations.iter().find(|p| p.exists());
+
+    if let Some(found_path) = found_dll {
+        if found_path != &rime_dll {
+            println!("cargo:warning=Found rime.dll at {}, copying to expected location", found_path.display());
+            std::fs::copy(found_path, &rime_dll).ok();
+        }
+        
         println!("cargo:rustc-link-search=native={}", dist_lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=rime");
         
-        // Copy rime.dll to target directories for both debug and release
         let profiles = ["debug", "release"];
         for profile in &profiles {
             let target_dir = workspace_dir.join("target").join(profile);
@@ -39,8 +53,23 @@ fn main() {
             }
         }
     } else {
+        println!("cargo:warning=Searched for rime.dll in:");
+        for loc in &possible_dll_locations {
+            println!("cargo:warning=  {} (exists: {})", loc.display(), loc.exists());
+        }
+        let build_dir = librime_dir.join("build");
+        if build_dir.exists() {
+            println!("cargo:warning=Build directory exists, listing contents:");
+            if let Ok(entries) = std::fs::read_dir(&build_dir) {
+                for entry in entries.flatten() {
+                    println!("cargo:warning=  {}", entry.path().display());
+                }
+            }
+        } else {
+            println!("cargo:warning=Build directory does not exist: {}", build_dir.display());
+        }
         panic!(
-            "librime build failed: rime.dll not found at {}",
+            "librime build failed: rime.dll not found at {} or any alternative location",
             rime_dll.display()
         );
     }
@@ -119,8 +148,20 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
             librime_dir.display()
         )
         .unwrap();
+        writeln!(file, "echo ===== STARTING DEPS BUILD =====").unwrap();
         writeln!(file, "build.bat deps").unwrap();
+        writeln!(file, "if errorlevel 1 echo DEPS BUILD FAILED with error %errorlevel% && exit /b %errorlevel%").unwrap();
+        writeln!(file, "echo ===== DEPS BUILD COMPLETE =====").unwrap();
+        writeln!(file, "echo ===== STARTING LIBRIME BUILD =====").unwrap();
+        writeln!(file, "echo build_dir=%build_dir%").unwrap();
+        writeln!(file, "echo build_config=%build_config%").unwrap();
         writeln!(file, "build.bat librime").unwrap();
+        writeln!(file, "if errorlevel 1 echo LIBRIME BUILD FAILED with error %errorlevel% && exit /b %errorlevel%").unwrap();
+        writeln!(file, "echo ===== LIBRIME BUILD COMPLETE =====").unwrap();
+        writeln!(file, "echo Checking if rime.dll was created...").unwrap();
+        writeln!(file, "if exist \"{}\\dist\\lib\\rime.dll\" echo rime.dll found in dist/lib", librime_dir.display()).unwrap();
+        writeln!(file, "if exist \"{}\\build\\Release\\rime.dll\" echo rime.dll found in build/Release", librime_dir.display()).unwrap();
+        writeln!(file, "dir \"{}\\dist\\lib\\*.dll\" 2>nul || echo No DLLs in dist/lib", librime_dir.display()).unwrap();
     }
 
     println!("cargo:warning=Starting librime compilation...");
