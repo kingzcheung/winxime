@@ -1,7 +1,53 @@
 use gpui::{prelude::FluentBuilder, ParentElement, IntoElement, *};
 use crate::components::{Radio};
+use crate::state::SettingsState;
+use crate::pages::SettingsApp;
 
-pub fn render() -> AnyElement {
+pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
+    let selected = cx.read_entity(&settings, |state, _| state.input_schema.selected_schema);
+    
+    let schemas = ["五笔86极点", "五笔86", "五笔98"];
+    
+    let items: Vec<AnyElement> = schemas
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let is_selected = i == selected;
+            let settings_clone = settings.clone();
+            let primary = rgb(0x8F73E2);
+            
+            div()
+                .id(("schema", i))
+                .flex()
+                .items_center()
+                .gap(px(12.0))
+                .py(px(8.0))
+                .px(px(12.0))
+                .rounded(px(8.0))
+                .cursor_pointer()
+                .hover(|style: StyleRefinement| style.bg(rgb(0x262626)))
+                .when(is_selected, |this: Stateful<Div>| {
+                    this.border_1()
+                        .border_color(primary)
+                        .bg(rgb(0x3d2d5d))
+                })
+                .on_click(move |_event, _window, cx| {
+                    settings_clone.update(cx, |s: &mut SettingsState, cx| {
+                        s.input_schema.selected_schema = i;
+                        cx.notify();
+                    });
+                })
+                .child(Radio::new(is_selected))
+                .child(
+                    div()
+                        .text_size(px(14.0))
+                        .text_color(if is_selected { primary } else { rgb(0xe6e6e6) })
+                        .child(name.to_string())
+                )
+                .into_any_element()
+        })
+        .collect();
+    
     div()
         .flex()
         .flex_col()
@@ -31,38 +77,7 @@ pub fn render() -> AnyElement {
                         .text_color(rgb(0x808080))
                         .child("选择输入方案")
                 )
-                .children(vec![
-                    render_radio_item("五笔86极点", 0, true),
-                    render_radio_item("五笔86", 1, false),
-                    render_radio_item("五笔98", 2, false),
-                ])
+                .children(items)
         )
         .into_any_element()
-}
-
-fn render_radio_item(label: impl Into<String>, index: usize, checked: bool) -> impl IntoElement {
-    let label = label.into();
-    let primary = rgb(0x8F73E2);
-    div()
-        .id(("schema", index))
-        .flex()
-        .items_center()
-        .gap(px(12.0))
-        .py(px(8.0))
-        .px(px(12.0))
-        .rounded(px(8.0))
-        .cursor_pointer()
-        .hover(|style: StyleRefinement| style.bg(rgb(0x262626)))
-        .when(checked, |this: Stateful<Div>| {
-            this.border_1()
-                .border_color(primary)
-                .bg(rgb(0x3d2d5d))
-        })
-        .child(Radio::new(checked))
-        .child(
-            div()
-                .text_size(px(14.0))
-                .text_color(if checked { primary } else { rgb(0xe6e6e6) })
-                .child(label)
-        )
 }

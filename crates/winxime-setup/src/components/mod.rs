@@ -13,7 +13,7 @@ pub use dropdown::Dropdown;
 pub use number_input::NumberInput;
 pub use button::Button;
 pub use kbd::Kbd;
-pub use settings::{SettingsPage, SettingsGroup, SettingsItem};
+pub use settings::{SettingsPage, SettingsGroup, SettingsItem, SettingsControl};
 pub use label::Label;
 pub use title_bar::TitleBar;
 pub use radio::Radio;

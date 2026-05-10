@@ -1,5 +1,6 @@
 mod components;
 mod pages;
+mod state;
 
 use gpui::*;
 use gpui_platform::application;
@@ -10,6 +11,7 @@ use std::borrow::Cow;
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/assets"]
 #[include = "image/*.png"]
+#[include = "icons/*.svg"]
 struct Assets;
 
 impl AssetSource for Assets {
@@ -53,7 +55,7 @@ fn main() {
                     is_resizable: false,
                     ..Default::default()
                 },
-                |_window: &mut Window, cx: &mut App| cx.new(|_| SettingsApp::new()),
+                |_window: &mut Window, cx: &mut App| cx.new(|cx| SettingsApp::new(cx)),
             );
         });
 }

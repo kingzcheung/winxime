@@ -67,8 +67,14 @@
 - [x] UI 主线程创建（修复消息处理）
 
 ### 设置程序
-- [x] winxime-setup (Slint UI)
+- [x] winxime-setup (GPUI UI)
 - [x] 基础设置界面
+- [x] 状态管理模块 (Entity<SettingsState>)
+- [x] 组件回调支持 (Switch/NumberInput/Button)
+- [x] 关于页面 (版本、作者、仓库、许可)
+- [x] 菜单图标 (SVG)
+- [x] 标题栏左侧与侧边栏颜色一致
+- [x] 菜单选中背景色改为主色
 
 ### 安装部署 (新增)
 - [x] winxime-tsf-register 工具 (TSF 注册)
@@ -141,7 +147,13 @@ msiexec /i target\wix\winxime-server-0.1.0-x86_64.msi
 - UI 设计要符合 fluent design
 
 ## 下一步
-- [ ] 完善 winxime-setup UI 层
+- [ ] winxime-setup UI 完善进度
+  - [x] 状态管理模块
+  - [x] 基础组件回调
+  - [x] 关于页面
+  - [x] 菜单图标
+  - [ ] 实现配置持久化 (保存到 xime.custom.yaml)
+  - [ ] 配置项分组细化
 - [ ] 实现 xime.custom.yaml 配置读写
 - [ ] Server 配置加载与重载机制
 - [ ] 测试任务栏中/英切换功能

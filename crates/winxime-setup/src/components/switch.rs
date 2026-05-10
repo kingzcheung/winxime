@@ -1,20 +1,29 @@
-use gpui::{prelude::FluentBuilder, *};
+use gpui::prelude::FluentBuilder;
+use gpui::*;
+use std::sync::Arc;
 
 pub struct Switch {
     checked: bool,
+    on_change: Option<Arc<dyn Fn(bool, &mut Window, &mut App) + 'static>>,
 }
 
 impl Switch {
     pub fn new(checked: bool) -> Self {
-        Self { checked }
+        Self { checked, on_change: None }
+    }
+    
+    pub fn on_change(mut self, callback: impl Fn(bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_change = Some(Arc::new(callback));
+        self
     }
 }
 
 impl IntoElement for Switch {
-    type Element = Div;
+    type Element = Stateful<Div>;
 
     fn into_element(self) -> Self::Element {
         let checked = self.checked;
+        let on_change = self.on_change;
         let primary = rgb(0x8F73E2);
         let toggle_width = px(44.0);
         let toggle_height = px(24.0);
@@ -22,22 +31,28 @@ impl IntoElement for Switch {
         let padding = px(3.0);
 
         div()
+            .id("switch")
             .w(toggle_width)
             .h(toggle_height)
             .rounded(px(12.0))
             .flex()
             .items_center()
-            .when(checked, |this: Div| {
+            .when(checked, |this: Stateful<Div>| {
                 this.bg(primary)
                     .justify_end()
                     .pr(padding)
             })
-            .when(!checked, |this: Div| {
+            .when(!checked, |this: Stateful<Div>| {
                 this.bg(rgb(0x4d4d4d))
                     .justify_start()
                     .pl(padding)
             })
             .cursor_pointer()
+            .when_some(on_change, |this: Stateful<Div>, cb| {
+                this.on_click(move |_, window, cx| {
+                    cb(!checked, window, cx);
+                })
+            })
             .child(
                 div()
                     .w(knob_size)

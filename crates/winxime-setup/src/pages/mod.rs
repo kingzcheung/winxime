@@ -4,19 +4,36 @@ pub mod clipboard;
 pub mod hotkeys;
 pub mod smart_suggestion;
 pub mod dictionary;
+pub mod about;
 
 use gpui::{prelude::FluentBuilder, ParentElement, IntoElement, *};
 use crate::components::{TitleBar};
+use crate::state::SettingsState;
 
 pub struct SettingsApp {
     current_page: usize,
+    settings: Entity<SettingsState>,
 }
 
 impl SettingsApp {
-    pub fn new() -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self { 
             current_page: 0,
+            settings: cx.new(|cx| SettingsState::new(cx)),
         }
+    }
+}
+
+fn get_page_icon(index: usize) -> &'static str {
+    match index {
+        0 => "icons/keyboard.svg",
+        1 => "icons/palette.svg",
+        2 => "icons/clipboard.svg",
+        3 => "icons/command.svg",
+        4 => "icons/thinking.svg",
+        5 => "icons/word.svg",
+        6 => "icons/about.svg",
+        _ => "icons/keyboard.svg",
     }
 }
 
@@ -24,13 +41,14 @@ impl Render for SettingsApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_background_appearance(WindowBackgroundAppearance::Blurred);
         
-        let pages = ["输入方案", "外观", "剪切板", "快捷键", "智能联想", "词库管理"];
+        let pages = ["输入方案", "外观", "剪切板", "快捷键", "智能联想", "词库管理", "关于"];
         let current = self.current_page;
+        let settings = self.settings.clone();
         
         let sidebar = div()
             .w(px(213.0))
             .h_full()
-            .bg(rgb(0x0d0d0d))
+            .bg(rgb(0x2d1f3d))
             .flex()
             .flex_col()
             .gap(px(2.0))
@@ -42,36 +60,51 @@ impl Render for SettingsApp {
                     .map(|(i, name)| {
                         let is_current = i == current;
                         let view = cx.entity();
+                        let icon_path = get_page_icon(i);
                         div()
                             .id(("menu", i))
                             .py(px(10.0))
                             .px(px(12.0))
                             .rounded(px(8.0))
-                            .when(is_current, |this: Stateful<Div>| this.bg(rgb(0x2d2d2d)))
+                            .flex()
+                            .items_center()
+                            .gap(px(12.0))
+                            .when(is_current, |this: Stateful<Div>| this.bg(rgb(0x8F73E2)))
                             .when(!is_current, |this: Stateful<Div>| {
                                 this.cursor_pointer()
-                                    .hover(|style: StyleRefinement| style.bg(rgb(0x1a1a1a)))
+                                    .hover(|style: StyleRefinement| style.bg(hsla(0.0, 0.0, 1.0, 0.05)))
                             })
-                            .text_size(px(13.0))
-                            .text_color(if is_current { rgb(0xe0e0e0) } else { rgb(0x808080) })
-                            .on_click(move |_, window: &mut Window, cx: &mut App| {
+                            .text_size(px(15.0))
+                            .text_color(if is_current { rgb(0xffffff) } else { rgb(0xb0b0b0) })
+                            .on_click(move |_, _window: &mut Window, cx: &mut App| {
                                 cx.update_entity(&view, |app: &mut SettingsApp, cx: &mut Context<SettingsApp>| {
                                     app.current_page = i;
                                     cx.notify();
                                 });
                             })
-                            .child(name.to_string())
+                            .child(
+                                img(icon_path)
+                                    .w(px(20.0))
+                                    .h(px(20.0))
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(15.0))
+                                    .text_color(if is_current { rgb(0xffffff) } else { rgb(0xb0b0b0) })
+                                    .child(name.to_string())
+                            )
                     })
             );
 
         let content = match self.current_page {
-            0 => input_schema::render(),
-            1 => appearance::render(),
-            2 => clipboard::render(),
+            0 => input_schema::render(settings, cx),
+            1 => appearance::render(settings, cx),
+            2 => clipboard::render(settings, cx),
             3 => hotkeys::render(),
-            4 => smart_suggestion::render(),
+            4 => smart_suggestion::render(settings, cx),
             5 => dictionary::render(),
-            _ => input_schema::render(),
+            6 => about::render(),
+            _ => input_schema::render(settings, cx),
         };
 
         div()

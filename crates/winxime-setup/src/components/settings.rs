@@ -17,6 +17,48 @@ pub enum SettingsControl {
     Custom(AnyElement),
 }
 
+impl SettingsControl {
+    pub fn switch(checked: bool) -> Self {
+        SettingsControl::Switch(Switch::new(checked))
+    }
+    
+    pub fn switch_with(checked: bool, on_change: impl Fn(bool, &mut Window, &mut App) + 'static) -> Self {
+        SettingsControl::Switch(Switch::new(checked).on_change(on_change))
+    }
+
+    pub fn dropdown(options: Vec<(String, String)>, selected: String) -> Self {
+        SettingsControl::Dropdown(Dropdown::new(options, selected))
+    }
+
+    pub fn number_input(value: f64) -> Self {
+        SettingsControl::NumberInput(NumberInput::new(value))
+    }
+    
+    pub fn number_input_with(value: f64, on_change: impl Fn(f64, &mut Window, &mut App) + 'static) -> Self {
+        SettingsControl::NumberInput(NumberInput::new(value).on_change(on_change))
+    }
+
+    pub fn button(label: impl Into<String>) -> Self {
+        SettingsControl::Button(Button::new(label))
+    }
+    
+    pub fn button_with(label: impl Into<String>, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        SettingsControl::Button(Button::new(label).on_click(on_click))
+    }
+
+    pub fn kbd(key: impl Into<String>) -> Self {
+        SettingsControl::Kbd(Kbd::new(key))
+    }
+
+    pub fn label(text: impl Into<String>) -> Self {
+        SettingsControl::Label(Label::new(text))
+    }
+
+    pub fn custom(element: AnyElement) -> Self {
+        SettingsControl::Custom(element)
+    }
+}
+
 impl SettingsItem {
     pub fn new(label: impl Into<String>, control: SettingsControl) -> Self {
         Self {
@@ -32,31 +74,31 @@ impl SettingsItem {
     }
 
     pub fn switch(checked: bool) -> SettingsControl {
-        SettingsControl::Switch(Switch::new(checked))
+        SettingsControl::switch(checked)
     }
 
     pub fn dropdown(options: Vec<(String, String)>, selected: String) -> SettingsControl {
-        SettingsControl::Dropdown(Dropdown::new(options, selected))
+        SettingsControl::dropdown(options, selected)
     }
 
     pub fn number_input(value: f64) -> SettingsControl {
-        SettingsControl::NumberInput(NumberInput::new(value))
+        SettingsControl::number_input(value)
     }
 
     pub fn button(label: impl Into<String>) -> SettingsControl {
-        SettingsControl::Button(Button::new(label))
+        SettingsControl::button(label)
     }
 
     pub fn kbd(key: impl Into<String>) -> SettingsControl {
-        SettingsControl::Kbd(Kbd::new(key))
+        SettingsControl::kbd(key)
     }
 
     pub fn label(text: impl Into<String>) -> SettingsControl {
-        SettingsControl::Label(Label::new(text))
+        SettingsControl::label(text)
     }
 
     pub fn custom(element: AnyElement) -> SettingsControl {
-        SettingsControl::Custom(element)
+        SettingsControl::custom(element)
     }
 }
 

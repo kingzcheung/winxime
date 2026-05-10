@@ -1,103 +1,68 @@
-use gpui::{ParentElement, IntoElement, *};
-use crate::components::{Switch, NumberInput};
+use gpui::*;
+use crate::components::{SettingsPage, SettingsGroup, SettingsItem, SettingsControl};
+use crate::state::SettingsState;
+use crate::pages::SettingsApp;
 
-pub fn render() -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(16.0))
-        .p(px(16.0))
-        .w_full()
-        .child(
-            div()
-                .text_size(px(20.0))
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgb(0xe0e0e0))
-                .child("外观")
+pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
+    let (font_size, candidate_count, show_code_hint, corner_radius) = cx.read_entity(&settings, |state, _| {
+        (state.appearance.font_size, state.appearance.candidate_count, state.appearance.show_code_hint, state.appearance.corner_radius)
+    });
+    
+    let settings_clone = settings.clone();
+    let settings_clone2 = settings.clone();
+    let settings_clone3 = settings.clone();
+    let settings_clone4 = settings.clone();
+    
+    SettingsPage::new("外观")
+        .group(
+            SettingsGroup::new("候选栏设置")
+                .items(vec![
+                    SettingsItem::new("字体大小", 
+                        SettingsControl::number_input_with(font_size, 
+                            move |val, _window, cx| {
+                                settings_clone.update(cx, |s: &mut SettingsState, cx| {
+                                    s.appearance.font_size = val;
+                                    cx.notify();
+                                });
+                            }
+                        )
+                    ).description("候选栏字体大小"),
+                    SettingsItem::new("候选数量", 
+                        SettingsControl::number_input_with(candidate_count as f64,
+                            move |val, _window, cx| {
+                                settings_clone2.update(cx, |s: &mut SettingsState, cx| {
+                                    s.appearance.candidate_count = val as i32;
+                                    cx.notify();
+                                });
+                            }
+                        )
+                    ).description("候选栏显示的候选词数量"),
+                    SettingsItem::new("显示编码提示", 
+                        SettingsControl::switch_with(show_code_hint,
+                            move |val, _window, cx| {
+                                settings_clone3.update(cx, |s: &mut SettingsState, cx| {
+                                    s.appearance.show_code_hint = val;
+                                    cx.notify();
+                                });
+                            }
+                        )
+                    ).description("在候选词旁显示编码"),
+                ])
         )
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(12.0))
-                .p(px(20.0))
-                .rounded(px(16.0))
-                .bg(rgb(0x1a1a1a))
-                .border_1()
-                .border_color(rgb(0x303030))
-                .child(render_item("字体大小", "候选栏字体大小", NumberInput::new(18.0)))
-                .child(render_item("候选数量", "候选栏显示的候选词数量", NumberInput::new(5.0)))
-                .child(render_switch_item("显示编码提示", "在候选词旁显示编码", true))
-        )
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(12.0))
-                .p(px(20.0))
-                .rounded(px(16.0))
-                .bg(rgb(0x1a1a1a))
-                .border_1()
-                .border_color(rgb(0x303030))
-                .child(render_item("圆角大小", "候选栏窗口圆角", NumberInput::new(8.0)))
+        .group(
+            SettingsGroup::new("窗口样式")
+                .items(vec![
+                    SettingsItem::new("圆角大小", 
+                        SettingsControl::number_input_with(corner_radius,
+                            move |val, _window, cx| {
+                                settings_clone4.update(cx, |s: &mut SettingsState, cx| {
+                                    s.appearance.corner_radius = val;
+                                    cx.notify();
+                                });
+                            }
+                        )
+                    ).description("候选栏窗口圆角"),
+                ])
         )
         .into_any_element()
-}
-
-fn render_item(label: impl Into<String>, desc: impl Into<String>, control: impl IntoElement) -> Div {
-    let label = label.into();
-    let desc = desc.into();
-    div()
-        .flex()
-        .items_center()
-        .justify_between()
-        .py(px(12.0))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(4.0))
-                .child(
-                    div()
-                        .text_size(px(14.0))
-                        .text_color(rgb(0xe0e0e0))
-                        .child(label)
-                )
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .text_color(rgb(0x808080))
-                        .child(desc)
-                )
-        )
-        .child(control)
-}
-
-fn render_switch_item(label: impl Into<String>, desc: impl Into<String>, checked: bool) -> Div {
-    let label = label.into();
-    let desc = desc.into();
-    div()
-        .flex()
-        .items_center()
-        .justify_between()
-        .py(px(12.0))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(4.0))
-                .child(
-                    div()
-                        .text_size(px(14.0))
-                        .text_color(rgb(0xe0e0e0))
-                        .child(label)
-                )
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .text_color(rgb(0x808080))
-                        .child(desc)
-                )
-        )
-        .child(Switch::new(checked))
 }

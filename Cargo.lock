@@ -2199,6 +2199,7 @@ dependencies = [
  "strum",
  "util-gpui-unofficial",
  "uuid",
+ "zed-font-kit",
 ]
 
 [[package]]

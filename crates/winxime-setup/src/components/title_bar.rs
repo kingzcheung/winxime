@@ -6,22 +6,26 @@ impl TitleBar {
     pub fn render(_window: &mut Window) -> impl IntoElement {
         div()
             .flex()
-            .items_center()
-            .justify_between()
             .w_full()
             .h(px(40.0))
-            .pl(px(12.0))
+.child(
+                div()
+                    .w(px(213.0))
+                    .h(px(40.0))
+                    .bg(rgb(0x2d1f3d))
+                    .flex()
+                    .items_center()
+                    .pl(px(12.0))
+                    .child(Self::logo())
+                    .child(Self::title_text())
+                    .window_control_area(WindowControlArea::Drag)
+            )
             .child(
                 div()
                     .id("drag-region")
-                    .flex()
                     .flex_1()
-                    .h_full()
-                    .items_center()
-                    .gap(px(10.0))
+                    .h(px(40.0))
                     .window_control_area(WindowControlArea::Drag)
-                    .child(Self::logo())
-                    .child(Self::title_text())
             )
             .child(Self::close_button())
     }
@@ -31,6 +35,7 @@ impl TitleBar {
             .w(px(24.0))
             .h(px(24.0))
             .flex_none()
+            .mr_2()
     }
 
     fn title_text() -> impl IntoElement {
