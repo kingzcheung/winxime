@@ -20,6 +20,36 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Ninja
+        run: pip install ninja
+
+      - name: Create env.bat for librime
+        run: |
+          $envfile = "librime\env.bat"
+          $envcontent = @"
+          set RIME_ROOT=%CD%
+          set CMAKE_GENERATOR=Ninja
+          "@
+          Set-Content -Path $envfile -Value $envcontent
+
+      - name: Install boost
+        run: |
+          cd librime
+          .\install-boost.bat
+
+      - name: Build librime dependencies
+        run: |
+          cd librime
+          .\build.bat deps
+
+      - name: Build librime
+        run: |
+          cd librime
+          .\build.bat librime
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release
