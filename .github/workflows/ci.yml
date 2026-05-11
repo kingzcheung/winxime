@@ -51,12 +51,12 @@ jobs:
       - name: Build release
         run: cargo build --release --quiet
 
-      - name: Prepare data files
+      - name: Prepare config files
         run: |
-          if exist target\release\data (
-            echo data already exists
+          if exist target\release\config (
+            echo config already exists
           ) else (
-            xcopy /E /I /Y librime\data target\release\data
+            xcopy /E /I /Y config target\release\config
           )
 
       - uses: actions/upload-artifact@v4
@@ -68,7 +68,7 @@ jobs:
             target/release/winxime-setup.exe
             target/release/winxime-tsf-register.exe
             target/release/rime.dll
-            target/release/data
+            target/release/config
 
   package:
     runs-on: windows-latest
@@ -95,19 +95,25 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/v3.14.1/wix314.exe" -OutFile wix314.exe
           Start-Process wix314.exe -ArgumentList "/quiet", "/norestart" -Wait
 
-      - name: Harvest data files
+      - name: Harvest config files
         run: |
           $wixPath = "C:\Program Files (x86)\WiX Toolset v3.14\bin"
-          & "$wixPath\heat.exe" dir target\release\data -o crates\winxime-server\wix\data.wxs -dr DataFolder -cg DataFiles -var var.DataDir -sreg -srd -ag
+          & "$wixPath\heat.exe" dir target\release\config -o crates\winxime-server\wix\data.wxs -dr DataFolder -cg DataFiles -var var.DataDir -sreg -srd -ag
 
       - name: Build MSI
+        id: msi
         run: |
           $wixPath = "C:\Program Files (x86)\WiX Toolset v3.14\bin"
-          & "$wixPath\candle.exe" -arch x64 crates\winxime-server\wix\main.wxs crates\winxime-server\wix\data.wxs -ext WixUIExtension -ext WixUtilExtension -dCargoTargetBinDir=target\release -dDataDir=target\release\data -dVersion=0.1.0 -out target\wix\
-          & "$wixPath\light.exe" target\wix\main.wixobj target\wix\data.wixobj -ext WixUIExtension -ext WixUtilExtension -out target\wix\xime-0.1.0.msi
+          $env:PATH += ";$wixPath"
+          $version = "${{ github.ref_name }}"
+          if ($version -notmatch "^v") { $version = "0.1.0" }
+          else { $version = $version.Substring(1) }
+          candle -arch x64 crates\winxime-server\wix\main.wxs crates\winxime-server\wix\data.wxs -ext WixUIExtension -ext WixUtilExtension -dCargoTargetBinDir=target\release -dDataDir=target\release\config -dVersion=$version -out target\wix\
+          light target\wix\main.wixobj target\wix\data.wixobj -ext WixUIExtension -ext WixUtilExtension -cultures:zh-CN -loc crates\winxime-server\wix\zh-cn.wxl -out target\wix\xime-$version.msi
+          echo "version=$version" >> $env:GITHUB_OUTPUT
 
       - id: upload-unsigned
         uses: actions/upload-artifact@v4
         with:
           name: Unsigned Installer
-          path: target/wix/xime-0.1.0.msi
+          path: target/wix/xime-${{ steps.msi.outputs.version }}.msi
