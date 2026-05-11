@@ -20,6 +20,32 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Cache librime build
+        id: cache-librime
+        uses: actions/cache@v4
+        with:
+          path: |
+            librime/dist
+            librime/deps/boost-*
+          key: librime-${{ hashFiles('librime/src/**', 'librime/CMakeLists.txt', 'librime/build.bat', 'librime/deps/**/CMakeLists.txt') }}
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install build tools
+        if: steps.cache-librime.outputs.cache-hit != 'true'
+        run: choco install aria2 7zip -y
+
+      - name: Build librime
+        if: steps.cache-librime.outputs.cache-hit != 'true'
+        shell: cmd
+        working-directory: librime
+        run: |
+          copy env.vs2022.bat env.bat
+          echo set ARCH=x64 >> env.bat
+          build.bat deps
+          build.bat librime shared
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release
