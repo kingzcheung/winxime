@@ -80,7 +80,6 @@ fn main() {
 }
 
 fn copy_rime_data(_workspace_dir: &Path, _librime_dir: &Path) {
-    // opencc is not needed - rime works without it
 }
 
 fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
@@ -138,30 +137,37 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         writeln!(file, "cd /d \"{}\"", librime_dir.display()).unwrap();
         writeln!(
             file,
-            "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat",
-            librime_dir.display()
-        )
-        .unwrap();
-        writeln!(
-            file,
             "if not defined BOOST_ROOT set BOOST_ROOT={}\\deps\\boost-1.89.0",
             librime_dir.display()
         )
         .unwrap();
-        writeln!(file, "echo ===== STARTING DEPS BUILD =====").unwrap();
+        writeln!(file, "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat", librime_dir.display()).unwrap();
+        writeln!(file, "echo ===== BUILDING DEPS =====").unwrap();
         writeln!(file, "build.bat deps").unwrap();
-        writeln!(file, "if errorlevel 1 echo DEPS BUILD FAILED with error %errorlevel% && exit /b %errorlevel%").unwrap();
-        writeln!(file, "echo ===== DEPS BUILD COMPLETE =====").unwrap();
-        writeln!(file, "echo ===== STARTING LIBRIME BUILD =====").unwrap();
-        writeln!(file, "echo build_dir=%build_dir%").unwrap();
-        writeln!(file, "echo build_config=%build_config%").unwrap();
-        writeln!(file, "build.bat librime shared").unwrap();
-        writeln!(file, "if errorlevel 1 echo LIBRIME BUILD FAILED with error %errorlevel% && exit /b %errorlevel%").unwrap();
-        writeln!(file, "echo ===== LIBRIME BUILD COMPLETE =====").unwrap();
-        writeln!(file, "echo Checking if rime.dll was created...").unwrap();
-        writeln!(file, "if exist \"{}\\dist\\lib\\rime.dll\" echo rime.dll found in dist/lib", librime_dir.display()).unwrap();
-        writeln!(file, "if exist \"{}\\build\\Release\\rime.dll\" echo rime.dll found in build/Release", librime_dir.display()).unwrap();
-        writeln!(file, "dir \"{}\\dist\\lib\\*.dll\" 2>nul || echo No DLLs in dist/lib", librime_dir.display()).unwrap();
+        writeln!(file, "if errorlevel 1 echo DEPS FAILED && exit /b %errorlevel%").unwrap();
+        writeln!(file, "echo ===== DEPS DONE =====").unwrap();
+        writeln!(file, "echo ===== CONFIGURING LIBRIME =====").unwrap();
+        writeln!(file, "cmake . -Bbuild -G\"Visual Studio 17 2022\" -Ax64 -Tv143 ^").unwrap();
+        writeln!(file, "  -DCMAKE_CONFIGURATION_TYPES:STRING=\"Release\" ^").unwrap();
+        writeln!(file, "  -DCMAKE_BUILD_TYPE:STRING=\"Release\" ^").unwrap();
+        writeln!(file, "  -DCMAKE_INSTALL_PREFIX:PATH=\"{}\\\\dist\" ^", librime_dir.display()).unwrap();
+        writeln!(file, "  -DCMAKE_PREFIX_PATH:PATH=\"{}\" ^", librime_dir.display()).unwrap();
+        writeln!(file, "  -DBUILD_STATIC=OFF ^").unwrap();
+        writeln!(file, "  -DBUILD_SHARED_LIBS=ON ^").unwrap();
+        writeln!(file, "  -DBUILD_TEST=OFF ^").unwrap();
+        writeln!(file, "  -DENABLE_LOGGING=ON").unwrap();
+        writeln!(file, "if errorlevel 1 echo CMAKE CONFIGURE FAILED && exit /b %errorlevel%").unwrap();
+        writeln!(file, "echo ===== BUILDING LIBRIME =====").unwrap();
+        writeln!(file, "cmake --build build --config Release --target install").unwrap();
+        writeln!(file, "if errorlevel 1 echo CMAKE BUILD FAILED && exit /b %errorlevel%").unwrap();
+        writeln!(file, "echo ===== LIBRIME BUILD DONE =====").unwrap();
+        writeln!(file, "if exist \"{}\\dist\\lib\\rime.dll\" (", librime_dir.display()).unwrap();
+        writeln!(file, "  echo rime.dll FOUND in dist/lib").unwrap();
+        writeln!(file, ") else (").unwrap();
+        writeln!(file, "  echo rime.dll NOT FOUND").unwrap();
+        writeln!(file, "  dir \"{}\\dist\\lib\" 2>nul || echo dist/lib does not exist", librime_dir.display()).unwrap();
+        writeln!(file, "  exit /b 1").unwrap();
+        writeln!(file, ")").unwrap();
     }
 
     println!("cargo:warning=Starting librime compilation...");
