@@ -43,6 +43,7 @@ jobs:
         run: |
           copy env.vs2022.bat env.bat
           echo set ARCH=x64 >> env.bat
+          call install-boost.bat
           build.bat deps
           build.bat librime shared
 
