@@ -155,7 +155,7 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         writeln!(file, "echo ===== STARTING LIBRIME BUILD =====").unwrap();
         writeln!(file, "echo build_dir=%build_dir%").unwrap();
         writeln!(file, "echo build_config=%build_config%").unwrap();
-        writeln!(file, "build.bat librime").unwrap();
+        writeln!(file, "build.bat librime shared").unwrap();
         writeln!(file, "if errorlevel 1 echo LIBRIME BUILD FAILED with error %errorlevel% && exit /b %errorlevel%").unwrap();
         writeln!(file, "echo ===== LIBRIME BUILD COMPLETE =====").unwrap();
         writeln!(file, "echo Checking if rime.dll was created...").unwrap();

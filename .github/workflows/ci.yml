@@ -27,7 +27,7 @@ jobs:
           path: |
             librime/dist
             librime/deps/boost-*
-          key: librime-${{ hashFiles('librime/src/**', 'librime/CMakeLists.txt', 'librime/build.bat', 'librime/deps/**/CMakeLists.txt') }}
+          key: librime-${{ hashFiles('librime/src/**', 'librime/CMakeLists.txt', 'librime/build.bat', 'librime/deps/**/CMakeLists.txt', 'crates/librime-sys/build.rs') }}
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
