@@ -52,6 +52,19 @@ jobs:
           cd librime
           .\build.bat librime
 
+      - name: Verify librime build output
+        run: |
+          echo "Checking for rime.dll in various locations:"
+          if exist librime\dist\lib\rime.dll (echo "FOUND: librime\dist\lib\rime.dll") else (echo "NOT FOUND: librime\dist\lib\rime.dll")
+          if exist librime\dist\bin\rime.dll (echo "FOUND: librime\dist\bin\rime.dll") else (echo "NOT FOUND: librime\dist\bin\rime.dll")
+          if exist librime\build\bin\rime.dll (echo "FOUND: librime\build\bin\rime.dll") else (echo "NOT FOUND: librime\build\bin\rime.dll")
+          if exist librime\build\lib\rime.dll (echo "FOUND: librime\build\lib\rime.dll") else (echo "NOT FOUND: librime\build\lib\rime.dll")
+          if exist librime\build\Release\rime.dll (echo "FOUND: librime\build\Release\rime.dll") else (echo "NOT FOUND: librime\build\Release\rime.dll")
+          echo "Listing librime/dist directory:"
+          if exist librime\dist (dir /s librime\dist) else (echo "dist directory does not exist")
+          echo "Listing librime/build directory:"
+          if exist librime\build (dir /s librime\build) else (echo "build directory does not exist")
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release

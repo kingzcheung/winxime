@@ -30,6 +30,9 @@ fn main() {
         librime_dir.join("build").join("Release").join("rime.dll"),
         librime_dir.join("build").join("bin").join("Release").join("rime.dll"),
         librime_dir.join("build").join("lib").join("Release").join("rime.dll"),
+        // Ninja generator paths (single-config, no Release subdirectory)
+        librime_dir.join("build").join("bin").join("rime.dll"),
+        librime_dir.join("build").join("lib").join("rime.dll"),
     ];
 
     let found_dll = possible_dll_locations.iter().find(|p| p.exists());
@@ -59,14 +62,50 @@ fn main() {
         }
         let build_dir = librime_dir.join("build");
         if build_dir.exists() {
-            println!("cargo:warning=Build directory exists, listing contents:");
+            println!("cargo:warning=Build directory exists: {}", build_dir.display());
+            // List top-level contents
             if let Ok(entries) = std::fs::read_dir(&build_dir) {
+                println!("cargo:warning=Build directory contents:");
                 for entry in entries.flatten() {
-                    println!("cargo:warning=  {}", entry.path().display());
+                    let path = entry.path();
+                    let metadata = path.metadata();
+                    let is_dir = metadata.map(|m| m.is_dir()).unwrap_or(false);
+                    println!("cargo:warning=  {}{}", path.display(), if is_dir { "/" } else { "" });
+                }
+            }
+            // Check bin and lib subdirectories
+            for subdir in ["bin", "lib"] {
+                let subdir_path = build_dir.join(subdir);
+                if subdir_path.exists() {
+                    println!("cargo:warning={}/ contents:", subdir);
+                    if let Ok(entries) = std::fs::read_dir(&subdir_path) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            let metadata = path.metadata();
+                            let is_dir = metadata.map(|m| m.is_dir()).unwrap_or(false);
+                            println!("cargo:warning=  {}{}", path.display(), if is_dir { "/" } else { "" });
+                        }
+                    }
                 }
             }
         } else {
             println!("cargo:warning=Build directory does not exist: {}", build_dir.display());
+        }
+        // Also check dist directory
+        let dist_dir = librime_dir.join("dist");
+        if dist_dir.exists() {
+            println!("cargo:warning=Dist directory exists: {}", dist_dir.display());
+            for subdir in ["bin", "lib"] {
+                let subdir_path = dist_dir.join(subdir);
+                if subdir_path.exists() {
+                    println!("cargo:warning=dist/{}/ contents:", subdir);
+                    if let Ok(entries) = std::fs::read_dir(&subdir_path) {
+                        for entry in entries.flatten() {
+                            println!("cargo:warning=  {}", entry.path().display());
+                        }
+                    }
+                }
+            }
         }
         panic!(
             "librime build failed: rime.dll not found at {} or any alternative location",
@@ -109,7 +148,8 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
     println!("cargo:warning=Using Visual Studio at: {}", vs_install);
 
     let env_bat = librime_dir.join("env.bat");
-    {
+    // Only create env.bat if it doesn't exist - preserves CI settings
+    if !env_bat.exists() {
         let mut file = std::fs::File::create(&env_bat).unwrap();
         writeln!(file, "@echo off").unwrap();
         writeln!(file, "set RIME_ROOT={}", librime_dir.display()).unwrap();
@@ -123,6 +163,9 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         writeln!(file, "set BJAM_TOOLSET=msvc-14.3").unwrap();
         writeln!(file, "set CMAKE_GENERATOR=\"Visual Studio 17 2022\"").unwrap();
         writeln!(file, "set PLATFORM_TOOLSET=v143").unwrap();
+        println!("cargo:warning=Created env.bat with default settings");
+    } else {
+        println!("cargo:warning=Using existing env.bat (CI settings preserved)");
     }
 
     let temp_bat = workspace_dir.join("temp-build-librime.bat");
