@@ -186,8 +186,10 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         .unwrap();
         writeln!(file, "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat", librime_dir.display()).unwrap();
         writeln!(file, "echo ===== BUILDING DEPS =====").unwrap();
-        writeln!(file, "build.bat deps").unwrap();
-        writeln!(file, "if errorlevel 1 echo DEPS FAILED && exit /b %errorlevel%").unwrap();
+        writeln!(file, "call build.bat deps").unwrap();
+        writeln!(file, "set DEPS_EXITCODE=%errorlevel%").unwrap();
+        writeln!(file, "echo DEPS exit code: %DEPS_EXITCODE%").unwrap();
+        writeln!(file, "if %DEPS_EXITCODE% neq 0 echo DEPS FAILED && exit /b %DEPS_EXITCODE%").unwrap();
         writeln!(file, "echo ===== DEPS DONE =====").unwrap();
         writeln!(file, "echo ===== BUILDING LIBRIME =====").unwrap();
         writeln!(file, "build.bat librime shared").unwrap();
