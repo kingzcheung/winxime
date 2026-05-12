@@ -59,6 +59,7 @@ jobs:
         run: cargo build --release --quiet
 
       - name: Prepare config files
+        shell: cmd
         run: |
           if exist target\release\config (
             echo config already exists
