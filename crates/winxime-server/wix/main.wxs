@@ -124,17 +124,19 @@
                             Permanent='no'
                             Part='last'
                             Action='set'
-                            System='yes'/>
+                            System='no'/>
                     </Component>
-                    <Component Id='binary0' Guid='*'>
+<Component Id='binary0' Guid='*'>
                         <File
                             Id='exe0'
                             Name='winxime-server.exe'
                             DiskId='1'
                             Source='$(var.CargoTargetBinDir)\winxime-server.exe'
                             KeyPath='yes'/>
-                        <RegistryKey Root='HKLM' Key='Software\Microsoft\Windows\CurrentVersion\Run'>
-                            <RegistryValue Type='string' Name='XimeServer' Value='[#exe0]'/>
+                    </Component>
+                    <Component Id='RunStartup' Guid='{B2C3D4E5-F6A7-8901-BCDE-F12345678901}'>
+                        <RegistryKey Root='HKCU' Key='Software\Microsoft\Windows\CurrentVersion\Run'>
+                            <RegistryValue Type='string' Name='XimeServer' Value='[#exe0]' KeyPath='yes'/>
                         </RegistryKey>
                     </Component>
                     <Component Id='binary1' Guid='*'>
@@ -207,6 +209,7 @@
             <ComponentRef Id='tsf_dll'/>
             <ComponentRef Id='icon_file'/>
             <ComponentRef Id='rime_dll'/>
+            <ComponentRef Id='RunStartup'/>
             <ComponentRef Id='ApplicationShortcut'/>
             <!-- Data files harvested by heat -->
             <ComponentGroupRef Id='DataFiles'/>

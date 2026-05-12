@@ -9,31 +9,28 @@ jobs:
   build:
     uses: ./.github/workflows/ci.yml
 
-  code-signing:
-    needs: [build]
-    uses: ./.github/workflows/code-signing.yml
-    with:
-      signing-policy-slug: release-signing
-      github-artifact-id: ${{ needs.build.outputs.unsigned-artifact-id }}
-    secrets:
-      api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-
   release:
     runs-on: ubuntu-latest
     name: Release
-    needs: [code-signing]
+    needs: [build]
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Download Signed Installer
+      - name: Download Unsigned Installer
         uses: actions/download-artifact@v4
         with:
-          name: Signed Installer
+          name: Unsigned Installer
           path: dist
+      - name: Rename and Calculate Checksum
+        run: |
+          mv dist/winxime-server-0.1.0-x86_64.msi dist/winxime.msi || true
+          sha256sum dist/winxime.msi > dist/winxime.msi.sha256
       - name: GH Release
         uses: softprops/action-gh-release@v2
         with:
           name: Xime ${{ github.ref_name }}
           draft: true
-          files: dist/*.msi
+          files: |
+            dist/winxime.msi
+            dist/winxime.msi.sha256

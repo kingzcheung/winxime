@@ -121,6 +121,12 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
             let schema_manager = SchemaManager::new()?;
             schema_manager.set_schema_list(&[selected_id])?;
             schema_manager.save()?;
+            
+            deploy_all()?;
+            
+            if !IpcClient::reload_config() {
+                eprintln!("Server not running, config will apply on next start");
+            }
         }
         Ok(())
     }
