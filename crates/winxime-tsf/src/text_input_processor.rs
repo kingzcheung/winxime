@@ -591,22 +591,27 @@ impl XimeTextService_Impl {
 
     fn should_handle_key(&self, vk: VIRTUAL_KEY) -> bool {
         let code = vk.0;
+        
+        if self.is_composing() {
+            return true;
+        }
+        
+        let is_ascii = self.ascii_mode.load(std::sync::atomic::Ordering::Acquire);
+        if is_ascii {
+            return false;
+        }
+        
         if (VK_X_A..=VK_X_Z).contains(&code) {
             return true;
         }
         if code == VK_RETURN.0 || code == VK_BACK.0 || code == VK_ESCAPE.0 {
             return true;
         }
-        if self.is_composing() {
-            if code == VK_SPACE.0 {
-                return true;
-            }
-            if (VK_X_0..=VK_X_9).contains(&code) {
-                return true;
-            }
-            if code == VK_UP.0 || code == VK_DOWN.0 || code == VK_LEFT.0 || code == VK_RIGHT.0 || code == VK_PRIOR.0 || code == VK_NEXT.0 {
-                return true;
-            }
+        if code == VK_SPACE.0 {
+            return true;
+        }
+        if (VK_X_0..=VK_X_9).contains(&code) {
+            return true;
         }
         false
     }
