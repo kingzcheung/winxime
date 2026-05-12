@@ -8,8 +8,8 @@ fn main() {
     if icon_path.exists() {
         let mut res = winres::WindowsResource::new();
         res.set_icon(icon_path.to_str().unwrap());
-        res.set("ProductName", "Xime");
-        res.set("FileDescription", "Xime 五笔输入法设置");
+        res.set("ProductName", "Xime（曦码）五笔输入法");
+        res.set("FileDescription", "Xime（曦码） 五笔输入法设置");
         res.compile().unwrap();
     }
 

@@ -65,18 +65,18 @@
         Name='Xime'
         UpgradeCode='C82D0C18-FE61-4F32-BB15-1D87BC5912A2'
         Manufacturer='Xime team'
-        Language='1033'
-        Codepage='1252'
+        Language='2052'
+        Codepage='936'
         Version='$(var.Version)'>
 
         <Package Id='*'
             Keywords='Installer'
             Manufacturer='Xime team'
             InstallerVersion='450'
-            Languages='1033'
+            Languages='2052'
             Compressed='yes'
             InstallScope='perMachine'
-            SummaryCodepage='1252'
+            SummaryCodepage='936'
             Platform='x64'
             />
 
@@ -91,7 +91,7 @@
         <Icon Id='SetupIcon' SourceFile='resource\icon.ico'/>
         
         <!-- Property to control "Launch on exit" checkbox -->
-        <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='打开 Xime 设置'/>
+        <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='!(loc.ExitDialogOptionalCheckBoxText)'/>
         <CustomAction Id='LaunchSettings' 
             FileKey='exe1'
             ExeCommand=''
@@ -117,10 +117,11 @@
                 <Directory Id='ApplicationProgramsFolder' Name='Xime'>
                     <Component Id='ApplicationShortcut' Guid='{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}'>
                         <Shortcut Id='XimeSettingsShortcut'
-                            Name='Xime 设置'
+                            Name='Xime Settings'
                             Target='[APPLICATIONFOLDER]winxime-setup.exe'
                             WorkingDirectory='APPLICATIONFOLDER'
                             Icon='SetupIcon'/>
+                        <RemoveFolder Id='RemoveApplicationProgramsFolder' On='uninstall'/>
                         <RegistryValue Root='HKCU' Key='Software\Xime' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
                     </Component>
                 </Directory>
@@ -182,8 +183,8 @@
                             KeyPath='yes'/>
                     </Component>
                     
-                    <!-- Data folder - use heat harvested files -->
-                    <Directory Id='DataFolder' Name='data'>
+                    <!-- Config folder - use heat harvested files -->
+                    <Directory Id='DataFolder' Name='config'>
                         <Directory Id='DataOpencc' Name='opencc'/>
                     </Directory>
                 </Directory>

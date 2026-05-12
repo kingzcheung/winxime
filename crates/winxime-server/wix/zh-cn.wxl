@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="zh-CN" Codepage="936" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+    <String Id="WelcomeDlgTitle" Overridable="yes">安装 [ProductName]</String>
+    <String Id="WelcomeDlgDescription" Overridable="yes">安装程序将引导您完成 [ProductName] 的安装过程。</String>
+    <String Id="InstallDirDlgTitle" Overridable="yes">选择安装位置</String>
+    <String Id="InstallDirDlgDescription" Overridable="yes">选择 [ProductName] 的安装位置。</String>
+    <String Id="VerifyReadyDlgTitle" Overridable="yes">准备安装</String>
+    <String Id="VerifyReadyDlgDescription" Overridable="yes">安装程序已准备好在您的计算机上安装 [ProductName]。</String>
+    <String Id="ExitDialogTitle" Overridable="yes">[ProductName] 安装完成</String>
+    <String Id="ExitDialogDescription" Overridable="yes">[ProductName] 已成功安装在您的计算机上。</String>
+    <String Id="ExitDialogOptionalCheckBoxText" Overridable="yes">打开 Xime 设置</String>
+    <String Id="FatalErrorTitle" Overridable="yes">[ProductName] 安装失败</String>
+    <String Id="FatalErrorDescription1" Overridable="yes">[ProductName] 安装程序因发生错误而提前结束。</String>
+    <String Id="UserExitTitle" Overridable="yes">[ProductName] 安装已中断</String>
+    <String Id="UserExitDescription1" Overridable="yes">[ProductName] 安装程序已中断。</String>
+    <String Id="ProgressDlgTitle" Overridable="yes">正在安装 [ProductName]</String>
+    <String Id="ProgressDlgTextInstalling" Overridable="yes">正在安装 [ProductName]，请稍候...</String>
+    <String Id="MaintenanceWelcomeDlgTitle" Overridable="yes">[ProductName] 维护</String>
+    <String Id="MaintenanceWelcomeDlgDescription" Overridable="yes">您可以从 [ProductName] 安装程序中选择要执行的操作。</String>
+    <String Id="MaintenanceTypeDlgTitle" Overridable="yes">选择维护操作</String>
+    <String Id="MaintenanceTypeDlgDescription" Overridable="yes">选择您想要执行的操作。</String>
+    <String Id="MaintenanceTypeDlgChange" Overridable="yes">更改</String>
+    <String Id="MaintenanceTypeDlgRepair" Overridable="yes">修复</String>
+    <String Id="MaintenanceTypeDlgRemove" Overridable="yes">卸载</String>
+    <String Id="RemoveDlgTitle" Overridable="yes">卸载 [ProductName]</String>
+    <String Id="RemoveDlgDescription" Overridable="yes">安装程序将从您的计算机中卸载 [ProductName]。</String>
+    <String Id="InstallVersion" Overridable="yes">版本 [ProductVersion]</String>
+    <String Id="InstallDir" Overridable="yes">安装位置:</String>
+    <String Id="InstallBrowse" Overridable="yes">浏览...</String>
+    <String Id="InstallNext" Overridable="yes">下一步</String>
+    <String Id="InstallBack" Overridable="yes">上一步</String>
+    <String Id="InstallInstall" Overridable="yes">安装</String>
+    <String Id="InstallCancel" Overridable="yes">取消</String>
+    <String Id="InstallFinish" Overridable="yes">完成</String>
+    <String Id="InstallRepair" Overridable="yes">修复</String>
+    <String Id="InstallUninstall" Overridable="yes">卸载</String>
+</WixLocalization>
