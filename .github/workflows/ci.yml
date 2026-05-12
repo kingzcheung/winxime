@@ -100,7 +100,7 @@ jobs:
 
       - name: Install WiX
         run: |
-          Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/v3.14.1/wix314.exe" -OutFile wix314.exe
+          Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314.exe" -OutFile wix314.exe
           Start-Process wix314.exe -ArgumentList "/quiet", "/norestart" -Wait
 
       - name: Harvest config files
