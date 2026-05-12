@@ -114,7 +114,11 @@ impl SettingsItem {
                     .theme(colors.surface_variant, colors.border_variant, colors.foreground);
                 themed.into_any_element()
             },
-            SettingsControl::Label(l) => l.clone().into_any_element(),
+            SettingsControl::Label(l) => {
+                let themed = l.clone()
+                    .theme(colors.foreground);
+                themed.into_any_element()
+            },
         };
 
         div()

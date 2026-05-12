@@ -1,6 +1,6 @@
 use gpui::*;
 use crate::theme::{SystemTheme, ThemeColors};
-use crate::rime_config::{RimeConfigManager, SchemaManager, deploy_all};
+use crate::rime_config::{RimeConfigManager, SchemaManager, SchemaConfig, SchemaConfigManager, deploy_all};
 use winxime_ipc::IpcClient;
 
 pub struct SettingsState {
@@ -38,6 +38,21 @@ impl SettingsState {
         }
     }
 
+pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
+        if self.input_schema.config_loaded {
+            return;
+        }
+        if self.input_schema.selected_schema >= self.input_schema.available_schemas.len() {
+            return;
+        }
+        let schema_id = &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
+        if let Ok(manager) = SchemaConfigManager::new(schema_id) {
+            self.input_schema.schema_config = Some(manager.get_config());
+            self.input_schema.config_loaded = true;
+            cx.notify();
+        }
+    }
+
     fn load_appearance_config_safe() -> AppearanceState {
         AppearanceState::default()
     }
@@ -59,7 +74,7 @@ impl SettingsState {
         }
     }
 
-    fn load_schema_config() -> InputSchemaState {
+    fn load_input_schema_config() -> InputSchemaState {
         if let Ok(manager) = SchemaManager::new() {
             let schemas = manager.get_schema_list();
             let selected_schema = manager.get_selected_schema()
@@ -70,6 +85,8 @@ impl SettingsState {
             InputSchemaState {
                 selected_schema,
                 available_schemas: schemas,
+                schema_config: None,
+                config_loaded: false,
             }
         } else {
             InputSchemaState::default()
@@ -105,6 +122,66 @@ impl SettingsState {
             schema_manager.set_schema_list(&[selected_id])?;
             schema_manager.save()?;
         }
+        Ok(())
+    }
+    
+    pub fn save_schema_config(&self) -> Result<(), String> {
+        if self.input_schema.selected_schema >= self.input_schema.available_schemas.len() {
+            return Ok(());
+        }
+        
+        let schema_id = &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
+        let manager = SchemaConfigManager::new(schema_id)?;
+        
+        if let Some(config) = &self.input_schema.schema_config {
+            if let Some(v) = config.speller.max_code_length {
+                manager.set_int("speller/max_code_length", v)?;
+            }
+            if let Some(v) = config.speller.auto_select {
+                manager.set_bool("speller/auto_select", v)?;
+            }
+            if let Some(v) = &config.speller.auto_clear {
+                if !v.is_empty() {
+                    manager.set_string("speller/auto_clear", v)?;
+                }
+            }
+            
+            if let Some(v) = config.translator.enable_charset_filter {
+                manager.set_bool("translator/enable_charset_filter", v)?;
+            }
+            if let Some(v) = config.translator.enable_completion {
+                manager.set_bool("translator/enable_completion", v)?;
+            }
+            if let Some(v) = config.translator.enable_sentence {
+                manager.set_bool("translator/enable_sentence", v)?;
+            }
+            if let Some(v) = config.translator.enable_user_dict {
+                manager.set_bool("translator/enable_user_dict", v)?;
+            }
+            if let Some(v) = config.translator.enable_encoder {
+                manager.set_bool("translator/enable_encoder", v)?;
+            }
+            if let Some(v) = config.translator.encode_commit_history {
+                manager.set_bool("translator/encode_commit_history", v)?;
+            }
+            if let Some(v) = config.translator.max_phrase_length {
+                manager.set_int("translator/max_phrase_length", v)?;
+            }
+            
+            if let Some(v) = &config.reverse_lookup.prefix {
+                manager.set_string("reverse_lookup/prefix", v)?;
+            }
+            if let Some(v) = &config.reverse_lookup.suffix {
+                manager.set_string("reverse_lookup/suffix", v)?;
+            }
+            
+            if let Some(v) = &config.tradition.opencc_config {
+                manager.set_string("tradition/opencc_config", v)?;
+            }
+            
+            manager.save()?;
+        }
+        
         Ok(())
     }
 
@@ -165,6 +242,8 @@ pub struct AppearanceState {
 pub struct InputSchemaState {
     pub selected_schema: usize,
     pub available_schemas: Vec<crate::rime_config::SchemaInfo>,
+    pub schema_config: Option<SchemaConfig>,
+    pub config_loaded: bool,
 }
 
 #[derive(Clone, Default)]

@@ -244,6 +244,10 @@ fn process_request(
             ascii_mode.store(new_mode, Ordering::Release);
             crate::tray::update_tray_icon(new_mode);
             
+            if new_mode {
+                window.hide();
+            }
+            
             IpcResponse {
                 success: true,
                 session_id: request.session_id,

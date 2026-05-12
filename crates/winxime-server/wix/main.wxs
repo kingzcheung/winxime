@@ -52,10 +52,8 @@
 -->
 <?if $(sys.BUILDARCH) = x64 or $(sys.BUILDARCH) = arm64 ?>
     <?define PlatformProgramFilesFolder = "ProgramFiles64Folder" ?>
-    <?define PlatformSystemFolder = "System64Folder" ?>
 <?else ?>
     <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
-    <?define PlatformSystemFolder = "SystemFolder" ?>
 <?endif ?>
 
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
@@ -86,6 +84,7 @@
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
         <Property Id='DiskPrompt' Value='Xime Installation'/>
+        <Property Id='REINSTALLMODE' Value='amus'/>
         
         <!-- Icon for start menu shortcut -->
         <Icon Id='SetupIcon' SourceFile='resource\icon.ico'/>
@@ -100,18 +99,6 @@
             Return='asyncNoWait'/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
-            <!-- System folder for TSF DLL -->
-            <Directory Id='$(var.PlatformSystemFolder)' Name='System32'>
-                <Component Id='tsf_dll_system' Guid='{D1E2F3A4-B5C6-7D8E-9F0A-1B2C3D4E5F6A}'>
-                    <File
-                        Id='dll_system'
-                        Name='winxime_tsf.dll'
-                        DiskId='1'
-                        Source='$(var.CargoTargetBinDir)\winxime_tsf.dll'
-                        KeyPath='yes'/>
-                </Component>
-            </Directory>
-            
             <!-- Start Menu shortcut -->
             <Directory Id='ProgramMenuFolder'>
                 <Directory Id='ApplicationProgramsFolder' Name='Xime'>
@@ -166,6 +153,14 @@
                             Source='$(var.CargoTargetBinDir)\winxime-tsf-register.exe'
                             KeyPath='yes'/>
                     </Component>
+                    <Component Id='tsf_dll' Guid='*'>
+                        <File
+                            Id='dll_tsf'
+                            Name='winxime_tsf.dll'
+                            DiskId='1'
+                            Source='$(var.CargoTargetBinDir)\winxime_tsf.dll'
+                            KeyPath='yes'/>
+                    </Component>
                     <Component Id='icon_file' Guid='*'>
                         <File
                             Id='icon0'
@@ -209,8 +204,8 @@
             <ComponentRef Id='binary0'/>
             <ComponentRef Id='binary1'/>
             <ComponentRef Id='binary2'/>
+            <ComponentRef Id='tsf_dll'/>
             <ComponentRef Id='icon_file'/>
-            <ComponentRef Id='tsf_dll_system'/>
             <ComponentRef Id='rime_dll'/>
             <ComponentRef Id='ApplicationShortcut'/>
             <!-- Data files harvested by heat -->
@@ -265,17 +260,17 @@
         <!-- Custom actions for TSF registration/unregistration -->
         <CustomAction Id='RegisterTSF' 
             BinaryKey='tsfreg'
-            ExeCommand='-register-only "[APPLICATIONFOLDER]icon.ico"'
-            Execute='deferred'
-            Impersonate='no'
-            Return='check'/>
+            ExeCommand='-register-user "[APPLICATIONFOLDER]winxime_tsf.dll" "[APPLICATIONFOLDER]icon.ico"'
+            Execute='immediate'
+            Impersonate='yes'
+            Return='ignore'/>
         
         <CustomAction Id='UnregisterTSF' 
             BinaryKey='tsfreg'
-            ExeCommand='-unregister-only'
-            Execute='deferred'
-            Impersonate='no'
-            Return='check'/>
+            ExeCommand='-unregister-user "[APPLICATIONFOLDER]winxime_tsf.dll"'
+            Execute='immediate'
+            Impersonate='yes'
+            Return='ignore'/>
         
         <CustomAction Id='StopServer' 
             BinaryKey='tsfreg'

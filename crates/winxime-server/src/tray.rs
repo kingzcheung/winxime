@@ -1,17 +1,18 @@
 use std::sync::Arc;
 use windows::Win32::{
-    Foundation::{HWND, LPARAM, LRESULT, WPARAM, HINSTANCE},
+    Foundation::{HWND, LPARAM, LRESULT, WPARAM, HINSTANCE, POINT},
     System::LibraryLoader::GetModuleHandleW,
     System::Registry::{RegCloseKey, RegGetValueW, RegOpenKeyExW, HKEY_CURRENT_USER, KEY_READ, RRF_RT_DWORD},
     UI::{
         Shell::{NIM_ADD, NIM_DELETE, NIM_MODIFY, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIF_STATE, NIS_HIDDEN, Shell_NotifyIconW, NOTIFYICONDATAW, NOTIFY_ICON_STATE},
         WindowsAndMessaging::{
             AppendMenuW, CreateIconFromResource, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-            LoadIconW, PostMessageW, PostQuitMessage,
-            RegisterClassW,
+            GetCursorPos, LoadIconW, PostMessageW, PostQuitMessage,
+            RegisterClassW, SetForegroundWindow, TrackPopupMenu,
             WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WM_USER, WM_SETTINGCHANGE,
             WNDCLASSW, IDI_APPLICATION, IDC_ARROW, LoadCursorW,
             MF_SEPARATOR, MF_STRING,
+            TPM_BOTTOMALIGN, TPM_LEFTALIGN,
             WS_POPUP, CW_USEDEFAULT, HMENU, HICON,
         },
     },
@@ -30,11 +31,15 @@ const WM_TRAY_HIDE: u32 = WM_USER + 103;
 const TRAY_ID: u32 = 1;
 const MENU_ID_TOGGLE: u32 = 1001;
 const MENU_ID_SETTINGS: u32 = 1002;
-const MENU_ID_QUIT: u32 = 1003;
+const MENU_ID_ABOUT: u32 = 1003;
+const MENU_ID_FEEDBACK: u32 = 1004;
+const MENU_ID_QUIT: u32 = 1005;
 
 pub enum TrayAction {
     ToggleAsciiMode,
     OpenSettings,
+    About,
+    Feedback,
     Quit,
 }
 
@@ -56,12 +61,17 @@ impl TrayIcon {
             TRAY_ON_ACTION = Some(on_action);
             
             let toggle_text: Vec<u16> = "切换中/英\0".encode_utf16().collect();
-            let settings_text: Vec<u16> = "设置\0".encode_utf16().collect();
+            let settings_text: Vec<u16> = "输入法设置\0".encode_utf16().collect();
+            let about_text: Vec<u16> = "关于\0".encode_utf16().collect();
+            let feedback_text: Vec<u16> = "反馈\0".encode_utf16().collect();
             let quit_text: Vec<u16> = "退出\0".encode_utf16().collect();
             
             let _ = AppendMenuW(menu, MF_STRING, MENU_ID_TOGGLE as usize, windows_core::PCWSTR(toggle_text.as_ptr()));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, windows_core::PCWSTR::null());
             let _ = AppendMenuW(menu, MF_STRING, MENU_ID_SETTINGS as usize, windows_core::PCWSTR(settings_text.as_ptr()));
+            let _ = AppendMenuW(menu, MF_SEPARATOR, 0, windows_core::PCWSTR::null());
+            let _ = AppendMenuW(menu, MF_STRING, MENU_ID_ABOUT as usize, windows_core::PCWSTR(about_text.as_ptr()));
+            let _ = AppendMenuW(menu, MF_STRING, MENU_ID_FEEDBACK as usize, windows_core::PCWSTR(feedback_text.as_ptr()));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, windows_core::PCWSTR::null());
             let _ = AppendMenuW(menu, MF_STRING, MENU_ID_QUIT as usize, windows_core::PCWSTR(quit_text.as_ptr()));
         }
@@ -196,10 +206,32 @@ impl TrayIcon {
     
     fn handle_tray_event(event: u32) {
         match event {
-            WM_LBUTTONUP | WM_RBUTTONUP => {
+            WM_LBUTTONUP => {
                 Self::handle_menu_command(MENU_ID_TOGGLE);
             }
+            WM_RBUTTONUP => {
+                Self::show_context_menu();
+            }
             _ => {}
+        }
+    }
+    
+    fn show_context_menu() {
+        unsafe {
+            if let (Some(hwnd), Some(menu)) = (TRAY_HWND, TRAY_MENU) {
+                let _ = SetForegroundWindow(hwnd);
+                let mut pt = POINT { x: 0, y: 0 };
+                let _ = GetCursorPos(&mut pt);
+                let _ = TrackPopupMenu(
+                    menu,
+                    TPM_BOTTOMALIGN | TPM_LEFTALIGN,
+                    pt.x,
+                    pt.y,
+                    None,
+                    hwnd,
+                    None,
+                );
+            }
         }
     }
     
@@ -209,6 +241,8 @@ impl TrayIcon {
                 match cmd {
                     MENU_ID_TOGGLE => on_action(TrayAction::ToggleAsciiMode),
                     MENU_ID_SETTINGS => on_action(TrayAction::OpenSettings),
+                    MENU_ID_ABOUT => on_action(TrayAction::About),
+                    MENU_ID_FEEDBACK => on_action(TrayAction::Feedback),
                     MENU_ID_QUIT => on_action(TrayAction::Quit),
                     _ => {}
                 }

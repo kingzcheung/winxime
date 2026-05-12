@@ -114,10 +114,14 @@ fn do_register() -> Result<()> {
     eprintln!("[Xime] DllRegisterServer: CLSID={}", cs);
     eprintln!("[Xime] DllRegisterServer: module_path={}", module_path);
 
-    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let classes = hklm.create_subkey("Software\\Classes").map_err(|e| {
+        eprintln!("[Xime] ERROR: Failed to open Software\\Classes: {}", e);
+        e
+    })?.0;
 
     eprintln!("[Xime] Step 1: Creating CLSID registry key...");
-    let (clsid_key, _) = hkcr.create_subkey(&format!("CLSID\\{}", cs)).map_err(|e| {
+    let (clsid_key, _) = classes.create_subkey(&format!("CLSID\\{}", cs)).map_err(|e| {
         eprintln!("[Xime] ERROR: Failed to create CLSID key: {}", e);
         e
     })?;
@@ -144,7 +148,7 @@ fn do_register() -> Result<()> {
             e
         })?;
 
-    let _ = hkcr.create_subkey(&format!(
+    let _ = classes.create_subkey(&format!(
         "CLSID\\{}\\Implemented Categories\\{{34745C63-B2F0-4784-8B67-5E12C8701A31}}",
         cs
     ));
@@ -162,10 +166,8 @@ fn do_unregister() {
 
     uninstall_layout();
 
-    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
-    let _ = hkcr.delete_subkey_all(&format!("CLSID\\{}", cs));
-
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let _ = hklm.delete_subkey_all(&format!("Software\\Classes\\CLSID\\{}", cs));
     let _ = hklm.delete_subkey_all(&format!("Software\\Microsoft\\CTF\\TIP\\{}", cs));
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);

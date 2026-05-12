@@ -11,7 +11,11 @@ $env:PATH += ";C:\Program Files (x86)\WiX Toolset v3.14\bin"
 
 # 1. Build release
 Write-Host "Step 1: Building release..." -ForegroundColor Yellow
-cargo build --release --quiet
+$files = Get-ChildItem -Path "crates/winxime-setup/src" -Recurse -Filter "*.rs"
+foreach ($f in $files) { $f.LastWriteTime = Get-Date }
+$files = Get-ChildItem -Path "crates/winxime-config/src" -Recurse -Filter "*.rs"
+foreach ($f in $files) { $f.LastWriteTime = Get-Date }
+cargo build --release
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed!" -ForegroundColor Red
     exit 1

@@ -16,6 +16,8 @@ anyhow = "1.0"
 windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Registry"] }
 raw-window-handle = "0.6"
 rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+serde_yaml = "0.9"
+serde = { version = "1.0", features = ["derive"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

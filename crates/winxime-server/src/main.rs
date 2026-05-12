@@ -193,6 +193,19 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
                             .ok();
                     }
                 }
+                tray::TrayAction::About => {
+                    let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\winxime-server\\winxime-server.exe"));
+                    let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\winxime-server"));
+                    let setup_path = exe_dir.join("winxime-setup.exe");
+                    let _ = std::process::Command::new(&setup_path)
+                        .arg("--about")
+                        .spawn();
+                }
+                tray::TrayAction::Feedback => {
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/C", "start", "https://github.com/kingzcheung/winxime/issues"])
+                        .spawn();
+                }
                 tray::TrayAction::Quit => {
                     IpcClient::shutdown_server();
                 }

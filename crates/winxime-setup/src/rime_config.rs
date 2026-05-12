@@ -3,6 +3,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
 use std::ptr;
 use std::sync::Once;
+use serde::Deserialize;
 
 static RIME_INIT: Once = Once::new();
 
@@ -478,4 +479,378 @@ impl Drop for SchemaManager {
 pub struct SchemaInfo {
     pub schema_id: String,
     pub name: String,
+}
+
+pub struct SchemaConfigManager {
+    api: *const RimeLeversApi,
+    settings: *mut RimeCustomSettings,
+    schema_id: String,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SpellerConfig {
+    pub max_code_length: Option<i32>,
+    pub auto_select: Option<bool>,
+    pub auto_clear: Option<String>,
+    pub alphabet: Option<String>,
+    pub delimiter: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TranslatorConfig {
+    pub enable_charset_filter: Option<bool>,
+    pub enable_completion: Option<bool>,
+    pub enable_sentence: Option<bool>,
+    pub enable_user_dict: Option<bool>,
+    pub enable_encoder: Option<bool>,
+    pub encode_commit_history: Option<bool>,
+    pub max_phrase_length: Option<i32>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ReverseLookupConfig {
+    pub prefix: Option<String>,
+    pub suffix: Option<String>,
+    pub tips: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TraditionConfig {
+    pub opencc_config: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SchemaConfig {
+    pub speller: SpellerConfig,
+    pub translator: TranslatorConfig,
+    pub reverse_lookup: ReverseLookupConfig,
+    pub tradition: TraditionConfig,
+}
+
+impl SchemaConfigManager {
+    pub fn new(schema_id: &str) -> Result<Self, String> {
+        init_rime_deployer()?;
+        
+        let api = rime_get_levers_api().ok_or("Levers API not available")?;
+        
+        unsafe {
+            let init_func = (*api).custom_settings_init.ok_or("custom_settings_init not available")?;
+            let schema_id_c = CString::new(schema_id).map_err(|_| "Invalid schema_id")?;
+            let generator_id = CString::new("Xime::SchemaConfigManager").map_err(|_| "Failed to create generator_id")?;
+            
+            let settings = init_func(schema_id_c.as_ptr(), generator_id.as_ptr());
+            if settings.is_null() {
+                return Err("Failed to initialize schema settings".to_string());
+            }
+            
+            let load_func = (*api).load_settings.ok_or("load_settings not available")?;
+            load_func(settings);
+            
+            Ok(Self { api, settings, schema_id: schema_id.to_string() })
+        }
+    }
+    
+    fn get_raw_config(&self) -> Option<RimeConfig> {
+        unsafe {
+            let get_config = (*self.api).settings_get_config?;
+            let mut config = RimeConfig { ptr: ptr::null_mut() };
+            if get_config(self.settings, &mut config) == FALSE {
+                return None;
+            }
+            Some(config)
+        }
+    }
+    
+    fn get_patch_value_string(&self, key: &str) -> Option<String> {
+        let (_, user_data_dir) = get_data_dirs();
+        let custom_yaml_path = user_data_dir.join(format!("{}.custom.yaml", self.schema_id));
+        
+        if !custom_yaml_path.exists() {
+            return None;
+        }
+        
+        let content = std::fs::read_to_string(&custom_yaml_path).ok()?;
+        
+        #[derive(Deserialize)]
+        struct CustomYaml {
+            patch: Option<serde_yaml::Value>,
+        }
+        
+        let yaml: CustomYaml = serde_yaml::from_str(&content).ok()?;
+        let patch = yaml.patch?;
+        
+        if let Some(value) = patch.get(key) {
+            if let serde_yaml::Value::String(s) = value {
+                return Some(s.clone());
+            } else if let serde_yaml::Value::Bool(b) = value {
+                return Some(b.to_string());
+            } else if let serde_yaml::Value::Number(n) = value {
+                return Some(n.to_string());
+            }
+        }
+        
+        let key_parts: Vec<&str> = key.split('/').collect();
+        if key_parts.len() > 1 {
+            let mut current = patch;
+            for part in &key_parts {
+                if let Some(next) = current.get(part) {
+                    current = next.clone();
+                } else {
+                    return None;
+                }
+            }
+            if let serde_yaml::Value::String(s) = current {
+                return Some(s);
+            } else if let serde_yaml::Value::Bool(b) = current {
+                return Some(b.to_string());
+            } else if let serde_yaml::Value::Number(n) = current {
+                return Some(n.to_string());
+            }
+        }
+        
+        None
+    }
+    
+    fn get_patch_value_int(&self, key: &str) -> Option<i32> {
+        let (_, user_data_dir) = get_data_dirs();
+        let custom_yaml_path = user_data_dir.join(format!("{}.custom.yaml", self.schema_id));
+        
+        if !custom_yaml_path.exists() {
+            return None;
+        }
+        
+        let content = std::fs::read_to_string(&custom_yaml_path).ok()?;
+        
+        #[derive(Deserialize)]
+        struct CustomYaml {
+            patch: Option<serde_yaml::Value>,
+        }
+        
+        let yaml: CustomYaml = serde_yaml::from_str(&content).ok()?;
+        let patch = yaml.patch?;
+        
+        if let Some(value) = patch.get(key) {
+            if let serde_yaml::Value::Number(n) = value {
+                return n.as_i64().map(|v| v as i32);
+            }
+        }
+        
+        let key_parts: Vec<&str> = key.split('/').collect();
+        if key_parts.len() > 1 {
+            let mut current = patch;
+            for part in &key_parts {
+                if let Some(next) = current.get(part) {
+                    current = next.clone();
+                } else {
+                    return None;
+                }
+            }
+            if let serde_yaml::Value::Number(n) = current {
+                return n.as_i64().map(|v| v as i32);
+            }
+        }
+        
+        None
+    }
+    
+    fn get_patch_value_bool(&self, key: &str) -> Option<bool> {
+        let (_, user_data_dir) = get_data_dirs();
+        let custom_yaml_path = user_data_dir.join(format!("{}.custom.yaml", self.schema_id));
+        
+        if !custom_yaml_path.exists() {
+            return None;
+        }
+        
+        let content = std::fs::read_to_string(&custom_yaml_path).ok()?;
+        
+        #[derive(Deserialize)]
+        struct CustomYaml {
+            patch: Option<serde_yaml::Value>,
+        }
+        
+        let yaml: CustomYaml = serde_yaml::from_str(&content).ok()?;
+        let patch = yaml.patch?;
+        
+        if let Some(value) = patch.get(key) {
+            if let serde_yaml::Value::Bool(b) = value {
+                return Some(*b);
+            }
+        }
+        
+        let key_parts: Vec<&str> = key.split('/').collect();
+        if key_parts.len() > 1 {
+            let mut current = patch;
+            for part in &key_parts {
+                if let Some(next) = current.get(part) {
+                    current = next.clone();
+                } else {
+                    return None;
+                }
+            }
+            if let serde_yaml::Value::Bool(b) = current {
+                return Some(b);
+            }
+        }
+        
+        None
+    }
+    
+    fn get_base_value_string(&self, key: &str) -> Option<String> {
+        unsafe {
+            let rime_api = rime_get_api()?;
+            let get_cstring = (*rime_api).config_get_cstring?;
+            
+            let key_c = CString::new(key).ok()?;
+            let mut raw_config = self.get_raw_config()?;
+            
+            let value_ptr = get_cstring(&mut raw_config, key_c.as_ptr());
+            if value_ptr.is_null() {
+                return None;
+            }
+            
+            CStr::from_ptr(value_ptr).to_str().ok().map(|s| s.to_owned())
+        }
+    }
+    
+    fn get_base_value_int(&self, key: &str) -> Option<i32> {
+        unsafe {
+            let rime_api = rime_get_api()?;
+            let get_int = (*rime_api).config_get_int?;
+            
+            let key_c = CString::new(key).ok()?;
+            let mut raw_config = self.get_raw_config()?;
+            
+            let mut value: c_int = 0;
+            if get_int(&mut raw_config, key_c.as_ptr(), &mut value) == FALSE {
+                return None;
+            }
+            
+            Some(value)
+        }
+    }
+    
+    fn get_base_value_bool(&self, key: &str) -> Option<bool> {
+        unsafe {
+            let rime_api = rime_get_api()?;
+            let get_bool = (*rime_api).config_get_bool?;
+            
+            let key_c = CString::new(key).ok()?;
+            let mut raw_config = self.get_raw_config()?;
+            
+            let mut value: Bool = FALSE;
+            if get_bool(&mut raw_config, key_c.as_ptr(), &mut value) == FALSE {
+                return None;
+            }
+            
+            Some(value != FALSE)
+        }
+    }
+    
+    fn get_merged_string(&self, key: &str) -> Option<String> {
+        self.get_patch_value_string(key).or_else(|| self.get_base_value_string(key))
+    }
+    
+    fn get_merged_int(&self, key: &str) -> Option<i32> {
+        self.get_patch_value_int(key).or_else(|| self.get_base_value_int(key))
+    }
+    
+    fn get_merged_bool(&self, key: &str) -> Option<bool> {
+        self.get_patch_value_bool(key).or_else(|| self.get_base_value_bool(key))
+    }
+    
+    pub fn get_config(&self) -> SchemaConfig {
+        SchemaConfig {
+            speller: SpellerConfig {
+                max_code_length: self.get_merged_int("speller/max_code_length"),
+                auto_select: self.get_merged_bool("speller/auto_select"),
+                auto_clear: self.get_merged_string("speller/auto_clear"),
+                alphabet: self.get_merged_string("speller/alphabet"),
+                delimiter: self.get_merged_string("speller/delimiter"),
+            },
+            translator: TranslatorConfig {
+                enable_charset_filter: self.get_merged_bool("translator/enable_charset_filter"),
+                enable_completion: self.get_merged_bool("translator/enable_completion"),
+                enable_sentence: self.get_merged_bool("translator/enable_sentence"),
+                enable_user_dict: self.get_merged_bool("translator/enable_user_dict"),
+                enable_encoder: self.get_merged_bool("translator/enable_encoder"),
+                encode_commit_history: self.get_merged_bool("translator/encode_commit_history"),
+                max_phrase_length: self.get_merged_int("translator/max_phrase_length"),
+            },
+            reverse_lookup: ReverseLookupConfig {
+                prefix: self.get_merged_string("reverse_lookup/prefix"),
+                suffix: self.get_merged_string("reverse_lookup/suffix"),
+                tips: self.get_merged_string("reverse_lookup/tips"),
+            },
+            tradition: TraditionConfig {
+                opencc_config: self.get_merged_string("tradition/opencc_config"),
+            },
+        }
+    }
+    
+    pub fn set_string(&self, key: &str, value: &str) -> Result<(), String> {
+        unsafe {
+            let customize_string = (*self.api).customize_string.ok_or("customize_string not available")?;
+            let key_c = CString::new(key).map_err(|_| "Failed to create key string")?;
+            let value_c = CString::new(value).map_err(|_| "Failed to create value string")?;
+            
+            if customize_string(self.settings, key_c.as_ptr(), value_c.as_ptr()) == FALSE {
+                return Err(format!("Failed to set {} = {}", key, value));
+            }
+            
+            Ok(())
+        }
+    }
+    
+    pub fn set_int(&self, key: &str, value: i32) -> Result<(), String> {
+        unsafe {
+            let customize_int = (*self.api).customize_int.ok_or("customize_int not available")?;
+            let key_c = CString::new(key).map_err(|_| "Failed to create key string")?;
+            
+            if customize_int(self.settings, key_c.as_ptr(), value) == FALSE {
+                return Err(format!("Failed to set {} = {}", key, value));
+            }
+            
+            Ok(())
+        }
+    }
+    
+    pub fn set_bool(&self, key: &str, value: bool) -> Result<(), String> {
+        unsafe {
+            let customize_bool = (*self.api).customize_bool.ok_or("customize_bool not available")?;
+            let key_c = CString::new(key).map_err(|_| "Failed to create key string")?;
+            let bool_value = if value { TRUE } else { FALSE };
+            
+            if customize_bool(self.settings, key_c.as_ptr(), bool_value) == FALSE {
+                return Err(format!("Failed to set {} = {}", key, value));
+            }
+            
+            Ok(())
+        }
+    }
+    
+    pub fn save(&self) -> Result<(), String> {
+        unsafe {
+            let save_settings = (*self.api).save_settings.ok_or("save_settings not available")?;
+            
+            if save_settings(self.settings) == FALSE {
+                return Err("Failed to save schema settings".to_string());
+            }
+            
+            Ok(())
+        }
+    }
+    
+    pub fn schema_id(&self) -> &str {
+        &self.schema_id
+    }
+}
+
+impl Drop for SchemaConfigManager {
+    fn drop(&mut self) {
+        unsafe {
+            if let Some(destroy_settings) = (*self.api).custom_settings_destroy {
+                destroy_settings(self.settings);
+            }
+        }
+    }
 }

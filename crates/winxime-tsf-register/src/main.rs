@@ -191,13 +191,15 @@ fn main() -> Result<()> {
 
         let exe_path = env::current_exe().expect("无法获取exe路径");
         let exe_dir = exe_path.parent().expect("无法获取exe目录");
-        let dll_path = exe_dir.join("winxime_tsf.dll");
-        let dll_path_str = dll_path.to_string_lossy().to_string();
 
         if env::args().len() == 1 {
             println!("Usage:");
-            println!("  winxime-tsf-register -install         完整安装(注册DLL+注册Profile+启用)");
+            println!("  winxime-tsf-register -install         完整安装(复制DLL到System32+注册)");
             println!("  winxime-tsf-register -uninstall       完整卸载");
+            println!("  winxime-tsf-register -register-user <DllPath> <IconPath>  用户级注册(不复制DLL)");
+            println!("  winxime-tsf-register -unregister-user <DllPath>           用户级卸载");
+            println!("  winxime-tsf-register -register-only <IconPath>            仅注册Profile(DLL已在System32)");
+            println!("  winxime-tsf-register -unregister-only                    仅注销Profile");
             println!("  winxime-tsf-register -r <IconPath>    注册TSF Profile");
             println!("  winxime-tsf-register -dll             注册DLL");
             println!("  winxime-tsf-register -i               启用输入法");
@@ -209,6 +211,63 @@ fn main() -> Result<()> {
         let arg1 = env::args().nth(1).expect("缺少参数");
 
         match arg1.as_str() {
+            "-register-user" => {
+                let dll_path = env::args().nth(2)
+                    .map(|p| p.trim_matches('"').to_string())
+                    .expect("缺少 DLL 路径参数");
+                let icon_path = env::args().nth(3)
+                    .map(|p| p.trim_matches('"').to_string())
+                    .expect("缺少 Icon 路径参数");
+                
+                println!("Step 1: Registering DLL from user directory...");
+                println!("  DLL path: {}", dll_path);
+                match register_dll(&dll_path) {
+                    Ok(_) => println!("  DLL registered"),
+                    Err(e) => {
+                        println!("  DLL registration FAILED: {:?}", e);
+                        process::exit(1);
+                    }
+                }
+
+                println!("Step 2: Registering TSF Profile...");
+                println!("  Icon path: {}", icon_path);
+                match register(icon_path) {
+                    Ok(_) => println!("  Profile registered"),
+                    Err(e) => {
+                        println!("  Profile registration FAILED: {:?}", e);
+                        process::exit(1);
+                    }
+                }
+
+                println!("Step 3: Enabling input method...");
+                enable();
+                println!("  Enabled");
+
+                println!("User-level registration complete!");
+            }
+            "-unregister-user" => {
+                let dll_path = env::args().nth(2)
+                    .map(|p| p.trim_matches('"').to_string())
+                    .expect("缺少 DLL 路径参数");
+                
+                println!("Step 1: Stopping server...");
+                stop();
+
+                println!("Step 2: Unregistering TSF Profile...");
+                match unregister() {
+                    Ok(_) => println!("  Profile unregistered"),
+                    Err(e) => println!("  Profile unregister failed: {:?}", e),
+                }
+
+                println!("Step 3: Unregistering DLL...");
+                println!("  DLL path: {}", dll_path);
+                match unregister_dll(&dll_path) {
+                    Ok(_) => println!("  DLL unregistered"),
+                    Err(e) => println!("  DLL unregister failed: {:?}", e),
+                }
+
+                println!("User-level unregistration complete!");
+            }
             "-install" => {
                 println!("Step 1: Copying DLL to system directory...");
                 let source_dll = exe_dir.join("winxime_tsf.dll");
@@ -336,6 +395,8 @@ fn main() -> Result<()> {
                 }
             }
             "-dll" => {
+                let dll_path = exe_dir.join("winxime_tsf.dll");
+                let dll_path_str = dll_path.to_string_lossy().to_string();
                 println!("Registering DLL: {}", dll_path_str);
                 match register_dll(&dll_path_str) {
                     Ok(_) => println!("DLL registered successfully"),
