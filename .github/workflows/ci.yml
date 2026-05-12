@@ -116,7 +116,7 @@ jobs:
           $version = "${{ github.ref_name }}"
           if ($version -notmatch "^v") { $version = "0.1.0" }
           else { $version = $version.Substring(1) }
-          candle -arch x64 crates\winxime-server\wix\main.wxs crates\winxime-server\wix\data.wxs -ext WixUIExtension -ext WixUtilExtension -dCargoTargetBinDir=target\release -dDataDir=target\release\config -dVersion=$version -out target\wix\
+          candle -arch x64 crates\winxime-server\wix\main.wxs crates\winxime-server\wix\data.wxs -ext WixUIExtension -ext WixUtilExtension -dCargoTargetBinDir=target\release -dDataDir=target\release\config -dVersion="$version" -out target\wix\
           light target\wix\main.wixobj target\wix\data.wixobj -ext WixUIExtension -ext WixUtilExtension -cultures:zh-CN -loc crates\winxime-server\wix\zh-cn.wxl -out target\wix\xime-$version.msi
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
