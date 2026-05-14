@@ -7066,11 +7066,11 @@ dependencies = [
 
 [[package]]
 name = "winxime-core"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "winxime-ipc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "interprocess",
  "serde",
@@ -7079,14 +7079,14 @@ dependencies = [
 
 [[package]]
 name = "winxime-rime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "librime-sys",
 ]
 
 [[package]]
 name = "winxime-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "interprocess",
  "librime-sys",
@@ -7105,9 +7105,10 @@ dependencies = [
 
 [[package]]
 name = "winxime-setup"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
+ "flate2",
  "gpui-platform-gpui-unofficial",
  "gpui-unofficial",
  "librime-sys",
@@ -7115,6 +7116,8 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_yaml",
+ "tar",
+ "ureq",
  "windows 0.61.3",
  "winres",
  "winxime-config",
@@ -7123,7 +7126,7 @@ dependencies = [
 
 [[package]]
 name = "winxime-tsf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "librime-sys",
  "time",
@@ -7136,7 +7139,7 @@ dependencies = [
 
 [[package]]
 name = "winxime-tsf-register"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "windows 0.62.2",
  "windows-core 0.62.2",

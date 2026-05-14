@@ -15,7 +15,7 @@ members = [
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
-authors = ["winxime team"]
+authors = ["Kor1 <kingzcheung@gmail.com>"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/ximeiorg/winxime"
 

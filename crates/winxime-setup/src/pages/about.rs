@@ -79,7 +79,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 )
                 .child(render_info_row("版本".to_string(), env!("CARGO_PKG_VERSION").to_string(), &colors))
                 .child(render_info_row("作者".to_string(), env!("CARGO_PKG_AUTHORS").to_string(), &colors))
-                .child(render_link_row("仓库".to_string(), "https://github.com/kingzcheung/winxime".to_string(), &colors))
+                .child(render_link_row("仓库".to_string(), "https://github.com/ximeiorg/winxime".to_string(), &colors))
                 .child(render_info_row("许可".to_string(), "GPL-3.0".to_string(), &colors))
         )
         .child(

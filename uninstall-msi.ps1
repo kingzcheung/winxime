@@ -5,22 +5,28 @@ Write-Host "Uninstalling Xime..." -ForegroundColor Yellow
 # 1. Stop server
 Write-Host "Step 1: Stopping server..." -ForegroundColor Yellow
 Get-Process -Name "winxime-server" -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name "winxime-setup" -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 2
 
-# 2. Uninstall MSI using registry lookup
+# 2. Uninstall all MSI products
 Write-Host "Step 2: Uninstalling MSI..." -ForegroundColor Yellow
-$upgradeCode = "{C82D0C18-FE61-4F32-BB15-1D87BC5912A2}"
 $uninstallKeys = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue
-$ximeProduct = $uninstallKeys | Where-Object { $_.DisplayName -eq "Xime" }
+$ximeProducts = $uninstallKeys | Where-Object { $_.DisplayName -eq "Xime" }
 
-if ($ximeProduct) {
-    Write-Host "  Found: $($ximeProduct.DisplayName) ($($ximeProduct.DisplayVersion))" -ForegroundColor Gray
-    $uninstallString = $ximeProduct.UninstallString
-    if ($uninstallString -match "msiexec") {
-        $productCode = ($uninstallString -split " ")[1]
-        Write-Host "  Uninstalling with msiexec..." -ForegroundColor Gray
-        Start-Process msiexec -ArgumentList "/x $productCode /qn" -Wait
-        Start-Sleep -Seconds 3
+if ($ximeProducts) {
+    Write-Host "  Found: $($ximeProducts.DisplayName -join ' ') ($($ximeProducts.DisplayVersion -join ' '))" -ForegroundColor Gray
+    foreach ($product in $ximeProducts) {
+        $uninstallString = $product.UninstallString
+        if ($uninstallString -match "msiexec") {
+            $productCode = ($uninstallString -split " ")[1]
+            Write-Host "  Uninstalling $productCode..." -ForegroundColor Gray
+            $proc = Start-Process msiexec -ArgumentList "/x $productCode /passive /norestart" -PassThru
+            if (-not $proc.WaitForExit(30000)) {
+                Write-Host "  Timeout, killing process..." -ForegroundColor Yellow
+                $proc.Kill()
+            }
+            Start-Sleep -Seconds 2
+        }
     }
 } else {
     Write-Host "  Xime not found in registry" -ForegroundColor Gray
@@ -40,6 +46,14 @@ reg delete "HKLM\SOFTWARE\Classes\AppID\$clsid" /f 2>$null
 reg delete "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v XimeServer /f 2>$null
 reg delete "HKCU\SOFTWARE\Microsoft\CTF\TIP\$clsid" /f 2>$null
 reg delete "HKCU\Software\Xime" /f 2>$null
+
+# Remove stale MSI registry entries
+$staleProducts = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq "Xime" }
+foreach ($stale in $staleProducts) {
+    $guid = $stale.PSChildName
+    Write-Host "  Removing stale registry entry: $guid" -ForegroundColor Gray
+    Remove-Item "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$guid" -Force -ErrorAction SilentlyContinue
+}
 
 # 5. Verify cleanup
 Write-Host ""

@@ -7,7 +7,18 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
     let schemas_loaded = cx.read_entity(&settings, |state, _| state.schemas_loaded);
     
     if !schemas_loaded {
+        let deploy_result = crate::rime_config::deploy_all();
         cx.update_entity(&settings, |state: &mut SettingsState, cx| {
+            match &deploy_result {
+                Ok(_) => {
+                    state.deploy_message = Some("部署完成".to_string());
+                }
+                Err(e) => {
+                    state.deploy_message = Some(format!("部署失败: {}", e));
+                    eprintln!("Deploy failed: {}", e);
+                }
+            }
+            
             if let Ok(manager) = crate::rime_config::SchemaManager::new() {
                 let schemas = manager.get_schema_list();
                 let selected_schema = manager.get_selected_schema()
@@ -18,13 +29,13 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 state.input_schema.available_schemas = schemas;
                 state.input_schema.selected_schema = selected_schema;
                 state.schemas_loaded = true;
-                cx.notify();
             }
+            cx.notify();
         });
     }
     
     let config_loaded = cx.read_entity(&settings, |state, _| state.input_schema.config_loaded);
-    if !config_loaded {
+    if !config_loaded && schemas_loaded {
         cx.update_entity(&settings, |state: &mut SettingsState, cx| {
             state.load_schema_config(cx);
         });

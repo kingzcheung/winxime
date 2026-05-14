@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Fragment>
+        <DirectoryRef Id="ResourcesFolder" />
+    </Fragment>
+    <Fragment>
+        <ComponentGroup Id="ResourcesFiles">
+            <Component Id="cmp8A87009ED609CD479F7BDB005EC596AC" Directory="ResourcesFolder" Guid="*">
+                <File Id="fil937AE4E822B823419465CF039FB884CA" KeyPath="yes" Source="$(var.ResourcesDir)\xime.yaml" />
+            </Component>
+        </ComponentGroup>
+    </Fragment>
+</Wix>

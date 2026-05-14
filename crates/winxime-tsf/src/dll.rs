@@ -114,9 +114,14 @@ fn do_register() -> Result<()> {
     eprintln!("[Xime] DllRegisterServer: CLSID={}", cs);
     eprintln!("[Xime] DllRegisterServer: module_path={}", module_path);
 
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let classes = hkcu.create_subkey("Software\\Classes").map_err(|e| {
-        eprintln!("[Xime] ERROR: Failed to open Software\\Classes: {}", e);
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let software = hklm.create_subkey("Software").map_err(|e| {
+        eprintln!("[Xime] ERROR: Failed to open HKLM\\Software: {}", e);
+        e
+    })?.0;
+    
+    let classes = software.create_subkey("Classes").map_err(|e| {
+        eprintln!("[Xime] ERROR: Failed to open HKLM\\Software\\Classes: {}", e);
         e
     })?.0;
 
@@ -166,7 +171,7 @@ fn do_unregister() {
 
     uninstall_layout();
 
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let _ = hkcu.delete_subkey_all(&format!("Software\\Classes\\CLSID\\{}", cs));
-    let _ = hkcu.delete_subkey_all(&format!("Software\\Microsoft\\CTF\\TIP\\{}", cs));
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let _ = hklm.delete_subkey_all(&format!("Software\\Classes\\CLSID\\{}", cs));
+    let _ = hklm.delete_subkey_all(&format!("Software\\Microsoft\\CTF\\TIP\\{}", cs));
 }

@@ -196,6 +196,8 @@ fn main() -> Result<()> {
             println!("Usage:");
             println!("  winxime-tsf-register -install         完整安装(复制DLL到System32+注册)");
             println!("  winxime-tsf-register -uninstall       完整卸载");
+            println!("  winxime-tsf-register -register <DllPath> <IconPath>  HKLM注册(不复制DLL,需要管理员权限)");
+            println!("  winxime-tsf-register -unregister <DllPath>           HKLM卸载(需要管理员权限)");
             println!("  winxime-tsf-register -register-user <DllPath> <IconPath>  用户级注册(不复制DLL)");
             println!("  winxime-tsf-register -unregister-user <DllPath>           用户级卸载");
             println!("  winxime-tsf-register -register-only <IconPath>            仅注册Profile(DLL已在System32)");
@@ -211,6 +213,63 @@ fn main() -> Result<()> {
         let arg1 = env::args().nth(1).expect("缺少参数");
 
         match arg1.as_str() {
+            "-register" => {
+                let dll_path = env::args().nth(2)
+                    .map(|p| p.trim_matches('"').to_string())
+                    .expect("缺少 DLL 路径参数");
+                let icon_path = env::args().nth(3)
+                    .map(|p| p.trim_matches('"').to_string())
+                    .expect("缺少 Icon 路径参数");
+                
+                println!("Step 1: Registering DLL to HKLM...");
+                println!("  DLL path: {}", dll_path);
+                match register_dll(&dll_path) {
+                    Ok(_) => println!("  DLL registered"),
+                    Err(e) => {
+                        println!("  DLL registration FAILED: {:?}", e);
+                        process::exit(1);
+                    }
+                }
+
+                println!("Step 2: Registering TSF Profile...");
+                println!("  Icon path: {}", icon_path);
+                match register(icon_path) {
+                    Ok(_) => println!("  Profile registered"),
+                    Err(e) => {
+                        println!("  Profile registration FAILED: {:?}", e);
+                        process::exit(1);
+                    }
+                }
+
+                println!("Step 3: Enabling input method...");
+                enable();
+                println!("  Enabled");
+
+                println!("HKLM registration complete!");
+            }
+            "-unregister" => {
+                let dll_path = env::args().nth(2)
+                    .map(|p| p.trim_matches('"').to_string())
+                    .expect("缺少 DLL 路径参数");
+                
+                println!("Step 1: Stopping server...");
+                stop();
+
+                println!("Step 2: Unregistering TSF Profile...");
+                match unregister() {
+                    Ok(_) => println!("  Profile unregistered"),
+                    Err(e) => println!("  Profile unregister failed: {:?}", e),
+                }
+
+                println!("Step 3: Unregistering DLL...");
+                println!("  DLL path: {}", dll_path);
+                match unregister_dll(&dll_path) {
+                    Ok(_) => println!("  DLL unregistered"),
+                    Err(e) => println!("  DLL unregister failed: {:?}", e),
+                }
+
+                println!("HKLM unregistration complete!");
+            }
             "-register-user" => {
                 let dll_path = env::args().nth(2)
                     .map(|p| p.trim_matches('"').to_string())

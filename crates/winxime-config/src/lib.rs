@@ -6,8 +6,8 @@ const DEFAULT_USER_CONFIG_URL: &str =
     "https://github.com/kingzcheung/rime-wubi/archive/refs/tags/1.0.0.tar.gz";
 const REQUIRED_USER_CONFIGS: &[&str] = &[
     "default.custom.yaml",
-    "wubi86_jidian.schema.yaml",
-    "wubi86_jidian.dict.yaml",
+    "wubi86.schema.yaml",
+    "wubi86.dict.yaml",
 ];
 
 const REQUIRED_SHARED_CONFIGS: &[&str] = &["default.yaml", "essay.txt"];
@@ -35,7 +35,7 @@ impl XimeConfig {
         #[cfg(target_os = "windows")]
         {
             std::env::var("APPDATA")
-                .map(|p| PathBuf::from(p).join("Xime"))
+                .map(|p| PathBuf::from(p).join("Xime").join("rime"))
                 .unwrap_or_else(|_| PathBuf::from("."))
         }
 

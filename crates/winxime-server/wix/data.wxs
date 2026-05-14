@@ -5,44 +5,26 @@
     </Fragment>
     <Fragment>
         <ComponentGroup Id="DataFiles">
+            <Component Id="cmpC3715AF6CC3D44412CB534C13B8D9FA3" Directory="DataFolder" Guid="*">
+                <File Id="filA0589574DA8004C37B7170D236DB4F43" KeyPath="yes" Source="$(var.DataDir)\cangjie5.dict.yaml" />
+            </Component>
+            <Component Id="cmp656563DCE2D386C13E3C2246944B4D46" Directory="DataFolder" Guid="*">
+                <File Id="filE302669F8DDBE6DD5BD4630CDC255F52" KeyPath="yes" Source="$(var.DataDir)\cangjie5.schema.yaml" />
+            </Component>
             <Component Id="cmp3304267FB8B3418D77D6E2BE16381AE3" Directory="DataFolder" Guid="*">
                 <File Id="fil143568CB34E95AE39C2E63C857CAD883" KeyPath="yes" Source="$(var.DataDir)\default.yaml" />
             </Component>
             <Component Id="cmpAFE55EF47E9E7846E6EA9AD6AE6D89F1" Directory="DataFolder" Guid="*">
                 <File Id="filAC56CAD55002C57BE7F387B7CE51EF35" KeyPath="yes" Source="$(var.DataDir)\essay.txt" />
             </Component>
-            <Component Id="cmpF1CD123493D15A05681889BF1C2A0751" Directory="DataFolder" Guid="*">
-                <File Id="fil4125772BF9527CBFF5E60B203C84E839" KeyPath="yes" Source="$(var.DataDir)\pinyin_simp.dict.yaml" />
+            <Component Id="cmpE0ABC2ED196421F03DD15019BAF86A58" Directory="DataFolder" Guid="*">
+                <File Id="filC2A8084974AEB5D7B3C96B6C375BDC37" KeyPath="yes" Source="$(var.DataDir)\luna_pinyin.dict.yaml" />
             </Component>
-            <Component Id="cmpD058667ED1CB9BD7188AD7345C3D339E" Directory="DataFolder" Guid="*">
-                <File Id="fil48FB9052B5B6A5A0BA5A6CE2249EC8F9" KeyPath="yes" Source="$(var.DataDir)\pinyin_simp.schema.yaml" />
+            <Component Id="cmp3FA154C3E251066CA388A3A9A81548C2" Directory="DataFolder" Guid="*">
+                <File Id="fil753191E90511CAEDD89A788DCB775608" KeyPath="yes" Source="$(var.DataDir)\luna_pinyin.schema.yaml" />
             </Component>
             <Component Id="cmpDF69A01DDAD3644061A97C62E354F9D6" Directory="DataFolder" Guid="*">
                 <File Id="fil8B03148D486F7393FC39628DFF6A60AA" KeyPath="yes" Source="$(var.DataDir)\symbols.yaml" />
-            </Component>
-            <Component Id="cmp8DE53E41320BDC8C6A3C672652F39B09" Directory="DataFolder" Guid="*">
-                <File Id="filD0D4AAC94A96762B6899B6EBDDD564A2" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian.dict.yaml" />
-            </Component>
-            <Component Id="cmp54A848B49D855F6428E800EA65E3819A" Directory="DataFolder" Guid="*">
-                <File Id="fil1380D4E13CFBB2263A8319E2F321415D" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian.schema.yaml" />
-            </Component>
-            <Component Id="cmp6D8B2B4B0FDD2B26EA182C957C97B4C1" Directory="DataFolder" Guid="*">
-                <File Id="fil4887C3191D53E34BB69762AE3748EA2E" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_extra.dict.yaml" />
-            </Component>
-            <Component Id="cmp31599D3111F2E96F5FA0B53BCCBF60B9" Directory="DataFolder" Guid="*">
-                <File Id="fil89CCB6F713C70C205ACD1307D2643A85" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_pinyin.schema.yaml" />
-            </Component>
-            <Component Id="cmpBEA5ACBA82765A92492C78A6CFE597EA" Directory="DataFolder" Guid="*">
-                <File Id="fil2E0AB3800D11F8CBB2B4263293FDD356" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_trad.schema.yaml" />
-            </Component>
-            <Component Id="cmp41A918D829B44D6A7EA1C920D61385D2" Directory="DataFolder" Guid="*">
-                <File Id="fil8CB218F4F2C2A4980F4D0F57B2B5D2F9" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_trad_pinyin.schema.yaml" />
-            </Component>
-            <Component Id="cmp75DA613D78D3FEF10E046BF5EEF67A75" Directory="DataFolder" Guid="*">
-                <File Id="fil8D8BE6B407000398863C847107950CE2" KeyPath="yes" Source="$(var.DataDir)\wubi86_jidian_user.dict.yaml" />
-            </Component>
-            <Component Id="cmp4CBA29225ADD963EA104239325E14FDF" Directory="DataFolder" Guid="*">
-                <File Id="fil6B0AB6DE5E04A948D2E696221F8E1A27" KeyPath="yes" Source="$(var.DataDir)\xime.yaml" />
             </Component>
         </ComponentGroup>
     </Fragment>

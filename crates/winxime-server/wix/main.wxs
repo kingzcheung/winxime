@@ -180,9 +180,13 @@
                             KeyPath='yes'/>
                     </Component>
                     
-                    <!-- Config folder - use heat harvested files -->
-                    <Directory Id='DataFolder' Name='config'>
+                    <!-- Data folder (librime/data/minimal) - use heat harvested files -->
+                    <Directory Id='DataFolder' Name='data'>
                         <Directory Id='DataOpencc' Name='opencc'/>
+                    </Directory>
+                    
+                    <!-- Resources folder - use heat harvested files -->
+                    <Directory Id='ResourcesFolder' Name='resources'>
                     </Directory>
                 </Directory>
             </Directory>
@@ -213,6 +217,8 @@
             <ComponentRef Id='ApplicationShortcut'/>
             <!-- Data files harvested by heat -->
             <ComponentGroupRef Id='DataFiles'/>
+            <!-- Resources files harvested by heat -->
+            <ComponentGroupRef Id='ResourcesFiles'/>
 
             <Feature
                 Id='Environment'
@@ -263,16 +269,16 @@
         <!-- Custom actions for TSF registration/unregistration -->
         <CustomAction Id='RegisterTSF' 
             BinaryKey='tsfreg'
-            ExeCommand='-register-user "[APPLICATIONFOLDER]winxime_tsf.dll" "[APPLICATIONFOLDER]icon.ico"'
-            Execute='immediate'
-            Impersonate='yes'
+            ExeCommand='-register "[APPLICATIONFOLDER]winxime_tsf.dll" "[APPLICATIONFOLDER]icon.ico"'
+            Execute='deferred'
+            Impersonate='no'
             Return='ignore'/>
         
         <CustomAction Id='UnregisterTSF' 
             BinaryKey='tsfreg'
-            ExeCommand='-unregister-user "[APPLICATIONFOLDER]winxime_tsf.dll"'
-            Execute='immediate'
-            Impersonate='yes'
+            ExeCommand='-unregister "[APPLICATIONFOLDER]winxime_tsf.dll"'
+            Execute='deferred'
+            Impersonate='no'
             Return='ignore'/>
         
         <CustomAction Id='StopServer' 
@@ -291,9 +297,9 @@
         
         <InstallExecuteSequence>
             <Custom Action='StopServer' Before='InstallValidate' />
-            <Custom Action='RegisterTSF' After='InstallFiles'>NOT Installed</Custom>
-            <Custom Action='StartServer' After='RegisterTSF'>NOT Installed</Custom>
-            <Custom Action='UnregisterTSF' Before='RemoveFiles'>Installed AND REMOVE="ALL"</Custom>
+            <Custom Action='RegisterTSF' After='InstallFiles'>NOT REMOVE</Custom>
+            <Custom Action='StartServer' After='RegisterTSF'>NOT REMOVE</Custom>
+            <Custom Action='UnregisterTSF' Before='RemoveFiles'>REMOVE="ALL"</Custom>
         </InstallExecuteSequence>
         
         <!--

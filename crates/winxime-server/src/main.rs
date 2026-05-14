@@ -83,30 +83,41 @@ fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
         let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
         (
-            workspace_dir.join("config"),
+            workspace_dir.join("librime").join("data").join("minimal"),
             workspace_dir.join("target").join("debug").join("user-data"),
         )
     }
 
     #[cfg(not(debug_assertions))]
     {
-        let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\winxime\\winxime-server.exe"));
-        let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\winxime"));
+        let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\Xime\\winxime-server.exe"));
+        let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\Xime"));
         
         let user_data_dir = std::env::var("APPDATA")
             .ok()
-            .map(|p| std::path::PathBuf::from(p).join("Rime"))
+            .map(|p| std::path::PathBuf::from(p).join("Xime").join("rime"))
             .unwrap_or_else(|| exe_dir.join("user-data"));
         
         (
-            exe_dir.join("config"),
+            exe_dir.join("data"),
             user_data_dir,
         )
     }
 }
 
 fn get_config_source_dir() -> std::path::PathBuf {
-    get_data_dirs().0
+    #[cfg(debug_assertions)]
+    {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
+        workspace_dir.join("resources")
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files\\Xime\\winxime-server.exe"));
+        exe_path.parent().unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\Xime")).join("resources")
+    }
 }
 
 fn ensure_user_config_files(user_data_dir: &std::path::Path) {
@@ -122,34 +133,6 @@ fn ensure_user_config_files(user_data_dir: &std::path::Path) {
         if source.exists() {
             std::fs::copy(&source, &xime_yaml).ok();
         }
-    }
-    
-    let default_custom = user_data_dir.join("default.custom.yaml");
-    if !default_custom.exists() {
-        std::fs::write(&default_custom, 
-r#"customization:
-  distribution_code_name: Xime
-  distribution_version: 1.0
-  generator: "Rime::SwitcherSettings"
-  rime_version: 1.16.1
-
-patch:
-  schema_list:
-    - schema: wubi86_jidian
-"#).ok();
-    }
-    
-    let xime_custom = user_data_dir.join("xime.custom.yaml");
-    if !xime_custom.exists() {
-        std::fs::write(&xime_custom, 
-r#"customization:
-  distribution_code_name: Xime
-  distribution_version: 1.0
-  generator: "Xime::ConfigManager"
-  rime_version: 1.16.1
-
-patch: {}
-"#).ok();
     }
 }
 

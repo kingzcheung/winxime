@@ -13,11 +13,14 @@ winxime-config = { path = "../winxime-config" }
 winxime-ipc = { path = "../winxime-ipc" }
 librime-sys = { path = "../librime-sys" }
 anyhow = "1.0"
-windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Registry"] }
+windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Registry", "Win32_System_Threading"] }
 raw-window-handle = "0.6"
 rust-embed = { version = "8", features = ["interpolate-folder-path"] }
 serde_yaml = "0.9"
 serde = { version = "1.0", features = ["derive"] }
+ureq = "2.9"
+flate2 = "1.0"
+tar = "0.4"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

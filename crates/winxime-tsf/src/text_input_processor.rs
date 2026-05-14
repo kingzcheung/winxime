@@ -7,6 +7,9 @@ use windows_core::{*, Interface};
 use winxime_ipc::{
     IpcClient, IpcCommand, IpcRequest, IpcRequestData, IpcResponse, KeyEventData, Position,
 };
+use librime_sys::{
+    VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN,
+};
 
 const TF_INVALID_COOKIE: u32 = 0xFFFFFFFF;
 
@@ -14,6 +17,16 @@ const VK_X_A: u16 = 0x41;
 const VK_X_Z: u16 = 0x5A;
 const VK_X_0: u16 = 0x30;
 const VK_X_9: u16 = 0x39;
+const VK_OEM_1: u16 = 0xBA;
+const VK_OEM_7: u16 = 0xDE;
+const VK_OEM_COMMA: u16 = 0xBC;
+const VK_OEM_PERIOD: u16 = 0xBE;
+const VK_OEM_MINUS: u16 = 0xBD;
+const VK_OEM_PLUS: u16 = 0xBB;
+const VK_OEM_4: u16 = 0xDB;
+const VK_OEM_6: u16 = 0xDD;
+const VK_OEM_2: u16 = 0xBF;
+const VK_OEM_5: u16 = 0xDC;
 
 const GUID_LBI_INPUTMODE: GUID = GUID::from_u128(0x5D5D8287_5B53_4DAA_B44C_52EB4794A3E7);
 
@@ -412,21 +425,14 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
         } else if !commit_text.is_empty() {
             crate::log::log(&format!("DoEditSession: committing '{}' and ending composition", commit_text));
             
-            // Replace composition text with commit text first
             let comp = self.composition.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if let Some(ref composition) = comp {
                 unsafe {
                     if let Ok(range) = composition.GetRange() {
-                        // Replace preedit with commit text
                         let wide: Vec<u16> = commit_text.encode_utf16().collect();
                         crate::log::log(&format!("DoEditSession: replacing composition with commit '{}'", commit_text));
                         if range.SetText(ec, 0, &wide).is_ok() {
-                            // Set cursor at end of commit text
-                            let commit_len = commit_text.chars().count() as i32;
-                            let mut moved = 0;
-                            range.Collapse(ec, TF_ANCHOR_START).ok();
-                            range.ShiftEnd(ec, commit_len, &mut moved, std::ptr::null_mut()).ok();
-                            range.ShiftStart(ec, commit_len, &mut moved, std::ptr::null_mut()).ok();
+                            range.Collapse(ec, TF_ANCHOR_END).ok();
                             
                             use std::mem::ManuallyDrop;
                             let mut selections = [TF_SELECTION::default(); 1];
@@ -436,12 +442,12 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
                             context.SetSelection(ec, &selections).ok();
                             let [TF_SELECTION { range, .. }] = selections;
                             ManuallyDrop::into_inner(range);
+                            crate::log::log("DoEditSession: selection set before end_composition");
                         }
                     }
                 }
             }
             
-            // Now end composition - the commit text becomes normal text
             self.end_composition(ec);
             crate::log::log("DoEditSession: commit done");
         } else {
@@ -604,13 +610,34 @@ impl XimeTextService_Impl {
         if (VK_X_A..=VK_X_Z).contains(&code) {
             return true;
         }
-        if code == VK_RETURN.0 || code == VK_BACK.0 || code == VK_ESCAPE.0 {
+        if code == VK_RETURN.0 || code == VK_BACK.0 || code == VK_ESCAPE.0 || code == VK_TAB.0 {
             return true;
         }
         if code == VK_SPACE.0 {
             return true;
         }
         if (VK_X_0..=VK_X_9).contains(&code) {
+            return true;
+        }
+        if code == VK_OEM_1 || code == VK_OEM_7 {
+            return true;
+        }
+        if code == VK_OEM_COMMA || code == VK_OEM_PERIOD {
+            return true;
+        }
+        if code == VK_OEM_MINUS || code == VK_OEM_PLUS {
+            return true;
+        }
+        if code == VK_OEM_4 || code == VK_OEM_6 {
+            return true;
+        }
+        if code == VK_OEM_2 || code == VK_OEM_5 {
+            return true;
+        }
+        if code == VK_PRIOR || code == VK_NEXT || code == VK_HOME || code == VK_END {
+            return true;
+        }
+        if code == VK_LEFT || code == VK_RIGHT || code == VK_UP || code == VK_DOWN {
             return true;
         }
         false
@@ -769,7 +796,7 @@ impl XimeTextService_Impl {
             return false;
         }
 
-        if is_composing && code == VK_PRIOR.0 {
+        if is_composing && code == VK_PRIOR {
             if let Some(response) = self.ipc.change_page(true) {
                 let output = RimeOutput::from_response(&response);
                 self.set_composing(output.composing);
@@ -780,7 +807,7 @@ impl XimeTextService_Impl {
             }
             return false;
         }
-        if is_composing && code == VK_NEXT.0 {
+        if is_composing && code == VK_NEXT {
             if let Some(response) = self.ipc.change_page(false) {
                 let output = RimeOutput::from_response(&response);
                 self.set_composing(output.composing);
@@ -868,7 +895,7 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
         Ok(BOOL(0))
     }
 
-    fn OnKeyUp(&self, _pic: Ref<'_, ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
+    fn OnKeyUp(&self, pic: Ref<'_, ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = VIRTUAL_KEY(wparam.0 as u16);
         log(&format!("OnKeyUp: vk={}", vk.0));
         
@@ -887,11 +914,22 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
         
         if let Some(response) = response {
             if response.success {
-                if let Some(status) = response.status {
+                if let Some(ref status) = response.status {
                     log(&format!("  -> ascii_mode: {}", status.ascii_mode));
                     self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                     self.update_lang_bar();
                 }
+                
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                
+                if output.commit.is_some() || self.is_composing() {
+                    log(&format!("  -> has commit or composing, scheduling edit session"));
+                    if let Some(ctx) = pic.as_ref() {
+                        self.schedule_edit_session(ctx, output);
+                    }
+                }
+                
                 return Ok(BOOL(1));
             }
         }

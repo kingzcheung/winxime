@@ -21,28 +21,39 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 2. Copy config files
-Write-Host "Step 2: Copying config files..." -ForegroundColor Yellow
-if (Test-Path "target\release\config") {
-    Remove-Item "target\release\config" -Recurse -Force
+# 2. Copy data files (librime/data/minimal -> target/release/data)
+Write-Host "Step 2: Copying data files..." -ForegroundColor Yellow
+if (Test-Path "target\release\data") {
+    Remove-Item "target\release\data" -Recurse -Force
 }
-Copy-Item "config" "target\release\config" -Recurse
+Copy-Item "librime\data\minimal" "target\release\data" -Recurse
 
-# 3. Harvest config files with heat
-Write-Host "Step 3: Harvesting config files..." -ForegroundColor Yellow
-heat dir "target\release\config" -o "crates\winxime-server\wix\data.wxs" -dr DataFolder -cg DataFiles -var var.DataDir -sreg -srd -ag
+# 2.5 Copy resources files (resources -> target/release/resources)
+Write-Host "Step 2.5: Copying resources files..." -ForegroundColor Yellow
+if (Test-Path "target\release\resources") {
+    Remove-Item "target\release\resources" -Recurse -Force
+}
+Copy-Item "resources" "target\release\resources" -Recurse
+
+# 3. Harvest data files with heat
+Write-Host "Step 3: Harvesting data files..." -ForegroundColor Yellow
+heat dir "target\release\data" -o "crates\winxime-server\wix\data.wxs" -dr DataFolder -cg DataFiles -var var.DataDir -sreg -srd -ag
+
+# 3.5 Harvest resources files with heat
+Write-Host "Step 3.5: Harvesting resources files..." -ForegroundColor Yellow
+heat dir "target\release\resources" -o "crates\winxime-server\wix\resources.wxs" -dr ResourcesFolder -cg ResourcesFiles -var var.ResourcesDir -sreg -srd -ag
 
 # 4. Compile and link MSI
 Write-Host "Step 4: Building MSI..." -ForegroundColor Yellow
 if (-not (Test-Path "target\wix")) {
     New-Item "target\wix" -ItemType Directory -Force | Out-Null
 }
-candle -arch x64 "crates\winxime-server\wix\main.wxs" "crates\winxime-server\wix\data.wxs" -ext WixUIExtension -ext WixUtilExtension "-dCargoTargetBinDir=target\release" "-dDataDir=target\release\data" "-dVersion=$Version" -out "target\wix\"
+candle -arch x64 "crates\winxime-server\wix\main.wxs" "crates\winxime-server\wix\data.wxs" "crates\winxime-server\wix\resources.wxs" -ext WixUIExtension -ext WixUtilExtension "-dCargoTargetBinDir=target\release" "-dDataDir=target\release\data" "-dResourcesDir=target\release\resources" "-dVersion=$Version" -out "target\wix\"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Candle failed!" -ForegroundColor Red
     exit 1
 }
-light "target\wix\main.wixobj" "target\wix\data.wixobj" -ext WixUIExtension -ext WixUtilExtension -cultures:zh-CN -loc "crates\winxime-server\wix\zh-cn.wxl" -out "target\wix\xime-$Version.msi"
+light "target\wix\main.wixobj" "target\wix\data.wixobj" "target\wix\resources.wixobj" -ext WixUIExtension -ext WixUtilExtension -cultures:zh-CN -loc "crates\winxime-server\wix\zh-cn.wxl" -out "target\wix\xime-$Version.msi"
 $lightExit = $LASTEXITCODE
 
 # 5. Check result

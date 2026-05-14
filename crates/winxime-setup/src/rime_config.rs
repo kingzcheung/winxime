@@ -1,5 +1,6 @@
 use librime_sys::*;
 use std::ffi::{CStr, CString};
+use std::io::Write;
 use std::os::raw::c_int;
 use std::ptr;
 use std::sync::Once;
@@ -65,9 +66,21 @@ fn init_rime_deployer() -> Result<(), String> {
     Ok(())
 }
 
+const DEFAULT_USER_CONFIG_URL: &str =
+    "https://github.com/kingzcheung/rime-wubi/archive/refs/tags/2.0.0.tar.gz";
+
 fn ensure_user_config_files(user_data_dir: &std::path::Path) {
     if !user_data_dir.exists() {
         std::fs::create_dir_all(user_data_dir).ok();
+    }
+    
+    let default_custom = user_data_dir.join("default.custom.yaml");
+    let wubi_schema = user_data_dir.join("wubi86.schema.yaml");
+    let wubi_dict = user_data_dir.join("wubi86.dict.yaml");
+    
+    if !default_custom.exists() || !wubi_schema.exists() || !wubi_dict.exists() {
+        eprintln!("User configs missing, downloading from {}", DEFAULT_USER_CONFIG_URL);
+        download_and_extract_user_configs(user_data_dir);
     }
     
     let config_source_dir = get_config_source_dir();
@@ -78,21 +91,6 @@ fn ensure_user_config_files(user_data_dir: &std::path::Path) {
         if source.exists() {
             std::fs::copy(&source, &xime_yaml).ok();
         }
-    }
-    
-    let default_custom = user_data_dir.join("default.custom.yaml");
-    if !default_custom.exists() {
-        std::fs::write(&default_custom, 
-r#"customization:
-  distribution_code_name: Xime
-  distribution_version: 1.0
-  generator: "Rime::SwitcherSettings"
-  rime_version: 1.16.1
-
-patch:
-  schema_list:
-    - schema: wubi86_jidian
-"#).ok();
     }
     
     let xime_custom = user_data_dir.join("xime.custom.yaml");
@@ -109,13 +107,87 @@ patch: {}
     }
 }
 
+fn download_and_extract_user_configs(user_data_dir: &std::path::Path) {
+    use std::fs::File;
+    use std::io::Read;
+    use flate2::read::GzDecoder;
+    use tar::Archive;
+    
+    let temp_dir = user_data_dir.join(".temp_download");
+    std::fs::create_dir_all(&temp_dir).ok();
+    
+    let tar_path = temp_dir.join("rime-wubi.tar.gz");
+    
+    let response = ureq::get(DEFAULT_USER_CONFIG_URL).call();
+    if response.is_err() {
+        eprintln!("Failed to download: {:?}", response.err());
+        std::fs::remove_dir_all(&temp_dir).ok();
+        return;
+    }
+    let response = response.unwrap();
+    
+    let file = File::create(&tar_path).ok();
+    if file.is_none() {
+        std::fs::remove_dir_all(&temp_dir).ok();
+        return;
+    }
+    let mut file = file.unwrap();
+    
+    let mut buffer = Vec::new();
+    if response.into_reader().read_to_end(&mut buffer).is_err() {
+        std::fs::remove_dir_all(&temp_dir).ok();
+        return;
+    }
+    file.write_all(&buffer).ok();
+    
+    eprintln!("Extracting...");
+    
+    let file = File::open(&tar_path).ok();
+    if file.is_none() {
+        std::fs::remove_dir_all(&temp_dir).ok();
+        return;
+    }
+    let file = file.unwrap();
+    let decoder = GzDecoder::new(file);
+    let mut archive = Archive::new(decoder);
+    
+    if let Ok(entries) = archive.entries() {
+        for entry_result in entries {
+            if let Ok(mut entry) = entry_result {
+                if let Ok(path) = entry.path() {
+                    let path_str = path.to_string_lossy();
+                    
+                    if path_str.contains("rime-wubi-1.0.0/") {
+                        let relative_path = path_str
+                            .strip_prefix("rime-wubi-1.0.0/")
+                            .unwrap_or(&path_str);
+                        
+                        if !relative_path.is_empty() && !relative_path.ends_with('/') {
+                            let dest = user_data_dir.join(relative_path);
+                            
+                            if let Some(parent) = dest.parent() {
+                                std::fs::create_dir_all(parent).ok();
+                            }
+                            
+                            entry.unpack(dest).ok();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    std::fs::remove_dir_all(&temp_dir).ok();
+    eprintln!("User configs installed");
+}
+
 fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
     #[cfg(debug_assertions)]
     {
         let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
         (
-            workspace_dir.join("config"),
+            workspace_dir.join("librime").join("data").join("minimal"),
             workspace_dir.join("target").join("debug").join("user-data"),
         )
     }
@@ -123,22 +195,33 @@ fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
     #[cfg(not(debug_assertions))]
     {
         let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let exe_dir = exe_path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from("."));
         
         let user_data_dir = std::env::var("APPDATA")
             .ok()
-            .map(|p| std::path::PathBuf::from(p).join("Rime"))
+            .map(|p| std::path::PathBuf::from(p).join("Xime").join("rime"))
             .unwrap_or_else(|| exe_dir.join("user-data"));
         
         (
-            exe_dir.join("config"),
+            exe_dir.join("data"),
             user_data_dir,
         )
     }
 }
 
 fn get_config_source_dir() -> std::path::PathBuf {
-    get_data_dirs().0
+    #[cfg(debug_assertions)]
+    {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
+        workspace_dir.join("resources")
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let exe_path = std::env::current_exe().ok().unwrap_or_else(|| std::path::PathBuf::from("."));
+        exe_path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from(".")).join("resources")
+    }
 }
 
 pub struct RimeConfigManager {
