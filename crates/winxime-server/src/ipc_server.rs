@@ -1,12 +1,16 @@
 use crate::ui::CandidateWindow;
 use interprocess::os::windows::named_pipe::{pipe_mode::Bytes, PipeListenerOptions};
 use interprocess::os::windows::security_descriptor::SecurityDescriptor;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::time::{Duration, Instant};
 use widestring::u16cstr;
 use winxime_core::SharedInputContext;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
 use winxime_rime::RimeEngine;
+
+const MAX_BUFFER_SIZE: usize = 1024 * 1024;
+const READ_TIMEOUT_MS: u64 = 10000;
 
 pub fn run_ipc_server(
     engine: Arc<std::sync::Mutex<RimeEngine>>,
@@ -67,14 +71,35 @@ fn handle_connection(
 
     loop {
         let mut buffer = Vec::new();
-        if let Err(_) = reader.read_until(0, &mut buffer) {
-            break;
+        let start_time = Instant::now();
+        
+        loop {
+            if buffer.len() > MAX_BUFFER_SIZE {
+                println!("Buffer too large, disconnecting client");
+                return;
+            }
+            if start_time.elapsed() > Duration::from_millis(READ_TIMEOUT_MS) {
+                println!("Read timeout, disconnecting client");
+                return;
+            }
+            
+            let mut byte = [0u8; 1];
+            match reader.read(&mut byte) {
+                Ok(0) => {
+                    if buffer.is_empty() {
+                        return;
+                    }
+                    break;
+                }
+                Ok(_) => {
+                    if byte[0] == 0 {
+                        break;
+                    }
+                    buffer.push(byte[0]);
+                }
+                Err(_) => return,
+            }
         }
-
-        if buffer.last() != Some(&0) {
-            break;
-        }
-        buffer.pop();
 
         if buffer.is_empty() {
             continue;
@@ -112,7 +137,19 @@ fn process_request(
     window: &Arc<CandidateWindow>,
     ascii_mode: &Arc<AtomicBool>,
 ) -> IpcResponse {
-    let mut eng = engine.lock().unwrap();
+    let mut eng = match engine.try_lock() {
+        Ok(g) => g,
+        Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => {
+            println!("Engine lock would block, returning error response");
+            return IpcResponse {
+                success: false,
+                session_id: request.session_id,
+                context: None,
+                status: None,
+            };
+        }
+    };
 
     match request.command {
         IpcCommand::Echo => IpcResponse {
@@ -246,13 +283,25 @@ fn process_request(
             
             if new_mode {
                 window.hide();
-            }
-            
-            IpcResponse {
-                success: true,
-                session_id: request.session_id,
-                context: None,
-                status: Some(get_ipc_status(&eng)),
+                let commit = eng.get_commit();
+                let ctx = get_ipc_context(&eng, &commit);
+                update_context(&mut eng, &context);
+                
+                IpcResponse {
+                    success: true,
+                    session_id: request.session_id,
+                    context: ctx,
+                    status: Some(get_ipc_status(&eng)),
+                }
+            } else {
+                update_context(&mut eng, &context);
+                
+                IpcResponse {
+                    success: true,
+                    session_id: request.session_id,
+                    context: None,
+                    status: Some(get_ipc_status(&eng)),
+                }
             }
         }
 
@@ -268,6 +317,21 @@ fn process_request(
 
         IpcCommand::HideTrayIcon => {
             crate::tray::hide_icon();
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: None,
+            }
+        }
+
+        IpcCommand::HideCandidates => {
+            context.update(|ctx| {
+                ctx.is_composing = false;
+                ctx.composition.preedit.clear();
+                ctx.candidates.clear();
+                ctx.commit_text.clear();
+            });
             IpcResponse {
                 success: true,
                 session_id: request.session_id,

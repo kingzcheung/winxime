@@ -65,7 +65,14 @@ impl IpcClientHandle {
 
     pub fn connect(&self) -> std::result::Result<(), winxime_ipc::IpcError> {
         log("IpcClientHandle::connect() called");
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                log("  -> lock would block, returning error");
+                return Err(winxime_ipc::IpcError::ConnectionFailed("lock would block".to_string()));
+            }
+        };
         if guard.client.is_some() {
             log("  -> already connected");
             return Ok(());
@@ -79,18 +86,31 @@ impl IpcClientHandle {
 
     pub fn disconnect(&self) {
         log("IpcClientHandle::disconnect() called");
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => return,
+        };
         guard.client = None;
         guard.session_id = 0;
     }
 
     pub fn is_connected(&self) -> bool {
-        let r = self.state.lock().unwrap_or_else(|e| e.into_inner()).client.is_some();
-        r
+        match self.state.try_lock() {
+            Ok(g) => g.client.is_some(),
+            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner().client.is_some(),
+            Err(std::sync::TryLockError::WouldBlock) => false,
+        }
     }
 
     pub fn start_session(&self) -> (u32, Option<IpcResponse>) {
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(e) => {
+                log("start_session: lock failed");
+                return (0, None);
+            }
+        };
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
                 command: IpcCommand::StartSession,
@@ -119,7 +139,13 @@ impl IpcClientHandle {
     }
 
     pub fn process_key(&self, keycode: i32, modifiers: i32) -> Option<IpcResponse> {
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => {
+                log("process_key: lock failed, returning None");
+                return None;
+            }
+        };
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -145,7 +171,10 @@ impl IpcClientHandle {
     }
 
     pub fn select_candidate(&self, index: usize) -> Option<IpcResponse> {
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return None,
+        };
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -160,7 +189,10 @@ impl IpcClientHandle {
     }
 
     pub fn change_page(&self, backward: bool) -> Option<IpcResponse> {
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return None,
+        };
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -175,7 +207,10 @@ impl IpcClientHandle {
     }
 
     pub fn update_position(&self, x: i32, y: i32) {
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -188,7 +223,10 @@ impl IpcClientHandle {
     }
 
     pub fn toggle_ascii_mode(&self) -> Option<IpcResponse> {
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return None,
+        };
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -204,7 +242,13 @@ impl IpcClientHandle {
 
     pub fn focus_in(&self) {
         log("IPC::focus_in() called");
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => {
+                log("  -> lock failed, skipping focus_in");
+                return;
+            }
+        };
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -225,7 +269,13 @@ impl IpcClientHandle {
 
     pub fn focus_out(&self) {
         log("IPC::focus_out() called");
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => {
+                log("  -> lock failed, skipping focus_out");
+                return;
+            }
+        };
         let session_id = guard.session_id;
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
@@ -246,7 +296,10 @@ impl IpcClientHandle {
 
     pub fn show_tray_icon(&self) {
         log("IPC::show_tray_icon() called");
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
                 command: IpcCommand::ShowTrayIcon,
@@ -266,7 +319,10 @@ impl IpcClientHandle {
 
     pub fn hide_tray_icon(&self) {
         log("IPC::hide_tray_icon() called");
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
         if let Some(ref mut client) = guard.client {
             let request = IpcRequest {
                 command: IpcCommand::HideTrayIcon,
@@ -278,6 +334,30 @@ impl IpcClientHandle {
                 log("  -> HideTrayIcon sent successfully");
             } else {
                 log("  -> HideTrayIcon send FAILED");
+            }
+        } else {
+            log("  -> no client");
+        }
+    }
+
+    pub fn hide_candidates(&self) {
+        log("IPC::hide_candidates() called");
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::HideCandidates,
+                session_id,
+                data: IpcRequestData::None,
+            };
+            log(&format!("  -> sending HideCandidates request (session_id={})", session_id));
+            if client.send_oneway(&request).is_ok() {
+                log("  -> HideCandidates sent successfully");
+            } else {
+                log("  -> HideCandidates send FAILED");
             }
         } else {
             log("  -> no client");
@@ -343,7 +423,11 @@ struct CompositionSink {
 impl ITfCompositionSink_Impl for CompositionSink_Impl {
     fn OnCompositionTerminated(&self, _ecwrite: u32, _pcomposition: Ref<'_, ITfComposition>) -> Result<()> {
         log("OnCompositionTerminated: composition terminated");
-        *self.composition.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        match self.composition.try_lock() {
+            Ok(mut guard) => *guard = None,
+            Err(std::sync::TryLockError::Poisoned(e)) => *e.into_inner() = None,
+            Err(std::sync::TryLockError::WouldBlock) => {}
+        }
         Ok(())
     }
 }
@@ -372,65 +456,21 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
         let commit_text = self.output.commit.clone().unwrap_or_default();
         let preedit_text = self.output.preedit.clone();
 
-        if self.output.composing {
-            crate::log::log("DoEditSession: composing mode");
-            let comp = self.composition.lock().unwrap_or_else(|e| e.into_inner()).clone();
-
-            if let Some(ref composition) = comp {
-                crate::log::log("DoEditSession: update existing composition");
-                // Update composition: set full text (commit + preedit), then shift to separate
-                unsafe {
-                    if let Ok(range) = composition.GetRange() {
-                        let full_text = format!("{}{}", commit_text, preedit_text);
-                        let wide: Vec<u16> = full_text.encode_utf16().collect();
-                        crate::log::log(&format!("DoEditSession: setting full text '{}' ({} chars)", full_text, wide.len()));
-                        
-                        if range.SetText(ec, 0, &wide).is_ok() {
-                            crate::log::log("DoEditSession: SetText succeeded");
-                            
-                            if !commit_text.is_empty() {
-                                let commit_len = commit_text.chars().count() as i32;
-                                let mut moved = 0;
-                                crate::log::log(&format!("DoEditSession: shifting start by {} chars", commit_len));
-                                range.ShiftStart(ec, commit_len, &mut moved, std::ptr::null_mut()).ok();
-                                composition.ShiftStart(ec, &range).ok();
-                                crate::log::log("DoEditSession: shift start done");
-                            }
-                            
-                            if let Ok(cursor_range) = range.Clone() {
-                                let preedit_len = preedit_text.chars().count() as i32;
-                                let mut moved = 0;
-                                cursor_range.Collapse(ec, TF_ANCHOR_START).ok();
-                                cursor_range.ShiftEnd(ec, preedit_len, &mut moved, std::ptr::null_mut()).ok();
-                                cursor_range.ShiftStart(ec, preedit_len, &mut moved, std::ptr::null_mut()).ok();
-                                
-                                use std::mem::ManuallyDrop;
-                                let mut selections = [TF_SELECTION::default(); 1];
-                                selections[0].range = ManuallyDrop::new(Some(cursor_range));
-                                selections[0].style.ase = TF_AE_END;
-                                selections[0].style.fInterimChar = FALSE;
-                                context.SetSelection(ec, &selections).ok();
-                                let [TF_SELECTION { range, .. }] = selections;
-                                ManuallyDrop::into_inner(range);
-                                
-                                Self::update_caret_position_in_session(&context, ec, &self.ipc);
-                            }
-                        }
-                    }
-                }
-            } else {
-                crate::log::log("DoEditSession: start new composition");
-                self.start_composition(&context, ec, &preedit_text);
-            }
-        } else if !commit_text.is_empty() {
-            crate::log::log(&format!("DoEditSession: committing '{}' and ending composition", commit_text));
+        if !commit_text.is_empty() {
+            crate::log::log(&format!("DoEditSession: committing '{}' first", commit_text));
             
-            let comp = self.composition.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let comp = match self.composition.try_lock() {
+                Ok(g) => g.clone(),
+                Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner().clone(),
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    crate::log::log("DoEditSession: composition lock would block");
+                    return Ok(());
+                }
+            };
             if let Some(ref composition) = comp {
                 unsafe {
                     if let Ok(range) = composition.GetRange() {
                         let wide: Vec<u16> = commit_text.encode_utf16().collect();
-                        crate::log::log(&format!("DoEditSession: replacing composition with commit '{}'", commit_text));
                         if range.SetText(ec, 0, &wide).is_ok() {
                             range.Collapse(ec, TF_ANCHOR_END).ok();
                             
@@ -442,17 +482,20 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
                             context.SetSelection(ec, &selections).ok();
                             let [TF_SELECTION { range, .. }] = selections;
                             ManuallyDrop::into_inner(range);
-                            crate::log::log("DoEditSession: selection set before end_composition");
                         }
                     }
                 }
             }
             
             self.end_composition(ec);
-            crate::log::log("DoEditSession: commit done");
-        } else {
-            crate::log::log("DoEditSession: end composition (no commit)");
-            self.end_composition(ec);
+            crate::log::log("DoEditSession: commit done, composition ended");
+        }
+
+        if self.output.composing && !preedit_text.is_empty() {
+            crate::log::log(&format!("DoEditSession: starting new composition with '{}'", preedit_text));
+            self.start_composition(&context, ec, &preedit_text);
+        } else if !self.output.composing {
+            crate::log::log("DoEditSession: not composing, done");
         }
 
         Ok(())
@@ -545,7 +588,11 @@ impl XimeEditSession_Impl {
                             let [TF_SELECTION { range, .. }] = selections;
                             ManuallyDrop::into_inner(range);
                             
-                            *self.composition.lock().unwrap_or_else(|e| e.into_inner()) = Some(comp);
+                            match self.composition.try_lock() {
+                                Ok(mut guard) => *guard = Some(comp),
+                                Err(std::sync::TryLockError::Poisoned(e)) => *e.into_inner() = Some(comp),
+                                Err(std::sync::TryLockError::WouldBlock) => {}
+                            }
                             
                             Self::update_caret_position_in_session(context, ec, &self.ipc);
                         }
@@ -563,7 +610,10 @@ impl XimeEditSession_Impl {
 
     fn update_composition_text(&self, _context: &ITfContext, ec: u32, preedit: &str) {
         log(&format!("update_composition_text: preedit='{}'", preedit));
-        let comp = self.composition.lock().unwrap_or_else(|e| e.into_inner());
+        let comp = match self.composition.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
         if let Some(ref composition) = *comp {
             unsafe {
                 if let Ok(range) = composition.GetRange() {
@@ -578,10 +628,22 @@ impl XimeEditSession_Impl {
     }
 
     fn end_composition(&self, ec: u32) {
-        if let Some(comp) = self.composition.lock().unwrap_or_else(|e| e.into_inner()).take() {
-            unsafe {
-                comp.EndComposition(ec).ok();
+        match self.composition.try_lock() {
+            Ok(mut guard) => {
+                if let Some(comp) = guard.take() {
+                    unsafe {
+                        comp.EndComposition(ec).ok();
+                    }
+                }
             }
+            Err(std::sync::TryLockError::Poisoned(e)) => {
+                if let Some(comp) = e.into_inner().take() {
+                    unsafe {
+                        comp.EndComposition(ec).ok();
+                    }
+                }
+            }
+            Err(std::sync::TryLockError::WouldBlock) => {}
         }
     }
 }
@@ -644,7 +706,11 @@ impl XimeTextService_Impl {
     }
 
     fn update_lang_bar(&self) {
-        if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
+        let sink = match self.lang_bar_sink_ref.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        if let Some(ref sink) = *sink {
             unsafe {
                 let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
             }
@@ -656,7 +722,7 @@ impl XimeTextService_Impl {
 
         use windows::Win32::Foundation::RECT;
         use windows::Win32::UI::TextServices::{
-            ITfEditSession, TF_DEFAULT_SELECTION, TF_ES_READ, TF_ES_SYNC,
+            ITfEditSession, TF_DEFAULT_SELECTION, TF_ES_READ, TF_ES_ASYNCDONTCARE,
         };
 
         #[implement(ITfEditSession)]
@@ -715,7 +781,7 @@ impl XimeTextService_Impl {
         let session = SelectionRect::new(context.clone()).into_object();
 
         let _ = unsafe {
-            context.RequestEditSession(tid, session.as_interface(), TF_ES_SYNC | TF_ES_READ)
+            context.RequestEditSession(tid, session.as_interface(), TF_ES_ASYNCDONTCARE | TF_ES_READ)
         };
 
         let rect = session.rect();
@@ -921,12 +987,24 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
                 }
                 
                 let output = RimeOutput::from_response(&response);
+                log(&format!("  -> output: commit={}, composing={}", output.commit.is_some(), output.composing));
                 self.set_composing(output.composing);
                 
-                if output.commit.is_some() || self.is_composing() {
-                    log(&format!("  -> has commit or composing, scheduling edit session"));
+                if output.commit.is_some() {
+                    log("  -> has commit, scheduling edit session to commit and end composition");
                     if let Some(ctx) = pic.as_ref() {
                         self.schedule_edit_session(ctx, output);
+                    }
+                } else if !output.composing && self.is_composing() {
+                    log("  -> composing changed to false, ending composition");
+                    self.set_composing(false);
+                    if let Some(ctx) = pic.as_ref() {
+                        self.schedule_edit_session(ctx, RimeOutput {
+                            commit: None,
+                            preedit: String::new(),
+                            _candidates: Vec::new(),
+                            composing: false,
+                        });
                     }
                 }
                 
@@ -1191,7 +1269,11 @@ impl XimeTextService_Impl {
         *self.thread_mgr.borrow_mut() = None;
         self.client_id.set(0);
         self.composing.set(false);
-        *self.composition.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        match self.composition.try_lock() {
+            Ok(mut guard) => *guard = None,
+            Err(std::sync::TryLockError::Poisoned(e)) => *e.into_inner() = None,
+            Err(std::sync::TryLockError::WouldBlock) => {}
+        }
         Ok(())
     }
 }
@@ -1248,7 +1330,11 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
                     log(&format!("  -> ascii_mode from server: {}", status.ascii_mode));
                     self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                     
-                    if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
+                    let sink = match self.lang_bar_sink_ref.try_lock() {
+                        Ok(g) => g,
+                        Err(_) => return Ok(()),
+                    };
+                    if let Some(ref sink) = *sink {
                         unsafe {
                             let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
                         }
@@ -1259,6 +1345,7 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
             self.ipc.show_tray_icon();
         } else {
             log("  -> Our TIP is being deactivated");
+            self.ipc.hide_candidates();
             self.ipc.hide_tray_icon();
         }
         
@@ -1286,8 +1373,11 @@ impl ITfThreadFocusSink_Impl for XimeTextService_Impl {
                 log(&format!("  -> ascii_mode from server: {}", status.ascii_mode));
                 self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                 
-                // Update language bar
-                if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
+                let sink = match self.lang_bar_sink_ref.try_lock() {
+                    Ok(g) => g,
+                    Err(_) => return Ok(()),
+                };
+                if let Some(ref sink) = *sink {
                     unsafe {
                         let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
                     }
@@ -1352,7 +1442,11 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
                 log(&format!("  -> ascii_mode from server: {}", status.ascii_mode));
                 self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                 
-                if let Some(ref sink) = *self.lang_bar_sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
+                let sink = match self.lang_bar_sink_ref.try_lock() {
+                    Ok(g) => g,
+                    Err(_) => return Ok(()),
+                };
+                if let Some(ref sink) = *sink {
                     unsafe {
                         let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
                     }

@@ -53,7 +53,7 @@ pub struct TrayIcon;
 impl TrayIcon {
     pub fn new(on_action: Arc<dyn Fn(TrayAction) + Send + Sync>) {
         let hwnd = Self::create_window();
-        let menu = unsafe { CreatePopupMenu().unwrap() };
+        let menu = unsafe { CreatePopupMenu().unwrap_or_default() };
         
         unsafe {
             TRAY_HWND = Some(hwnd);
@@ -81,7 +81,7 @@ impl TrayIcon {
     
     fn create_window() -> HWND {
         unsafe {
-            let hinst = GetModuleHandleW(None).unwrap();
+            let hinst = GetModuleHandleW(None).unwrap_or_default();
             
             let class_name: Vec<u16> = "XimeTrayWindow\0".encode_utf16().collect();
             
@@ -89,11 +89,11 @@ impl TrayIcon {
                 lpfnWndProc: Some(Self::window_proc),
                 hInstance: HINSTANCE(hinst.0),
                 lpszClassName: windows_core::PCWSTR(class_name.as_ptr()),
-                hCursor: LoadCursorW(None, IDC_ARROW).unwrap(),
+                hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
                 ..Default::default()
             };
             
-            RegisterClassW(&wnd_class);
+            let _ = RegisterClassW(&wnd_class);
             
             CreateWindowExW(
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
@@ -105,7 +105,7 @@ impl TrayIcon {
                 None,
                 Some(HINSTANCE(hinst.0)),
                 None,
-            ).unwrap()
+            ).unwrap_or_default()
         }
     }
     

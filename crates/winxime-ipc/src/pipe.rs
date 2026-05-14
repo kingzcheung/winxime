@@ -1,5 +1,9 @@
 use interprocess::os::windows::named_pipe::{pipe_mode::Bytes, DuplexPipeStream};
 use std::io::{Read, Write};
+use std::time::{Duration, Instant};
+
+const MAX_RESPONSE_SIZE: usize = 1024 * 1024;
+const READ_TIMEOUT_MS: u64 = 5000;
 
 #[derive(Debug)]
 pub enum IpcError {
@@ -9,6 +13,8 @@ pub enum IpcError {
     WriteFailed(String),
     ReadFailed(String),
     EmptyResponse,
+    ResponseTooLarge,
+    Timeout,
 }
 
 impl std::fmt::Display for IpcError {
@@ -20,6 +26,8 @@ impl std::fmt::Display for IpcError {
             IpcError::WriteFailed(s) => write!(f, "WriteFailed: {}", s),
             IpcError::ReadFailed(s) => write!(f, "ReadFailed: {}", s),
             IpcError::EmptyResponse => write!(f, "EmptyResponse"),
+            IpcError::ResponseTooLarge => write!(f, "ResponseTooLarge (max {} bytes)", MAX_RESPONSE_SIZE),
+            IpcError::Timeout => write!(f, "Timeout ({}ms)", READ_TIMEOUT_MS),
         }
     }
 }
@@ -70,8 +78,15 @@ impl IpcClient {
 
         let mut response_buf = Vec::new();
         let mut byte = [0u8; 1];
+        let start_time = Instant::now();
 
         loop {
+            if response_buf.len() > MAX_RESPONSE_SIZE {
+                return Err(IpcError::ResponseTooLarge);
+            }
+            if start_time.elapsed() > Duration::from_millis(READ_TIMEOUT_MS) {
+                return Err(IpcError::Timeout);
+            }
             match self.pipe.read(&mut byte) {
                 Ok(0) => break,
                 Ok(_) => {
@@ -103,7 +118,15 @@ impl IpcClient {
 
         let mut response_buf = Vec::new();
         let mut byte = [0u8; 1];
+        let start_time = Instant::now();
+        
         loop {
+            if response_buf.len() > MAX_RESPONSE_SIZE {
+                return Err(IpcError::ResponseTooLarge);
+            }
+            if start_time.elapsed() > Duration::from_millis(READ_TIMEOUT_MS) {
+                return Err(IpcError::Timeout);
+            }
             match self.pipe.read(&mut byte) {
                 Ok(0) => break,
                 Ok(_) => {

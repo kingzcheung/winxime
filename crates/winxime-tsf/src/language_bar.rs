@@ -85,7 +85,11 @@ impl ITfLangBarItem_Impl for LangBarItemButton_Impl {
 
 impl LangBarItemButton_Impl {
     fn update_sinks(&self, dwflags: u32) -> Result<()> {
-        if let Some(ref sink) = *self.sink_ref.lock().unwrap_or_else(|e| e.into_inner()) {
+        let sink = match self.sink_ref.try_lock() {
+            Ok(g) => g,
+            Err(_) => return Ok(()),
+        };
+        if let Some(ref sink) = *sink {
             unsafe { sink.OnUpdate(dwflags)? };
         }
         Ok(())
@@ -150,7 +154,12 @@ impl ITfSource_Impl for LangBarItemButton_Impl {
         
         let punk_ref = punk.as_ref().ok_or_else(|| Error::from(HRESULT(0x80004005u32 as i32)))?;
         let sink: ITfLangBarItemSink = punk_ref.cast()?;
-        *self.sink_ref.lock().unwrap_or_else(|e| e.into_inner()) = Some(sink);
+        
+        match self.sink_ref.try_lock() {
+            Ok(mut guard) => *guard = Some(sink),
+            Err(std::sync::TryLockError::Poisoned(e)) => *e.into_inner() = Some(sink),
+            Err(std::sync::TryLockError::WouldBlock) => {}
+        }
         
         Ok(LANGBAR_ITEM_COOKIE)
     }
@@ -159,7 +168,11 @@ impl ITfSource_Impl for LangBarItemButton_Impl {
         if dwCookie != LANGBAR_ITEM_COOKIE {
             return Err(Error::from(HRESULT(0x80040200u32 as i32)));
         }
-        *self.sink_ref.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        match self.sink_ref.try_lock() {
+            Ok(mut guard) => *guard = None,
+            Err(std::sync::TryLockError::Poisoned(e)) => *e.into_inner() = None,
+            Err(std::sync::TryLockError::WouldBlock) => {}
+        }
         Ok(())
     }
 }

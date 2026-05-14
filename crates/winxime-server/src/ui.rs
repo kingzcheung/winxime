@@ -886,6 +886,10 @@ impl CandidateWindow {
                     LPARAM(0),
                 );
                 println!("  update: PostMessageW result: {:?}", result);
+                if result.is_err() {
+                    let _ = Box::from_raw(ctx_ptr);
+                    println!("  update: PostMessageW failed, freed memory");
+                }
             }
         } else {
             println!("  update: view is None!");
