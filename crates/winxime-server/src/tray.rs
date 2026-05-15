@@ -19,10 +19,10 @@ use windows::Win32::{
     },
 };
 
-const ZH_LIGHT_ICO: &[u8] = include_bytes!("../../../resource/trayicon/zh_light.ico");
-const ZH_DARK_ICO: &[u8] = include_bytes!("../../../resource/trayicon/zh_dark.ico");
-const EN_LIGHT_ICO: &[u8] = include_bytes!("../../../resource/trayicon/en_light.ico");
-const EN_DARK_ICO: &[u8] = include_bytes!("../../../resource/trayicon/en_dark.ico");
+const ZH_LIGHT_ICO: &[u8] = include_bytes!("../../../resources/trayicon/zh_light.ico");
+const ZH_DARK_ICO: &[u8] = include_bytes!("../../../resources/trayicon/zh_dark.ico");
+const EN_LIGHT_ICO: &[u8] = include_bytes!("../../../resources/trayicon/en_light.ico");
+const EN_DARK_ICO: &[u8] = include_bytes!("../../../resources/trayicon/en_dark.ico");
 
 pub const WM_TRAY_EVENT: u32 = WM_USER + 100;
 const WM_TRAY_UPDATE: u32 = WM_USER + 101;
