@@ -98,6 +98,8 @@ pub enum IpcCommand {
     HideTrayIcon,
     HideCandidates,
     ReloadConfig,
+    GetSchemaList,
+    SelectSchema,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +117,13 @@ pub enum IpcRequestData {
     Position(Position),
     SelectIndex(usize),
     ChangePage(bool),
+    SelectSchema(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemaInfo {
+    pub schema_id: String,
+    pub schema_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,6 +138,7 @@ pub struct IpcResponse {
     pub session_id: u32,
     pub context: Option<Context>,
     pub status: Option<Status>,
+    pub schema_list: Option<Vec<SchemaInfo>>,
 }
 
 pub const IPC_PIPE_NAME: &str = "WinximeNamedPipe";

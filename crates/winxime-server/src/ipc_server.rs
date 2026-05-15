@@ -148,6 +148,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: None,
+                schema_list: None,
             };
         }
     };
@@ -158,6 +159,7 @@ fn process_request(
             session_id: request.session_id,
             context: None,
             status: None,
+            schema_list: None,
         },
 
         IpcCommand::StartSession => {
@@ -167,6 +169,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: Some(get_ipc_status(&eng)),
+                schema_list: None,
             }
         }
 
@@ -177,6 +180,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: None,
+                schema_list: None,
             }
         }
 
@@ -187,6 +191,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: Some(get_ipc_status(&eng)),
+                schema_list: None,
             }
         }
 
@@ -198,6 +203,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: None,
+                schema_list: None,
             }
         }
 
@@ -212,6 +218,7 @@ fn process_request(
                     session_id: request.session_id,
                     context: None,
                     status: Some(get_ipc_status(&eng)),
+                    schema_list: None,
                 }
             } else {
                 let handled = match &request.data {
@@ -257,6 +264,7 @@ fn process_request(
                     session_id: request.session_id,
                     context: ipc_ctx,
                     status: Some(get_ipc_status(&eng)),
+                    schema_list: None,
                 }
             }
         }
@@ -278,6 +286,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: None,
+                schema_list: None,
             }
         }
 
@@ -328,6 +337,7 @@ fn process_request(
                     session_id: request.session_id,
                     context: ctx,
                     status: Some(get_ipc_status(&eng)),
+                    schema_list: None,
                 }
             } else {
                 update_context(&mut eng, &context, &None);
@@ -337,6 +347,7 @@ fn process_request(
                     session_id: request.session_id,
                     context: None,
                     status: Some(get_ipc_status(&eng)),
+                    schema_list: None,
                 }
             }
         }
@@ -348,6 +359,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: None,
+                schema_list: None,
             }
         }
 
@@ -358,6 +370,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: None,
+                schema_list: None,
             }
         }
 
@@ -373,6 +386,7 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: None,
+                schema_list: None,
             }
         }
 
@@ -385,6 +399,65 @@ fn process_request(
                 session_id: request.session_id,
                 context: None,
                 status: Some(get_ipc_status(&eng)),
+                schema_list: None,
+            }
+        }
+
+        IpcCommand::GetSchemaList => {
+            tracing::info!("GetSchemaList requested");
+            let schemas = eng.get_schema_list();
+            let schema_list = schemas.iter().map(|(id, name)| winxime_ipc::SchemaInfo {
+                schema_id: id.clone(),
+                schema_name: name.clone(),
+            }).collect();
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: Some(get_ipc_status(&eng)),
+                schema_list: Some(schema_list),
+            }
+        }
+
+        IpcCommand::SelectSchema => {
+            tracing::info!("SelectSchema requested");
+            let schema_id = match &request.data {
+                winxime_ipc::IpcRequestData::SelectSchema(id) => Some(id.clone()),
+                _ => None,
+            };
+            
+            match schema_id {
+                Some(id) => {
+                    tracing::info!("  -> selecting schema: {}", id);
+                    if eng.select_schema(&id) {
+                        tracing::info!("  -> schema selected successfully");
+                        IpcResponse {
+                            success: true,
+                            session_id: request.session_id,
+                            context: None,
+                            status: Some(get_ipc_status(&eng)),
+                            schema_list: None,
+                        }
+                    } else {
+                        tracing::info!("  -> schema selection failed");
+                        IpcResponse {
+                            success: false,
+                            session_id: request.session_id,
+                            context: None,
+                            status: Some(get_ipc_status(&eng)),
+                            schema_list: None,
+                        }
+                    }
+                }
+                None => {
+                    IpcResponse {
+                        success: false,
+                        session_id: request.session_id,
+                        context: None,
+                        status: Some(get_ipc_status(&eng)),
+                        schema_list: None,
+                    }
+                }
             }
         }
 
@@ -393,6 +466,7 @@ fn process_request(
             session_id: request.session_id,
             context: None,
             status: None,
+            schema_list: None,
         },
     }
 }
