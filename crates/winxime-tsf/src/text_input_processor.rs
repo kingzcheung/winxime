@@ -9,6 +9,7 @@ use winxime_ipc::{
 };
 use librime::{
     vk_to_xk, get_key_modifiers, VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN,
+    VK_RETURN, VK_BACK, VK_TAB, VK_ESCAPE, VK_SPACE, VK_DELETE, K_SHIFT_MASK,
 };
 
 const TF_INVALID_COOKIE: u32 = 0xFFFFFFFF;
@@ -19,12 +20,12 @@ const VK_X_0: u16 = 0x30;
 const VK_X_9: u16 = 0x39;
 const VK_OEM_1: u16 = 0xBA;
 const VK_OEM_7: u16 = 0xDE;
+const VK_OEM_4: u16 = 0xDB;
+const VK_OEM_6: u16 = 0xDD;
 const VK_OEM_COMMA: u16 = 0xBC;
 const VK_OEM_PERIOD: u16 = 0xBE;
 const VK_OEM_MINUS: u16 = 0xBD;
 const VK_OEM_PLUS: u16 = 0xBB;
-const VK_OEM_4: u16 = 0xDB;
-const VK_OEM_6: u16 = 0xDD;
 const VK_OEM_2: u16 = 0xBF;
 const VK_OEM_5: u16 = 0xDC;
 
@@ -674,10 +675,10 @@ impl XimeTextService_Impl {
         if (VK_X_A..=VK_X_Z).contains(&code) {
             return true;
         }
-        if code == VK_RETURN.0 || code == VK_BACK.0 || code == VK_ESCAPE.0 || code == VK_TAB.0 {
+        if code == VK_RETURN || code == VK_BACK || code == VK_ESCAPE || code == VK_TAB {
             return true;
         }
-        if code == VK_SPACE.0 {
+        if code == VK_SPACE {
             return true;
         }
         if (VK_X_0..=VK_X_9).contains(&code) {
@@ -850,10 +851,116 @@ impl XimeTextService_Impl {
         debug!("  -> IPC connected");
         let code = vk.0;
         let is_composing = self.is_composing();
+        let mods = get_key_modifiers();
 
+        // 数字键 1-9 选择候选词
         if is_composing && code >= 0x31 && code <= 0x39 {
             let index = (code - 0x31) as usize;
             if let Some(response) = self.ipc.select_candidate(index) {
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // 分号选择第2个候选词
+        if is_composing && code == VK_OEM_1 {
+            if let Some(response) = self.ipc.select_candidate(1) {
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // 单引号选择第3个候选词
+        if is_composing && code == VK_OEM_7 {
+            if let Some(response) = self.ipc.select_candidate(2) {
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // 方括号 [ 翻页上一页
+        if is_composing && code == VK_OEM_4 {
+            if let Some(response) = self.ipc.change_page(true) {
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // 方括号 ] 翻页下一页
+        if is_composing && code == VK_OEM_6 {
+            if let Some(response) = self.ipc.change_page(false) {
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // 减号 - 翻页上一页
+        if is_composing && code == VK_OEM_MINUS {
+            if let Some(response) = self.ipc.change_page(true) {
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // 等号 = 翻页下一页
+        if is_composing && code == VK_OEM_PLUS {
+            if let Some(response) = self.ipc.change_page(false) {
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // Tab 翻页下一页
+        if is_composing && code == VK_TAB && mods == 0 {
+            if let Some(response) = self.ipc.change_page(false) {
+                let output = RimeOutput::from_response(&response);
+                self.set_composing(output.composing);
+                if let Some(ctx) = context {
+                    self.schedule_edit_session(ctx, output);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // Shift+Tab 翻页上一页
+        if is_composing && code == VK_TAB && (mods & K_SHIFT_MASK as i32) != 0 {
+            if let Some(response) = self.ipc.change_page(true) {
                 let output = RimeOutput::from_response(&response);
                 self.set_composing(output.composing);
                 if let Some(ctx) = context {
