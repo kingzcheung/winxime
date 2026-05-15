@@ -660,11 +660,14 @@ impl XimeTextService_Impl {
         let code = vk.0;
         
         if self.is_composing() {
+            debug!("should_handle_key: composing=true, handle {}", code);
             return true;
         }
         
         let is_ascii = self.ascii_mode.load(std::sync::atomic::Ordering::Acquire);
+        debug!("should_handle_key: code={}, is_ascii={}", code, is_ascii);
         if is_ascii {
+            debug!("  -> ascii mode, not handling");
             return false;
         }
         
@@ -980,8 +983,10 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
         if let Some(response) = response {
             if response.success {
                 if let Some(ref status) = response.status {
-                    debug!("  -> ascii_mode: {}", status.ascii_mode);
+                    debug!("  -> server ascii_mode: {}, updating local", status.ascii_mode);
                     self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                    let verify = self.ascii_mode.load(std::sync::atomic::Ordering::Acquire);
+                    debug!("  -> verified local ascii_mode: {}", verify);
                     self.update_lang_bar();
                 }
                 
