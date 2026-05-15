@@ -79,6 +79,13 @@ target\wix\xime-0.1.0.msi
 - `crates/librime-sys/` — librime 原生绑定
 - `librime/` — RIME 引擎子模块
 
+## TODO
+- [ ] 候选栏 + ctrl 显示五笔字根
+- [ ] 设置页面主题色全局
+- [ ] 剪切板跨平台复制粘贴
+- [ ] 智能联想
+- [ ] 词库管理器
+
 ## 许可证
 
 GPL-3.0-or-later

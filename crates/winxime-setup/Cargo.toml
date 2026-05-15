@@ -11,7 +11,7 @@ gpui = { package = "gpui-unofficial", version = "1.1.7" }
 gpui-platform = { package = "gpui-platform-gpui-unofficial", version = "1.1.7" , features = ["font-kit"]}
 winxime-config = { path = "../winxime-config" }
 winxime-ipc = { path = "../winxime-ipc" }
-librime-sys = { path = "../librime-sys" }
+librime.workspace = true
 anyhow = "1.0"
 windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Registry", "Win32_System_Threading"] }
 raw-window-handle = "0.6"

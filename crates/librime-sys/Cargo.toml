@@ -1,14 +1,16 @@
 [package]
-name = "librime-sys"
+name = "librime-sys2"
 version = "0.1.0"
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
+edition = "2021"
+authors = ["Kor1 <kingzcheung@gmail.com>"]
+license = "BSD-3-Clause"
+description = "Raw FFI bindings to librime"
+repository = "https://github.com/ximeiorg/xime-wayland"
+links = "rime"
+exclude = ["/target"]
 
 [lib]
-name = "librime_sys"
-
-[build-dependencies]
+name = "librime_sys2"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }

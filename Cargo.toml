@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/librime-sys",
+    "crates/librime",
     "crates/winxime-core",
     "crates/winxime-tsf",
     "crates/winxime-rime",
@@ -20,7 +20,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/ximeiorg/winxime"
 
 [workspace.dependencies]
-librime-sys = { path = "crates/librime-sys" }
+librime = { path = "crates/librime" }
 winxime-core = { path = "crates/winxime-core" }
 winxime-tsf = { path = "crates/winxime-tsf" }
 winxime-rime = { path = "crates/winxime-rime" }

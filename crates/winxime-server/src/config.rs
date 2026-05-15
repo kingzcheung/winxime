@@ -1,4 +1,5 @@
-use librime_sys::*;
+use librime_sys2::*;
+use librime::get_api;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
 use std::ptr;
@@ -29,11 +30,10 @@ impl Default for UiConfig {
 
 impl UiConfig {
     pub fn load() -> Self {
-        let api = rime_get_api();
-        if api.is_none() {
+        let api = get_api();
+        if api.is_null() {
             return Self::default();
         }
-        let api = api.unwrap();
 
         unsafe {
             let config_id = CString::new("xime").unwrap_or_default();
@@ -57,10 +57,9 @@ impl UiConfig {
         }
     }
 
-    unsafe fn read_config(config: &mut RimeConfig, api: *const RimeApi) -> Self {
+    unsafe fn read_config(config: &mut RimeConfig, api: *mut RimeApi) -> Self {
         let mut ui_config = Self::default();
 
-        // Read style/font_family
         if let Some(get_cstring) = (*api).config_get_cstring {
             let key = CString::new("style/font_family").unwrap_or_default();
             let value_ptr = get_cstring(config, key.as_ptr());
@@ -70,7 +69,6 @@ impl UiConfig {
             }
         }
 
-        // Read style/font_size
         if let Some(get_int) = (*api).config_get_int {
             let key = CString::new("style/font_size").unwrap_or_default();
             let mut value: c_int = 0;
@@ -79,7 +77,6 @@ impl UiConfig {
             }
         }
 
-        // Read style/candidate_count
         if let Some(get_int) = (*api).config_get_int {
             let key = CString::new("style/candidate_count").unwrap_or_default();
             let mut value: c_int = 0;
@@ -88,7 +85,6 @@ impl UiConfig {
             }
         }
 
-        // Read style/show_code_hint
         if let Some(get_bool) = (*api).config_get_bool {
             let key = CString::new("style/show_code_hint").unwrap_or_default();
             let mut value: Bool = FALSE;
@@ -97,7 +93,6 @@ impl UiConfig {
             }
         }
 
-        // Read style/color_scheme
         if let Some(get_cstring) = (*api).config_get_cstring {
             let key = CString::new("style/color_scheme").unwrap_or_default();
             let value_ptr = get_cstring(config, key.as_ptr());
@@ -106,7 +101,6 @@ impl UiConfig {
             }
         }
 
-        // Read color_schemes/{color_scheme}/primary_color
         if !ui_config.color_scheme.is_empty() {
             if let Some(get_int) = (*api).config_get_int {
                 let key = CString::new(format!("color_schemes/{}/primary_color", ui_config.color_scheme)).unwrap_or_default();

@@ -1,6 +1,5 @@
 mod class_factory;
 mod dll;
-pub mod log;
 mod language_bar;
 mod text_input_processor;
 

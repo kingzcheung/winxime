@@ -1,4 +1,4 @@
-#![allow(non_upper_case_globals)]
+﻿#![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
@@ -22,6 +22,7 @@ macro_rules! rime_struct {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct RimeTraits {
     pub data_size: c_int,
     pub shared_data_dir: *const c_char,
@@ -38,6 +39,7 @@ pub struct RimeTraits {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct RimeComposition {
     pub length: c_int,
     pub cursor_pos: c_int,
@@ -47,6 +49,7 @@ pub struct RimeComposition {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct RimeCandidate {
     pub text: *mut c_char,
     pub comment: *mut c_char,
@@ -54,6 +57,7 @@ pub struct RimeCandidate {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct RimeMenu {
     pub page_size: c_int,
     pub page_no: c_int,
@@ -65,12 +69,14 @@ pub struct RimeMenu {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct RimeCommit {
     pub data_size: c_int,
     pub text: *mut c_char,
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct RimeContext {
     pub data_size: c_int,
     pub composition: RimeComposition,
@@ -80,6 +86,7 @@ pub struct RimeContext {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct RimeStatus {
     pub data_size: c_int,
     pub schema_id: *mut c_char,
@@ -496,58 +503,79 @@ pub struct RimeApi {
 
 // the rime_get_api is a standalone function exported from the DLL
 #[cfg(target_os = "windows")]
-pub fn rime_get_api() -> Option<*const RimeApi> {
+pub fn rime_get_api() -> *mut RimeApi {
     use std::ffi::CString;
     use std::ptr;
     use windows::core::PCSTR;
     use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA, SetDllDirectoryW};
 
-    static mut API_CACHE: *const RimeApi = ptr::null();
+    static mut API_CACHE: *mut RimeApi = ptr::null_mut();
 
     unsafe {
         if !API_CACHE.is_null() {
-            return Some(API_CACHE);
+            return API_CACHE;
         }
 
-        let exe_path = std::env::current_exe().ok()?;
-        let exe_dir = exe_path.parent()?;
+        let exe_path = match std::env::current_exe().ok() {
+            Some(p) => p,
+            None => return ptr::null_mut(),
+        };
+        let exe_dir = match exe_path.parent() {
+            Some(d) => d,
+            None => return ptr::null_mut(),
+        };
         let exe_dir_wide: Vec<u16> = exe_dir.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
         
         let _ = SetDllDirectoryW(windows::core::PCWSTR(exe_dir_wide.as_ptr()));
 
-        let lib_name = CString::new("rime.dll").ok()?;
+        let lib_name = match CString::new("rime.dll").ok() {
+            Some(n) => n,
+            None => return ptr::null_mut(),
+        };
         let hmodule = LoadLibraryA(PCSTR(lib_name.as_ptr() as *const u8));
 
         if let Ok(hmodule) = hmodule {
-            let fn_name = CString::new("rime_get_api").ok()?;
+            let fn_name = match CString::new("rime_get_api").ok() {
+                Some(n) => n,
+                None => return ptr::null_mut(),
+            };
             let proc = GetProcAddress(hmodule, PCSTR(fn_name.as_ptr() as *const u8));
 
             if let Some(proc) = proc {
-                let get_api: extern "C" fn() -> *const RimeApi = std::mem::transmute(proc);
+                let get_api: extern "C" fn() -> *mut RimeApi = std::mem::transmute(proc);
                 API_CACHE = get_api();
-                return Some(API_CACHE);
+                return API_CACHE;
             }
         }
-        None
+        ptr::null_mut()
     }
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn rime_get_api() -> Option<*const RimeApi> {
-    None
+pub fn rime_get_api() -> *mut RimeApi {
+    std::ptr::null_mut()
 }
 
 pub fn rime_get_levers_api() -> Option<*const RimeLeversApi> {
-    let api = rime_get_api()?;
+    let api = rime_get_api();
+    if api.is_null() {
+        return None;
+    }
     unsafe {
-        let find_module = (*api).find_module?;
+        let find_module = (*api).find_module;
+        if find_module.is_none() {
+            return None;
+        }
         let module_name_c = std::ffi::CString::new("levers").ok()?;
-        let levers_module = find_module(module_name_c.as_ptr());
+        let levers_module = find_module.unwrap()(module_name_c.as_ptr());
         if levers_module.is_null() {
             return None;
         }
-        let get_api = (*levers_module).get_api?;
-        let levers_api_ptr = get_api();
+        let get_api = (*levers_module).get_api;
+        if get_api.is_none() {
+            return None;
+        }
+        let levers_api_ptr = get_api.unwrap()();
         if levers_api_ptr.is_null() {
             return None;
         }
@@ -560,6 +588,153 @@ pub const RIME_MODIFIER_LOCK: c_int = 1 << 1;
 pub const RIME_MODIFIER_CTRL: c_int = 1 << 2;
 pub const RIME_MODIFIER_ALT: c_int = 1 << 3;
 pub const RIME_MODIFIER_RELEASE: c_int = 1 << 30;
+
+pub const RimeKeyCode_XK_BackSpace: u32 = 65288;
+pub const RimeKeyCode_XK_Tab: u32 = 65289;
+pub const RimeKeyCode_XK_Linefeed: u32 = 65290;
+pub const RimeKeyCode_XK_Clear: u32 = 65291;
+pub const RimeKeyCode_XK_Return: u32 = 65293;
+pub const RimeKeyCode_XK_Pause: u32 = 65299;
+pub const RimeKeyCode_XK_Scroll_Lock: u32 = 65300;
+pub const RimeKeyCode_XK_Sys_Req: u32 = 65301;
+pub const RimeKeyCode_XK_Escape: u32 = 65307;
+pub const RimeKeyCode_XK_Delete: u32 = 65535;
+pub const RimeKeyCode_XK_Home: u32 = 65360;
+pub const RimeKeyCode_XK_Left: u32 = 65361;
+pub const RimeKeyCode_XK_Up: u32 = 65362;
+pub const RimeKeyCode_XK_Right: u32 = 65363;
+pub const RimeKeyCode_XK_Down: u32 = 65364;
+pub const RimeKeyCode_XK_Prior: u32 = 65365;
+pub const RimeKeyCode_XK_Page_Up: u32 = 65365;
+pub const RimeKeyCode_XK_Next: u32 = 65366;
+pub const RimeKeyCode_XK_Page_Down: u32 = 65366;
+pub const RimeKeyCode_XK_End: u32 = 65367;
+pub const RimeKeyCode_XK_Begin: u32 = 65368;
+pub const RimeKeyCode_XK_Select: u32 = 65376;
+pub const RimeKeyCode_XK_Print: u32 = 65377;
+pub const RimeKeyCode_XK_Execute: u32 = 65378;
+pub const RimeKeyCode_XK_Insert: u32 = 65379;
+pub const RimeKeyCode_XK_Undo: u32 = 65381;
+pub const RimeKeyCode_XK_Redo: u32 = 65382;
+pub const RimeKeyCode_XK_Menu: u32 = 65383;
+pub const RimeKeyCode_XK_Find: u32 = 65384;
+pub const RimeKeyCode_XK_Cancel: u32 = 65385;
+pub const RimeKeyCode_XK_Help: u32 = 65386;
+pub const RimeKeyCode_XK_Break: u32 = 65387;
+pub const RimeKeyCode_XK_Mode_switch: u32 = 65406;
+pub const RimeKeyCode_XK_Num_Lock: u32 = 65407;
+pub const RimeKeyCode_XK_space: u32 = 32;
+pub const RimeKeyCode_XK_0: u32 = 48;
+pub const RimeKeyCode_XK_1: u32 = 49;
+pub const RimeKeyCode_XK_2: u32 = 50;
+pub const RimeKeyCode_XK_3: u32 = 51;
+pub const RimeKeyCode_XK_4: u32 = 52;
+pub const RimeKeyCode_XK_5: u32 = 53;
+pub const RimeKeyCode_XK_6: u32 = 54;
+pub const RimeKeyCode_XK_7: u32 = 55;
+pub const RimeKeyCode_XK_8: u32 = 56;
+pub const RimeKeyCode_XK_9: u32 = 57;
+pub const RimeKeyCode_XK_A: u32 = 65;
+pub const RimeKeyCode_XK_B: u32 = 66;
+pub const RimeKeyCode_XK_C: u32 = 67;
+pub const RimeKeyCode_XK_D: u32 = 68;
+pub const RimeKeyCode_XK_E: u32 = 69;
+pub const RimeKeyCode_XK_F: u32 = 70;
+pub const RimeKeyCode_XK_G: u32 = 71;
+pub const RimeKeyCode_XK_H: u32 = 72;
+pub const RimeKeyCode_XK_I: u32 = 73;
+pub const RimeKeyCode_XK_J: u32 = 74;
+pub const RimeKeyCode_XK_K: u32 = 75;
+pub const RimeKeyCode_XK_L: u32 = 76;
+pub const RimeKeyCode_XK_M: u32 = 77;
+pub const RimeKeyCode_XK_N: u32 = 78;
+pub const RimeKeyCode_XK_O: u32 = 79;
+pub const RimeKeyCode_XK_P: u32 = 80;
+pub const RimeKeyCode_XK_Q: u32 = 81;
+pub const RimeKeyCode_XK_R: u32 = 82;
+pub const RimeKeyCode_XK_S: u32 = 83;
+pub const RimeKeyCode_XK_T: u32 = 84;
+pub const RimeKeyCode_XK_U: u32 = 85;
+pub const RimeKeyCode_XK_V: u32 = 86;
+pub const RimeKeyCode_XK_W: u32 = 87;
+pub const RimeKeyCode_XK_X: u32 = 88;
+pub const RimeKeyCode_XK_Y: u32 = 89;
+pub const RimeKeyCode_XK_Z: u32 = 90;
+pub const RimeKeyCode_XK_a: u32 = 97;
+pub const RimeKeyCode_XK_b: u32 = 98;
+pub const RimeKeyCode_XK_c: u32 = 99;
+pub const RimeKeyCode_XK_d: u32 = 100;
+pub const RimeKeyCode_XK_e: u32 = 101;
+pub const RimeKeyCode_XK_f: u32 = 102;
+pub const RimeKeyCode_XK_g: u32 = 103;
+pub const RimeKeyCode_XK_h: u32 = 104;
+pub const RimeKeyCode_XK_i: u32 = 105;
+pub const RimeKeyCode_XK_j: u32 = 106;
+pub const RimeKeyCode_XK_k: u32 = 107;
+pub const RimeKeyCode_XK_l: u32 = 108;
+pub const RimeKeyCode_XK_m: u32 = 109;
+pub const RimeKeyCode_XK_n: u32 = 110;
+pub const RimeKeyCode_XK_o: u32 = 111;
+pub const RimeKeyCode_XK_p: u32 = 112;
+pub const RimeKeyCode_XK_q: u32 = 113;
+pub const RimeKeyCode_XK_r: u32 = 114;
+pub const RimeKeyCode_XK_s: u32 = 115;
+pub const RimeKeyCode_XK_t: u32 = 116;
+pub const RimeKeyCode_XK_u: u32 = 117;
+pub const RimeKeyCode_XK_v: u32 = 118;
+pub const RimeKeyCode_XK_w: u32 = 119;
+pub const RimeKeyCode_XK_x: u32 = 120;
+pub const RimeKeyCode_XK_y: u32 = 121;
+pub const RimeKeyCode_XK_z: u32 = 122;
+pub const RimeKeyCode_XK_Shift_L: u32 = 65505;
+pub const RimeKeyCode_XK_Shift_R: u32 = 65506;
+pub const RimeKeyCode_XK_Control_L: u32 = 65507;
+pub const RimeKeyCode_XK_Control_R: u32 = 65508;
+pub const RimeKeyCode_XK_Caps_Lock: u32 = 65509;
+pub const RimeKeyCode_XK_Shift_Lock: u32 = 65510;
+pub const RimeKeyCode_XK_Meta_L: u32 = 65511;
+pub const RimeKeyCode_XK_Meta_R: u32 = 65512;
+pub const RimeKeyCode_XK_Alt_L: u32 = 65513;
+pub const RimeKeyCode_XK_Alt_R: u32 = 65514;
+pub const RimeKeyCode_XK_Super_L: u32 = 65515;
+pub const RimeKeyCode_XK_Super_R: u32 = 65516;
+pub const RimeKeyCode_XK_Hyper_L: u32 = 65517;
+pub const RimeKeyCode_XK_Hyper_R: u32 = 65518;
+pub const RimeKeyCode_XK_F1: u32 = 65470;
+pub const RimeKeyCode_XK_F2: u32 = 65471;
+pub const RimeKeyCode_XK_F3: u32 = 65472;
+pub const RimeKeyCode_XK_F4: u32 = 65473;
+pub const RimeKeyCode_XK_F5: u32 = 65474;
+pub const RimeKeyCode_XK_F6: u32 = 65475;
+pub const RimeKeyCode_XK_F7: u32 = 65476;
+pub const RimeKeyCode_XK_F8: u32 = 65477;
+pub const RimeKeyCode_XK_F9: u32 = 65478;
+pub const RimeKeyCode_XK_F10: u32 = 65479;
+pub const RimeKeyCode_XK_F11: u32 = 65480;
+pub const RimeKeyCode_XK_F12: u32 = 65481;
+
+pub const RimeModifier_kShiftMask: u32 = 1 << 0;
+pub const RimeModifier_kLockMask: u32 = 1 << 1;
+pub const RimeModifier_kControlMask: u32 = 1 << 2;
+pub const RimeModifier_kMod1Mask: u32 = 1 << 3;
+pub const RimeModifier_kAltMask: u32 = 1 << 3;
+pub const RimeModifier_kMod2Mask: u32 = 1 << 4;
+pub const RimeModifier_kMod3Mask: u32 = 1 << 5;
+pub const RimeModifier_kMod4Mask: u32 = 1 << 6;
+pub const RimeModifier_kMod5Mask: u32 = 1 << 7;
+pub const RimeModifier_kButton1Mask: u32 = 1 << 8;
+pub const RimeModifier_kButton2Mask: u32 = 1 << 9;
+pub const RimeModifier_kButton3Mask: u32 = 1 << 10;
+pub const RimeModifier_kButton4Mask: u32 = 1 << 11;
+pub const RimeModifier_kButton5Mask: u32 = 1 << 12;
+pub const RimeModifier_kHandledMask: u32 = 1 << 24;
+pub const RimeModifier_kForwardMask: u32 = 1 << 25;
+pub const RimeModifier_kIgnoredMask: u32 = 1 << 25;
+pub const RimeModifier_kSuperMask: u32 = 1 << 26;
+pub const RimeModifier_kHyperMask: u32 = 1 << 27;
+pub const RimeModifier_kMetaMask: u32 = 1 << 28;
+pub const RimeModifier_kReleaseMask: u32 = 1 << 30;
+pub const RimeModifier_kModifierMask: u32 = 0x5f001fff;
 
 pub const XK_BackSpace: c_int = 65288;
 pub const XK_Tab: c_int = 65289;
@@ -577,17 +752,6 @@ pub const XK_Home: c_int = 65360;
 pub const XK_End: c_int = 65367;
 pub const XK_Shift_L: c_int = 65505;
 pub const XK_Shift_R: c_int = 65506;
-pub const XK_Insert: c_int = 65379;
-pub const XKsemicolon: c_int = 59;
-pub const XK_apostrophe: c_int = 39;
-pub const XK_comma: c_int = 44;
-pub const XK_period: c_int = 46;
-pub const XK_minus: c_int = 45;
-pub const XK_equal: c_int = 61;
-pub const XK_bracketleft: c_int = 91;
-pub const XK_bracketright: c_int = 93;
-pub const XK_slash: c_int = 47;
-pub const XK_backslash: c_int = 92;
 
 // TSF virtual key codes
 pub const VK_A: u16 = 0x41;
@@ -632,20 +796,6 @@ pub const VK_NEXT: u16 = 0x22; // PageDown
 pub const VK_SHIFT: u16 = 0x10;
 pub const VK_CONTROL: u16 = 0x11;
 pub const VK_MENU: u16 = 0x12;
-pub const VK_TAB: u16 = 0x09;
-pub const VK_HOME: u16 = 0x24;
-pub const VK_END: u16 = 0x23;
-pub const VK_INSERT: u16 = 0x2D;
-pub const VK_OEM_1: u16 = 0xBA; // ;
-pub const VK_OEM_7: u16 = 0xDE; // '
-pub const VK_OEM_COMMA: u16 = 0xBC; // ,
-pub const VK_OEM_PERIOD: u16 = 0xBE; // .
-pub const VK_OEM_MINUS: u16 = 0xBD; // -
-pub const VK_OEM_PLUS: u16 = 0xBB; // =
-pub const VK_OEM_4: u16 = 0xDB; // [
-pub const VK_OEM_6: u16 = 0xDD; // ]
-pub const VK_OEM_2: u16 = 0xBF; // /
-pub const VK_OEM_5: u16 = 0xDC; // \
 
 pub const XK_a: c_int = 0x61;
 pub const XK_b: c_int = 0x62;
@@ -681,27 +831,13 @@ pub fn vk_to_xk(vk: u16) -> c_int {
         VK_BACK => XK_BackSpace,
         VK_ESCAPE => XK_Escape,
         VK_DELETE => XK_Delete,
-        VK_INSERT => XK_Insert,
         VK_LEFT => XK_Left,
         VK_UP => XK_Up,
         VK_RIGHT => XK_Right,
         VK_DOWN => XK_Down,
         VK_PRIOR => XK_Prior,
         VK_NEXT => XK_Next,
-        VK_HOME => XK_Home,
-        VK_END => XK_End,
-        VK_TAB => XK_Tab,
         VK_SHIFT => XK_Shift_L,
-        VK_OEM_1 => XKsemicolon,
-        VK_OEM_7 => XK_apostrophe,
-        VK_OEM_COMMA => XK_comma,
-        VK_OEM_PERIOD => XK_period,
-        VK_OEM_MINUS => XK_minus,
-        VK_OEM_PLUS => XK_equal,
-        VK_OEM_4 => XK_bracketleft,
-        VK_OEM_6 => XK_bracketright,
-        VK_OEM_2 => XK_slash,
-        VK_OEM_5 => XK_backslash,
         VK_A => XK_a,
         VK_B => XK_b,
         VK_C => XK_c,
@@ -731,27 +867,6 @@ pub fn vk_to_xk(vk: u16) -> c_int {
         VK_0..=VK_9 => vk as c_int,
         _ => vk as c_int,
     }
-}
-
-// Get modifier mask from TSF key event
-pub fn get_key_modifiers() -> c_int {
-    unsafe {
-        let mut mods = 0;
-        if GetAsyncKeyState(VK_SHIFT as c_int) < 0 {
-            mods |= RIME_MODIFIER_SHIFT;
-        }
-        if GetAsyncKeyState(VK_CONTROL as c_int) < 0 {
-            mods |= RIME_MODIFIER_CTRL;
-        }
-        if GetAsyncKeyState(VK_MENU as c_int) < 0 {
-            mods |= RIME_MODIFIER_ALT;
-        }
-        mods
-    }
-}
-
-extern "system" {
-    fn GetAsyncKeyState(vKey: c_int) -> i16;
 }
 
 #[repr(C)]

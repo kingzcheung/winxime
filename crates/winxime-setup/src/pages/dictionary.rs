@@ -5,8 +5,7 @@ use crate::pages::SettingsApp;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
     let colors = cx.read_entity(&settings, |state, _| state.colors());
-    let config = winxime_config::XimeConfig::default();
-    let path_str = config.user_data_dir().to_string_lossy().to_string();
+    let path_str = winxime_config::XimeConfig::user_data_dir().to_string_lossy().to_string();
 
     SettingsPage::new("词库管理", colors.clone())
         .group(

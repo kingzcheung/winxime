@@ -1,10 +1,12 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
 mod ipc_server;
-mod log;
 mod tray;
 mod ui;
+
+use tracing::info;
+use winxime_core::init_logging_with_console;
 
 use std::sync::{Arc, atomic::AtomicBool};
 use windows::Win32::{
@@ -16,20 +18,20 @@ use winxime_ipc::{check_server_running, IpcClient};
 use winxime_rime::RimeEngine;
 
 fn main() {
-    log::init_log();
-    log::log("Server starting");
+    winxime_core::init_logging_with_console("server");
+    info!("Server starting");
     let args: Vec<String> = std::env::args().collect();
 
     if args.iter().any(|arg| arg == "/q" || arg == "/quit") {
         if check_server_running() {
             IpcClient::shutdown_server();
         }
-        log::log("Server stopped via /q");
+        info!("Server stopped via /q");
         return;
     }
 
     if check_server_running() {
-        log::log("Stopping existing server...");
+        info!("Stopping existing server...");
         IpcClient::shutdown_server();
         for _ in 0..10 {
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -38,10 +40,10 @@ fn main() {
             }
         }
         if check_server_running() {
-            log::log("Failed to stop existing server, exiting");
+            info!("Failed to stop existing server, exiting");
             return;
         }
-        log::log("Existing server stopped");
+        info!("Existing server stopped");
     }
 
     unsafe {
@@ -50,26 +52,26 @@ fn main() {
     }
 
     let (shared_data_dir, user_data_dir) = get_data_dirs();
-    log::log(&format!("Data dirs: shared={}, user={}", shared_data_dir.display(), user_data_dir.display()));
+    info!("Data dirs: shared={}, user={}", shared_data_dir.display(), user_data_dir.display());
 
     if !shared_data_dir.exists() {
-        log::log(&format!("Shared data not found at {:?}", shared_data_dir));
+        info!("Shared data not found at {:?}", shared_data_dir);
         std::process::exit(1);
     }
-    log::log("Shared data dir exists");
+    info!("Shared data dir exists");
 
     let _ = std::fs::create_dir_all(&user_data_dir);
     ensure_user_config_files(&user_data_dir);
 
-    log::log("Initializing Rime engine...");
+    info!("Initializing Rime engine...");
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
         Ok(mut e) => {
             e.set_option("_horizontal", true);
-            log::log("Rime initialized successfully");
+            info!("Rime initialized successfully");
             Arc::new(std::sync::Mutex::new(e))
         }
         Err(e) => {
-            log::log(&format!("Rime init failed: {}", e));
+            info!("Rime init failed: {}", e);
             std::process::exit(1);
         }
     };
@@ -137,15 +139,15 @@ fn ensure_user_config_files(user_data_dir: &std::path::Path) {
 }
 
 fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
-    log::log("run_server: starting");
+    info!("run_server: starting");
     let context = Arc::new(SharedInputContext::new());
     let ascii_mode = Arc::new(AtomicBool::new(false));
     
-    log::log("Creating UI window...");
+    info!("Creating UI window...");
     let window = ui::CandidateWindow::new();
-    log::log("UI window created");
+    info!("UI window created");
 
-    log::log("Starting IPC thread...");
+    info!("Starting IPC thread...");
     let engine_clone = engine.clone();
     let context_clone = context.clone();
     let window_clone = window.clone();
@@ -153,9 +155,9 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
     std::thread::spawn(move || {
         ipc_server::run_ipc_server(engine_clone, context_clone, window_clone, ascii_mode_clone);
     });
-    log::log("IPC thread started");
+    info!("IPC thread started");
 
-    log::log("Creating tray icon...");
+    info!("Creating tray icon...");
     let on_action = {
         let engine = engine.clone();
         Arc::new(move |action: tray::TrayAction| {
@@ -197,9 +199,9 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
     };
     
     tray::TrayIcon::new(on_action);
-    log::log("Tray icon created");
+    info!("Tray icon created");
     
-    log::log("Server ready, entering message loop");
+    info!("Server ready, entering message loop");
     
     unsafe {
         let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
@@ -208,5 +210,5 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
             windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
         }
     }
-    log::log("Message loop exited");
+    info!("Message loop exited");
 }

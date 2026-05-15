@@ -1,5 +1,6 @@
-use std::cell::RefCell;
+﻿use std::cell::RefCell;
 use std::sync::Arc;
+use tracing::{debug, info, error};
 
 use windows::Win32::{
     Foundation::*,
@@ -269,24 +270,24 @@ impl RenderedView {
                 unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
             }
             WM_SHOW_CANDIDATE => {
-                crate::log::log(&format!("WM_SHOW_CANDIDATE received, hwnd={:?}", hwnd.0));
+                debug!("WM_SHOW_CANDIDATE received, hwnd={:?}", hwnd.0);
                 let result = ShowWindow(hwnd, SW_SHOWNA);
-                crate::log::log(&format!("ShowWindow(SW_SHOWNA) result: {:?}", result));
+                debug!("ShowWindow(SW_SHOWNA) result: {:?}", result);
                 LRESULT(0)
             }
             WM_HIDE_CANDIDATE => {
-                crate::log::log("WM_HIDE_CANDIDATE received");
+                debug!("WM_HIDE_CANDIDATE received");
                 let _ = ShowWindow(hwnd, SW_HIDE);
                 LRESULT(0)
             }
             WM_UPDATE_CANDIDATE => {
-                crate::log::log("WM_UPDATE_CANDIDATE received");
+                debug!("WM_UPDATE_CANDIDATE received");
                 let ctx_ptr = wparam.0 as *mut Context;
                 if !ctx_ptr.is_null() {
                     let ctx = Box::from_raw(ctx_ptr);
-                    crate::log::log(&format!("ctx.candidates: {} items", ctx.candidates.candies.len()));
+                    debug!("ctx.candidates: {} items", ctx.candidates.candies.len());
                     let model = CandidateModel::from(&*ctx);
-                    println!("  model.items: {:?}", model.items);
+                    info!("  model.items: {:?}", model.items);
                     
                     let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                     if !this_ptr.is_null() {
@@ -295,11 +296,11 @@ impl RenderedView {
                         let view = (*this_ptr).view.borrow();
                         if let Some(view) = view.as_ref() {
                             let dpi = RenderedView::get_dpi_for_window(hwnd);
-                            println!("  DPI: {}", dpi);
+                            info!("  DPI: {}", dpi);
                             if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
-                                println!("  metrics.width: {}, metrics.height: {}", metrics.width, metrics.height);
-                                println!("  metrics.hw_width: {}, metrics.hw_height: {}", metrics.hw_width, metrics.hw_height);
-                                println!("  metrics.item_widths: {:?}", metrics.item_widths);
+                                info!("  metrics.width: {}, metrics.height: {}", metrics.width, metrics.height);
+                                info!("  metrics.hw_width: {}, metrics.hw_height: {}", metrics.hw_width, metrics.hw_height);
+                                info!("  metrics.item_widths: {:?}", metrics.item_widths);
                                 let _ = SetWindowPos(
                                     hwnd,
                                     Some(HWND_TOPMOST),
@@ -315,7 +316,7 @@ impl RenderedView {
                             }
                         }
                     }
-                    println!("  update complete");
+                    info!("  update complete");
                 }
                 LRESULT(0)
             }
@@ -326,14 +327,14 @@ impl RenderedView {
                 LRESULT(0)
             }
             WM_PAINT => {
-                println!("WM_PAINT received");
+                info!("WM_PAINT received");
                 let mut ps = PAINTSTRUCT::default();
                 BeginPaint(hwnd, &mut ps);
 
                 let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                 if !this_ptr.is_null() {
                     let model = (*this_ptr).model.borrow();
-                    println!("  painting {} items", model.items.len());
+                    info!("  painting {} items", model.items.len());
                     if !model.items.is_empty() {
                         let view = (*this_ptr).view.borrow();
                         if let Some(view) = view.as_ref() {
@@ -529,9 +530,8 @@ impl RenderedView {
 
     fn on_paint_with_metrics(&self, model: &CandidateModel, dpi: f32, metrics: &RenderedMetrics) -> Result<(), String> {
         unsafe {
-            println!("on_paint: dpi={}, width={}, height={}, hw_width={}, hw_height={}", 
-                dpi, metrics.width, metrics.height, metrics.hw_width, metrics.hw_height);
-            println!("on_paint: item_widths={:?}", metrics.item_widths);
+            info!("on_paint: dpi={}, width={}, height={}, hw_width={}, hw_height={}", dpi, metrics.width, metrics.height, metrics.hw_width, metrics.hw_height);
+            info!("on_paint: item_widths={:?}", metrics.item_widths);
 
             self.d2d_context.SetTarget(None);
             self.swapchain
@@ -694,9 +694,9 @@ let comment_brush = self.d2d_context
                 let text_width = metrics.text_widths.get(i).copied().unwrap_or(40.0);
                 let comment_width = metrics.comment_widths.get(i).copied().unwrap_or(0.0);
                 
-                println!("  item {}: x={}, item_width={}, text='{}'", i, x, item_width, item);
-                println!("  bg_rect: left={}, right={}", blur_radius, metrics.width + blur_radius);
-                println!("  item_right={}", x + item_width);
+                info!("  item {}: x={}, item_width={}, text='{}'", i, x, item_width, item);
+                info!("  bg_rect: left={}, right={}", blur_radius, metrics.width + blur_radius);
+                info!("  item_right={}", x + item_width);
 
                 let selkey_rect = D2D_RECT_F {
                     left: x + padding_x,
@@ -841,11 +841,11 @@ impl CandidateWindow {
             let user_data_ptr = self as *const Self;
             match RenderedView::new(user_data_ptr.cast()) {
                 Ok(view) => {
-                    println!("UI initialized successfully");
+                    info!("UI initialized successfully");
                     *self.view.borrow_mut() = Some(view);
                 }
                 Err(e) => {
-                    eprintln!("Failed to initialize UI: {}", e);
+                    info!("Failed to initialize UI: {}", e);
                 }
             }
         }
@@ -854,15 +854,15 @@ impl CandidateWindow {
     pub fn show(&self, x: i32, y: i32) {
         self.ensure_view_initialized();
         if let Some(view) = self.view.borrow().as_ref() {
-            println!("  show: hwnd={:?}, moving to ({}, {})", view.hwnd.0, x, y + 24);
+            info!("  show: hwnd={:?}, moving to ({}, {})", view.hwnd.0, x, y + 24);
             unsafe {
                 let _ = SetWindowPos(view.hwnd, Some(HWND_TOPMOST), x, y + 24, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
-                println!("  show: posting WM_SHOW_CANDIDATE");
+                info!("  show: posting WM_SHOW_CANDIDATE");
                 let result = PostMessageW(Some(view.hwnd), WM_SHOW_CANDIDATE, WPARAM(0), LPARAM(0));
-                println!("  show: PostMessageW result: {:?}", result);
+                info!("  show: PostMessageW result: {:?}", result);
             }
         } else {
-            println!("  show: view is None!");
+            info!("  show: view is None!");
         }
     }
 
@@ -876,7 +876,7 @@ impl CandidateWindow {
 
     pub fn update(&self, ctx: &Context) {
         if let Some(view) = self.view.borrow().as_ref() {
-            println!("  update: hwnd={:?}, posting WM_UPDATE_CANDIDATE", view.hwnd.0);
+            info!("  update: hwnd={:?}, posting WM_UPDATE_CANDIDATE", view.hwnd.0);
             unsafe {
                 let ctx_ptr = Box::into_raw(Box::new(ctx.clone()));
                 let result = PostMessageW(
@@ -885,14 +885,14 @@ impl CandidateWindow {
                     WPARAM(ctx_ptr as usize),
                     LPARAM(0),
                 );
-                println!("  update: PostMessageW result: {:?}", result);
+                info!("  update: PostMessageW result: {:?}", result);
                 if result.is_err() {
                     let _ = Box::from_raw(ctx_ptr);
-                    println!("  update: PostMessageW failed, freed memory");
+                    info!("  update: PostMessageW failed, freed memory");
                 }
             }
         } else {
-            println!("  update: view is None!");
+            info!("  update: view is None!");
         }
     }
 }

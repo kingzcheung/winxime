@@ -1,4 +1,4 @@
-use crate::ui::CandidateWindow;
+﻿use crate::ui::CandidateWindow;
 use interprocess::os::windows::named_pipe::{pipe_mode::Bytes, PipeListenerOptions};
 use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -8,6 +8,7 @@ use widestring::u16cstr;
 use winxime_core::SharedInputContext;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
 use winxime_rime::RimeEngine;
+use tracing::{info, error, debug};
 
 const MAX_BUFFER_SIZE: usize = 1024 * 1024;
 const READ_TIMEOUT_MS: u64 = 10000;
@@ -19,7 +20,7 @@ pub fn run_ipc_server(
     ascii_mode: Arc<AtomicBool>,
 ) {
     let pipe_path = get_pipe_path();
-    println!("Winxime Server: creating named pipe at {}", pipe_path);
+    tracing::info!("Winxime Server: creating named pipe at {}", pipe_path);
 
     let sd = SecurityDescriptor::deserialize(u16cstr!("D:(A;;GA;;;WD)"))
         .expect("Failed to create security descriptor");
@@ -32,17 +33,17 @@ pub fn run_ipc_server(
     {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("Failed to create pipe listener: {}", e);
+            tracing::info!("Failed to create pipe listener: {}", e);
             return;
         }
     };
 
-    println!("Waiting for client connections...");
+    tracing::info!("Waiting for client connections...");
 
     for pipe in listener.incoming() {
         match pipe {
             Ok(p) => {
-                println!("Client connected!");
+                tracing::info!("Client connected!");
                 let engine_clone = engine.clone();
                 let context_clone = context.clone();
                 let window_clone = window.clone();
@@ -52,7 +53,7 @@ pub fn run_ipc_server(
                 });
             }
             Err(e) => {
-                eprintln!("Failed to accept connection: {}", e);
+                tracing::info!("Failed to accept connection: {}", e);
             }
         }
     }
@@ -75,11 +76,11 @@ fn handle_connection(
         
         loop {
             if buffer.len() > MAX_BUFFER_SIZE {
-                println!("Buffer too large, disconnecting client");
+                tracing::info!("Buffer too large, disconnecting client");
                 return;
             }
             if start_time.elapsed() > Duration::from_millis(READ_TIMEOUT_MS) {
-                println!("Read timeout, disconnecting client");
+                tracing::info!("Read timeout, disconnecting client");
                 return;
             }
             
@@ -109,7 +110,7 @@ fn handle_connection(
             Ok(r) => r,
             Err(_) => continue,
         };
-        println!("Received request: {:?}", request.command);
+        tracing::info!("Received request: {:?}", request.command);
 
         let response = process_request(&request, &engine, &context, &window, &ascii_mode);
 
@@ -127,7 +128,7 @@ fn handle_connection(
             break;
         }
     }
-    println!("Client disconnected");
+    tracing::info!("Client disconnected");
 }
 
 fn process_request(
@@ -141,7 +142,7 @@ fn process_request(
         Ok(g) => g,
         Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
         Err(std::sync::TryLockError::WouldBlock) => {
-            println!("Engine lock would block, returning error response");
+            tracing::info!("Engine lock would block, returning error response");
             return IpcResponse {
                 success: false,
                 session_id: request.session_id,
@@ -160,7 +161,7 @@ fn process_request(
         },
 
         IpcCommand::StartSession => {
-            println!("StartSession");
+            tracing::info!("StartSession");
             IpcResponse {
                 success: true,
                 session_id: request.session_id,
@@ -170,7 +171,7 @@ fn process_request(
         }
 
         IpcCommand::EndSession => {
-            println!("EndSession");
+            tracing::info!("EndSession");
             IpcResponse {
                 success: true,
                 session_id: request.session_id,
@@ -180,7 +181,7 @@ fn process_request(
         }
 
         IpcCommand::FocusIn => {
-            println!("FocusIn");
+            tracing::info!("FocusIn");
             IpcResponse {
                 success: true,
                 session_id: request.session_id,
@@ -190,7 +191,7 @@ fn process_request(
         }
 
         IpcCommand::FocusOut => {
-            println!("FocusOut -> hide");
+            tracing::info!("FocusOut -> hide");
             window.hide();
             IpcResponse {
                 success: true,
@@ -203,38 +204,38 @@ fn process_request(
         IpcCommand::ProcessKeyEvent => {
             let handled = match &request.data {
                 IpcRequestData::KeyEvent(key) => {
-                    println!("Key: {} mod: {}", key.keycode, key.modifiers);
+                    tracing::info!("Key: {} mod: {}", key.keycode, key.modifiers);
                     let result = eng.process_key(key.keycode, key.modifiers);
-                    println!("  handled: {}", result);
+                    tracing::info!("  handled: {}", result);
                     result
                 }
                 _ => false,
             };
 
             let commit = eng.get_commit();
-            println!("  commit: {:?}", commit);
-            println!("  input: {:?}", eng.get_input());
-            println!("  composing: {}", eng.is_composing());
+            tracing::info!("  commit: {:?}", commit);
+            info!("  input: {:?}", eng.get_input());
+            info!("  composing: {}", eng.is_composing());
 
             let ipc_ctx = get_ipc_context(&eng, &commit);
-            update_context(&mut eng, context);
+            update_context(&mut eng, context, &commit);
             
             if commit.is_some() {
-                println!("  -> hide (commit)");
+                tracing::info!("  -> hide (commit)");
                 window.hide();
             } else if !eng.is_composing() {
-                println!("  -> hide (not composing)");
+                tracing::info!("  -> hide (not composing)");
                 window.hide();
             } else if let Some(ctx) = &ipc_ctx {
-                println!("  candies: {:?}", ctx.candidates.candies);
+                tracing::info!("  candies: {:?}", ctx.candidates.candies);
                 if ctx.candidates.candies.is_empty() {
-                    println!("  -> hide (no candidates)");
+                    tracing::info!("  -> hide (no candidates)");
                     window.hide();
                 } else {
                     let pos = context.read(|c| (c.caret_x, c.caret_y));
-                    println!("  -> show at ({}, {})", pos.0, pos.1);
+                    tracing::info!("  -> show at ({}, {})", pos.0, pos.1);
                     window.show(pos.0, pos.1);
-                    println!("  -> update {} candies", ctx.candidates.candies.len());
+                    info!("  -> update {} candies", ctx.candidates.candies.len());
                     window.update(ctx);
                 }
             }
@@ -250,7 +251,7 @@ fn process_request(
         IpcCommand::UpdateInputPosition => {
             match &request.data {
                 IpcRequestData::Position(pos) => {
-                    println!("Position: {},{}", pos.x, pos.y);
+                    tracing::info!("Position: {},{}", pos.x, pos.y);
                     context.update(|ctx| {
                         ctx.caret_x = pos.x;
                         ctx.caret_y = pos.y;
@@ -268,15 +269,15 @@ fn process_request(
         }
 
         IpcCommand::ShutdownServer => {
-            println!("Shutdown requested");
+            tracing::info!("Shutdown requested");
             std::process::exit(0);
         }
 
         IpcCommand::ToggleAsciiMode => {
-            println!("ToggleAsciiMode requested");
+            tracing::info!("ToggleAsciiMode requested");
             let current = eng.is_ascii_mode();
             let new_mode = !current;
-            println!("  -> current={}, setting to {}", current, new_mode);
+            tracing::info!("  -> current={}, setting to {}", current, new_mode);
             eng.set_option("ascii_mode", new_mode);
             ascii_mode.store(new_mode, Ordering::Release);
             crate::tray::update_tray_icon(new_mode);
@@ -285,7 +286,7 @@ fn process_request(
                 window.hide();
                 let commit = eng.get_commit();
                 let ctx = get_ipc_context(&eng, &commit);
-                update_context(&mut eng, &context);
+                update_context(&mut eng, &context, &commit);
                 
                 IpcResponse {
                     success: true,
@@ -294,7 +295,7 @@ fn process_request(
                     status: Some(get_ipc_status(&eng)),
                 }
             } else {
-                update_context(&mut eng, &context);
+                update_context(&mut eng, &context, &None);
                 
                 IpcResponse {
                     success: true,
@@ -341,9 +342,9 @@ fn process_request(
         }
 
         IpcCommand::ReloadConfig => {
-            println!("ReloadConfig requested");
+            tracing::info!("ReloadConfig requested");
             let deploy_result = eng.deploy();
-            println!("  deploy result: {}", deploy_result);
+            tracing::info!("  deploy result: {}", deploy_result);
             IpcResponse {
                 success: deploy_result,
                 session_id: request.session_id,
@@ -361,11 +362,11 @@ fn process_request(
     }
 }
 
-fn update_context(eng: &mut RimeEngine, context: &Arc<SharedInputContext>) {
+fn update_context(eng: &mut RimeEngine, context: &Arc<SharedInputContext>, commit: &Option<String>) {
     context.update(|ctx| {
         ctx.is_composing = eng.is_composing();
         ctx.composition.preedit = eng.get_input().unwrap_or_default();
-        ctx.commit_text = eng.get_commit().unwrap_or_default();
+        ctx.commit_text = commit.clone().unwrap_or_default();
 
         let cand_list = eng.get_candidates();
         ctx.candidates = cand_list

@@ -1,4 +1,4 @@
-use crate::log::log;
+﻿use tracing::debug;
 use crate::text_input_processor::IpcClientHandle;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use windows::Win32::Foundation::*;
@@ -98,18 +98,18 @@ impl LangBarItemButton_Impl {
 
 impl ITfLangBarItemButton_Impl for LangBarItemButton_Impl {
     fn OnClick(&self, click: TfLBIClick, _pt: &POINT, _prcArea: *const RECT) -> Result<()> {
-        log(&format!("LangBarItem: OnClick, click={}", click.0));
+        debug!("LangBarItem: OnClick, click={}", click.0);
         
         if click == TF_LBI_CLK_RIGHT {
             return Ok(())
         }
         
         if self.ipc.is_connected() {
-            log("LangBarItem: calling toggle_ascii_mode");
+            debug!("LangBarItem: calling toggle_ascii_mode");
             let response = self.ipc.toggle_ascii_mode();
             if let Some(response) = response {
                 if let Some(status) = response.status {
-                    log(&format!("LangBarItem: ascii_mode={}", status.ascii_mode));
+                    debug!("LangBarItem: ascii_mode={}", status.ascii_mode);
                     self.ascii_mode.store(status.ascii_mode, Ordering::Release);
                     self.update_sinks(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT)?;
                 }

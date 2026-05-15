@@ -122,7 +122,7 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
             schema_manager.set_schema_list(&[selected_id])?;
             schema_manager.save()?;
             
-            deploy_all()?;
+            deploy_all().map_err(|e| e.to_string())?;
             
             if !IpcClient::reload_config() {
                 eprintln!("Server not running, config will apply on next start");
@@ -219,7 +219,7 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
     }
 
     pub fn deploy(&mut self) -> Result<(), String> {
-        let result = deploy_all();
+        let result = deploy_all().map_err(|e| e.to_string());
         match &result {
             Ok(_) => {
                 if IpcClient::reload_config() {

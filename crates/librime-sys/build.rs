@@ -1,4 +1,4 @@
-use std::env;
+﻿use std::env;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -24,28 +24,11 @@ fn main() {
         build_librime(&librime_dir, workspace_dir);
     }
 
-    let possible_dll_locations = [
-        dist_lib_dir.join("rime.dll"),
-        dist_dir.join("bin").join("rime.dll"),
-        librime_dir.join("build").join("Release").join("rime.dll"),
-        librime_dir.join("build").join("bin").join("Release").join("rime.dll"),
-        librime_dir.join("build").join("lib").join("Release").join("rime.dll"),
-        // Ninja generator paths (single-config, no Release subdirectory)
-        librime_dir.join("build").join("bin").join("rime.dll"),
-        librime_dir.join("build").join("lib").join("rime.dll"),
-    ];
-
-    let found_dll = possible_dll_locations.iter().find(|p| p.exists());
-
-    if let Some(found_path) = found_dll {
-        if found_path != &rime_dll {
-            println!("cargo:warning=Found rime.dll at {}, copying to expected location", found_path.display());
-            std::fs::copy(found_path, &rime_dll).ok();
-        }
-        
+    if rime_dll.exists() {
         println!("cargo:rustc-link-search=native={}", dist_lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=rime");
         
+        // Copy rime.dll to target directories for both debug and release
         let profiles = ["debug", "release"];
         for profile in &profiles {
             let target_dir = workspace_dir.join("target").join(profile);
@@ -56,59 +39,8 @@ fn main() {
             }
         }
     } else {
-        println!("cargo:warning=Searched for rime.dll in:");
-        for loc in &possible_dll_locations {
-            println!("cargo:warning=  {} (exists: {})", loc.display(), loc.exists());
-        }
-        let build_dir = librime_dir.join("build");
-        if build_dir.exists() {
-            println!("cargo:warning=Build directory exists: {}", build_dir.display());
-            // List top-level contents
-            if let Ok(entries) = std::fs::read_dir(&build_dir) {
-                println!("cargo:warning=Build directory contents:");
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    let metadata = path.metadata();
-                    let is_dir = metadata.map(|m| m.is_dir()).unwrap_or(false);
-                    println!("cargo:warning=  {}{}", path.display(), if is_dir { "/" } else { "" });
-                }
-            }
-            // Check bin and lib subdirectories
-            for subdir in ["bin", "lib"] {
-                let subdir_path = build_dir.join(subdir);
-                if subdir_path.exists() {
-                    println!("cargo:warning={}/ contents:", subdir);
-                    if let Ok(entries) = std::fs::read_dir(&subdir_path) {
-                        for entry in entries.flatten() {
-                            let path = entry.path();
-                            let metadata = path.metadata();
-                            let is_dir = metadata.map(|m| m.is_dir()).unwrap_or(false);
-                            println!("cargo:warning=  {}{}", path.display(), if is_dir { "/" } else { "" });
-                        }
-                    }
-                }
-            }
-        } else {
-            println!("cargo:warning=Build directory does not exist: {}", build_dir.display());
-        }
-        // Also check dist directory
-        let dist_dir = librime_dir.join("dist");
-        if dist_dir.exists() {
-            println!("cargo:warning=Dist directory exists: {}", dist_dir.display());
-            for subdir in ["bin", "lib"] {
-                let subdir_path = dist_dir.join(subdir);
-                if subdir_path.exists() {
-                    println!("cargo:warning=dist/{}/ contents:", subdir);
-                    if let Ok(entries) = std::fs::read_dir(&subdir_path) {
-                        for entry in entries.flatten() {
-                            println!("cargo:warning=  {}", entry.path().display());
-                        }
-                    }
-                }
-            }
-        }
         panic!(
-            "librime build failed: rime.dll not found at {} or any alternative location",
+            "librime build failed: rime.dll not found at {}",
             rime_dll.display()
         );
     }
@@ -119,6 +51,7 @@ fn main() {
 }
 
 fn copy_rime_data(_workspace_dir: &Path, _librime_dir: &Path) {
+    // opencc is not needed - rime works without it
 }
 
 fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
@@ -147,8 +80,7 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
     println!("cargo:warning=Using Visual Studio at: {}", vs_install);
 
     let env_bat = librime_dir.join("env.bat");
-    // Only create env.bat if it doesn't exist - preserves CI settings
-    if !env_bat.exists() {
+    {
         let mut file = std::fs::File::create(&env_bat).unwrap();
         writeln!(file, "@echo off").unwrap();
         writeln!(file, "set RIME_ROOT={}", librime_dir.display()).unwrap();
@@ -162,9 +94,6 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         writeln!(file, "set BJAM_TOOLSET=msvc-14.3").unwrap();
         writeln!(file, "set CMAKE_GENERATOR=\"Visual Studio 17 2022\"").unwrap();
         writeln!(file, "set PLATFORM_TOOLSET=v143").unwrap();
-        println!("cargo:warning=Created env.bat with default settings");
-    } else {
-        println!("cargo:warning=Using existing env.bat (CI settings preserved)");
     }
 
     let temp_bat = workspace_dir.join("temp-build-librime.bat");
@@ -180,28 +109,18 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         writeln!(file, "cd /d \"{}\"", librime_dir.display()).unwrap();
         writeln!(
             file,
+            "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat",
+            librime_dir.display()
+        )
+        .unwrap();
+        writeln!(
+            file,
             "if not defined BOOST_ROOT set BOOST_ROOT={}\\deps\\boost-1.89.0",
             librime_dir.display()
         )
         .unwrap();
-        writeln!(file, "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat", librime_dir.display()).unwrap();
-        writeln!(file, "echo ===== BUILDING DEPS =====").unwrap();
-        writeln!(file, "call build.bat deps").unwrap();
-        writeln!(file, "set DEPS_EXITCODE=%errorlevel%").unwrap();
-        writeln!(file, "echo DEPS exit code: %DEPS_EXITCODE%").unwrap();
-        writeln!(file, "if %DEPS_EXITCODE% neq 0 echo DEPS FAILED && exit /b %DEPS_EXITCODE%").unwrap();
-        writeln!(file, "echo ===== DEPS DONE =====").unwrap();
-        writeln!(file, "echo ===== BUILDING LIBRIME =====").unwrap();
-        writeln!(file, "build.bat librime shared").unwrap();
-        writeln!(file, "if errorlevel 1 echo LIBRIME FAILED && exit /b %errorlevel%").unwrap();
-        writeln!(file, "echo ===== LIBRIME DONE =====").unwrap();
-        writeln!(file, "if exist \"{}\\dist\\lib\\rime.dll\" (", librime_dir.display()).unwrap();
-        writeln!(file, "  echo rime.dll FOUND in dist/lib").unwrap();
-        writeln!(file, ") else (").unwrap();
-        writeln!(file, "  echo rime.dll NOT FOUND").unwrap();
-        writeln!(file, "  dir \"{}\\dist\\lib\" 2>nul || echo dist/lib does not exist", librime_dir.display()).unwrap();
-        writeln!(file, "  exit /b 1").unwrap();
-        writeln!(file, ")").unwrap();
+        writeln!(file, "build.bat deps").unwrap();
+        writeln!(file, "build.bat librime").unwrap();
     }
 
     println!("cargo:warning=Starting librime compilation...");

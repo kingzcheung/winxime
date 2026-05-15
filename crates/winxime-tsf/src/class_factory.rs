@@ -22,6 +22,8 @@ impl IClassFactory_Impl for ClassFactory_Impl {
             return Err(Error::from(HRESULT(-2147221232)));
         }
 
+        crate::dll::increment_instance_count();
+        
         let service = crate::XimeTextService::new();
         let unknown: IUnknown = service.into();
         unsafe {
@@ -29,12 +31,18 @@ impl IClassFactory_Impl for ClassFactory_Impl {
             if hr.is_ok() {
                 Ok(())
             } else {
+                crate::dll::decrement_instance_count();
                 Err(Error::from(hr))
             }
         }
     }
 
-    fn LockServer(&self, _flock: BOOL) -> Result<()> {
+    fn LockServer(&self, flock: BOOL) -> Result<()> {
+        if flock.as_bool() {
+            crate::dll::increment_instance_count();
+        } else {
+            crate::dll::decrement_instance_count();
+        }
         Ok(())
     }
 }

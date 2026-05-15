@@ -172,11 +172,21 @@ msiexec /i target\wix\winxime-server-0.1.0-x86_64.msi
     - [x] IPC ReloadConfig 命令 (winxime-ipc)
     - [x] ipc_server.rs 处理 ReloadConfig → eng.deploy()
     - [x] winxime-setup 部署后调用 IpcClient::reload_config()
- - [x] **方案级详细设置 (2026-05-12)**
-    - [x] SchemaConfigManager (rime_config.rs)
-    - [x] 读取方案配置 (speller/translator/reverse_lookup/tradition)
-    - [x] 保存方案配置到 schema.custom.yaml
-    - [x] InputSchemaState 添加 schema_config 字段
+- [x] **方案级详细设置 (2026-05-12)**
+     - [x] SchemaConfigManager (rime_config.rs)
+     - [x] 读取方案配置 (speller/translator/reverse_lookup/tradition)
+     - [x] 保存方案配置到 schema.custom.yaml
+     - [x] InputSchemaState 添加 schema_config 字段
+     - [x] 输入方案页面展示选中方案的详细设置
+     - [x] SettingsGroup 组件渲染方案配置分组
+  - [x] **日志系统重构 (2026-05-15)**
+     - [x] 使用 tracing 替换原来的 log crate
+     - [x] winxime-core: init_logging() 支持组件名参数
+     - [x] winxime-server: 使用 tracing + init_logging_with_console()
+     - [x] winxime-tsf: 使用 tracing::debug!
+     - [x] winxime-tsf/language_bar.rs: 使用 tracing
+     - [x] winxime-server/tray.rs, ui.rs, ipc_server.rs: 使用 tracing
+  - [ ] 词库管理功能 (导入/导出/同步)
     - [x] 输入方案页面展示选中方案的详细设置
     - [x] SettingsGroup 组件渲染方案配置分组
  - [ ] 词库管理功能 (导入/导出/同步)

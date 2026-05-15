@@ -11,7 +11,8 @@ crate-type = ["cdylib"]
 [dependencies]
 winxime-core.workspace = true
 winxime-ipc.workspace = true
-librime-sys.workspace = true
+librime.workspace = true
+tracing = "0.1"
 windows-core = "0.62.2"
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",
@@ -24,4 +25,3 @@ windows = { version = "0.62.2", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 winreg = "0.52"
-time = "0.3"

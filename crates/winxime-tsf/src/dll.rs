@@ -1,7 +1,14 @@
 use crate::class_factory::CLSID_XIME;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use windows::Win32::Foundation::*;
 use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetProcAddress, LoadLibraryW};
 use windows_core::*;
+
+static DLL_MODULE: AtomicUsize = AtomicUsize::new(0);
+
+fn get_dll_module() -> HINSTANCE {
+    HINSTANCE(DLL_MODULE.load(Ordering::Acquire) as *mut _)
+}
 
 fn clsid_str() -> String {
     format!(
@@ -23,7 +30,7 @@ fn clsid_str() -> String {
 fn get_module_path() -> String {
     unsafe {
         let mut buf = [0u16; 260];
-        let len = GetModuleFileNameW(Some(HMODULE(DLL_MODULE.0)), &mut buf);
+        let len = GetModuleFileNameW(Some(HMODULE(get_dll_module().0)), &mut buf);
         if len > 0 {
             String::from_utf16_lossy(&buf[..len as usize])
         } else {
@@ -49,9 +56,23 @@ pub unsafe extern "system" fn DllGetClassObject(
     Interface::query(&unknown, riid, ppv)
 }
 
+static ACTIVE_INSTANCES: AtomicUsize = AtomicUsize::new(0);
+
+pub fn increment_instance_count() {
+    ACTIVE_INSTANCES.fetch_add(1, Ordering::AcqRel);
+}
+
+pub fn decrement_instance_count() {
+    ACTIVE_INSTANCES.fetch_sub(1, Ordering::AcqRel);
+}
+
 #[no_mangle]
 pub unsafe extern "system" fn DllCanUnloadNow() -> HRESULT {
-    S_OK
+    if ACTIVE_INSTANCES.load(Ordering::Acquire) > 0 {
+        S_FALSE
+    } else {
+        S_OK
+    }
 }
 
 #[no_mangle]
@@ -71,18 +92,21 @@ pub unsafe extern "system" fn DllUnregisterServer() -> HRESULT {
     S_OK
 }
 
-static mut DLL_MODULE: HINSTANCE = HINSTANCE(std::ptr::null_mut());
-
 #[no_mangle]
 pub unsafe extern "system" fn DllMain(
     hinst: HINSTANCE,
-    _reason: u32,
+    reason: u32,
     _reserved: *mut core::ffi::c_void,
 ) -> BOOL {
-    DLL_MODULE = hinst;
-    crate::language_bar::set_instance(hinst);
+    if reason == DLL_PROCESS_ATTACH {
+        DLL_MODULE.store(hinst.0 as usize, Ordering::Release);
+        crate::language_bar::set_instance(hinst);
+        winxime_core::init_logging("tsf");
+    }
     BOOL(1)
 }
+
+const DLL_PROCESS_ATTACH: u32 = 1;
 
 fn uninstall_layout() {
     let install_str = format!("0804:{}{{{}}}", clsid_str(), clsid_str(),);

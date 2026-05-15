@@ -1,3 +1,4 @@
+﻿use tracing::debug;
 use std::sync::Arc;
 use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM, HINSTANCE, POINT},
@@ -126,7 +127,7 @@ impl TrayIcon {
                 }
             }
             let result = Shell_NotifyIconW(NIM_ADD, &nid);
-            crate::log::log(&format!("Shell_NotifyIconW NIM_ADD result: {:?}", result));
+            debug!("Shell_NotifyIconW NIM_ADD result: {:?}", result);
         }
     }
     
