@@ -291,12 +291,18 @@ fn process_request(
             let current = eng.is_ascii_mode();
             let new_mode = !current;
             tracing::info!("  -> current={}, setting to {}", current, new_mode);
+            
+            // Clear composition state before switching mode
+            eng.clear_composition();
+            tracing::info!("  -> cleared composition");
+            
             eng.set_option("ascii_mode", new_mode);
             ascii_mode.store(new_mode, Ordering::Release);
             crate::tray::update_tray_icon(new_mode);
             
+            window.hide();
+            
             if new_mode {
-                window.hide();
                 let commit = eng.get_commit();
                 let ctx = get_ipc_context(&eng, &commit);
                 update_context(&mut eng, &context, &commit);
