@@ -185,12 +185,13 @@ msiexec /i target\wix\winxime-server-0.1.0-x86_64.msi
      - [x] winxime-server: 使用 tracing + init_logging_with_console()
      - [x] winxime-tsf: 使用 tracing::debug!
      - [x] winxime-tsf/language_bar.rs: 使用 tracing
-     - [x] winxime-server/tray.rs, ui.rs, ipc_server.rs: 使用 tracing
-  - [ ] 词库管理功能 (导入/导出/同步)
-    - [x] 输入方案页面展示选中方案的详细设置
-    - [x] SettingsGroup 组件渲染方案配置分组
- - [ ] 词库管理功能 (导入/导出/同步)
- - [ ] 测试任务栏中/英切换功能
- - [ ] SignPath 组织注册和项目配置
- - [ ] 测试 MSI 安装流程
- - [ ] 移除调试日志 (release 版本)
+- [x] winxime-server/tray.rs, ui.rs, ipc_server.rs: 使用 tracing
+  - [x] **按键绑定实现 (2026-05-16)**
+     - [x] key_binder: 分号选词、方括号/Tab翻页
+     - [x] ascii_composer: commit_code 行为 (切换时提交编码)
+     - [x] switcher: IPC 命令 (GetSchemaList, SelectSchema)
+  - - [ ] 下一步
+     - [ ] switcher: Ctrl+0 弹出方案选择菜单 (需要 UI)
+     - [ ] punctuator 标点符号映射
+     - [ ] recognizer 英文识别模式
+     - [ ] menu.page_size 配置读取
