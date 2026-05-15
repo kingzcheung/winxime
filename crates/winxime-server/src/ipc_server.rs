@@ -202,49 +202,62 @@ fn process_request(
         }
 
         IpcCommand::ProcessKeyEvent => {
-            let handled = match &request.data {
-                IpcRequestData::KeyEvent(key) => {
-                    tracing::info!("Key: {} mod: {}", key.keycode, key.modifiers);
-                    let result = eng.process_key(key.keycode, key.modifiers);
-                    tracing::info!("  handled: {}", result);
-                    result
-                }
-                _ => false,
-            };
-
-            let commit = eng.get_commit();
-            tracing::info!("  commit: {:?}", commit);
-            info!("  input: {:?}", eng.get_input());
-            info!("  composing: {}", eng.is_composing());
-
-            let ipc_ctx = get_ipc_context(&eng, &commit);
-            update_context(&mut eng, context, &commit);
+            let is_ascii = ascii_mode.load(Ordering::Acquire);
+            tracing::info!("Key event, ascii_mode={}", is_ascii);
             
-            if commit.is_some() {
-                tracing::info!("  -> hide (commit)");
-                window.hide();
-            } else if !eng.is_composing() {
-                tracing::info!("  -> hide (not composing)");
-                window.hide();
-            } else if let Some(ctx) = &ipc_ctx {
-                tracing::info!("  candies: {:?}", ctx.candidates.candies);
-                if ctx.candidates.candies.is_empty() {
-                    tracing::info!("  -> hide (no candidates)");
-                    window.hide();
-                } else {
-                    let pos = context.read(|c| (c.caret_x, c.caret_y));
-                    tracing::info!("  -> show at ({}, {})", pos.0, pos.1);
-                    window.show(pos.0, pos.1);
-                    info!("  -> update {} candies", ctx.candidates.candies.len());
-                    window.update(ctx);
+            if is_ascii {
+                tracing::info!("  -> ASCII mode, not handling");
+                IpcResponse {
+                    success: false,
+                    session_id: request.session_id,
+                    context: None,
+                    status: Some(get_ipc_status(&eng)),
                 }
-            }
+            } else {
+                let handled = match &request.data {
+                    IpcRequestData::KeyEvent(key) => {
+                        tracing::info!("Key: {} mod: {}", key.keycode, key.modifiers);
+                        let result = eng.process_key(key.keycode, key.modifiers);
+                        tracing::info!("  handled: {}", result);
+                        result
+                    }
+                    _ => false,
+                };
 
-            IpcResponse {
-                success: handled,
-                session_id: request.session_id,
-                context: ipc_ctx,
-                status: Some(get_ipc_status(&eng)),
+                let commit = eng.get_commit();
+                tracing::info!("  commit: {:?}", commit);
+                info!("  input: {:?}", eng.get_input());
+                info!("  composing: {}", eng.is_composing());
+
+                let ipc_ctx = get_ipc_context(&eng, &commit);
+                update_context(&mut eng, context, &commit);
+                
+                if commit.is_some() {
+                    tracing::info!("  -> hide (commit)");
+                    window.hide();
+                } else if !eng.is_composing() {
+                    tracing::info!("  -> hide (not composing)");
+                    window.hide();
+                } else if let Some(ctx) = &ipc_ctx {
+                    tracing::info!("  candies: {:?}", ctx.candidates.candies);
+                    if ctx.candidates.candies.is_empty() {
+                        tracing::info!("  -> hide (no candidates)");
+                        window.hide();
+                    } else {
+                        let pos = context.read(|c| (c.caret_x, c.caret_y));
+                        tracing::info!("  -> show at ({}, {})", pos.0, pos.1);
+                        window.show(pos.0, pos.1);
+                        info!("  -> update {} candies", ctx.candidates.candies.len());
+                        window.update(ctx);
+                    }
+                }
+
+                IpcResponse {
+                    success: handled,
+                    session_id: request.session_id,
+                    context: ipc_ctx,
+                    status: Some(get_ipc_status(&eng)),
+                }
             }
         }
 
