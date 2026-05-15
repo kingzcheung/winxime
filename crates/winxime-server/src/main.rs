@@ -85,7 +85,7 @@ fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
         let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
         (
-            workspace_dir.join("librime").join("data").join("minimal"),
+            workspace_dir.join("rime-wubi"),
             workspace_dir.join("target").join("debug").join("user-data"),
         )
     }

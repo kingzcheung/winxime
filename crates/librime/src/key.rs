@@ -96,6 +96,7 @@ pub fn vk_to_xk(vk: u16) -> i32 {
         0x41..=0x5A => XK_A as i32 + (vk - 0x41) as i32,
         0x61..=0x7A => XK_A as i32 + (vk - 0x61) as i32,
         0x30..=0x39 => XK_0 as i32 + (vk - 0x30) as i32,
+        0x60..=0x69 => XK_0 as i32 + (vk - 0x60) as i32,
         _ => vk as i32,
     }
 }
