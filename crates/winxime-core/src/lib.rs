@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use tracing_subscriber::{fmt, EnvFilter, prelude::*};
 
+static LOG_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> = std::sync::OnceLock::new();
+
 pub fn init_logging(component: &str) {
     let log_dir = get_log_dir();
     std::fs::create_dir_all(&log_dir).ok();
@@ -11,7 +13,8 @@ pub fn init_logging(component: &str) {
         format!("{}.log", component),
     );
     
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    LOG_GUARD.set(guard).ok();
     
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("debug"));
@@ -37,7 +40,8 @@ pub fn init_logging_with_console(component: &str) {
         format!("{}.log", component),
     );
     
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    LOG_GUARD.set(guard).ok();
     
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("debug"));
