@@ -292,9 +292,17 @@ fn process_request(
             let new_mode = !current;
             tracing::info!("  -> current={}, setting to {}", current, new_mode);
             
-            // Clear composition state before switching mode
-            eng.clear_composition();
-            tracing::info!("  -> cleared composition");
+            // commit_code behavior: if composing, commit the input code first
+            let commit_text = if eng.is_composing() {
+                eng.get_input().unwrap_or_default()
+            } else {
+                String::new()
+            };
+            
+            if !commit_text.is_empty() {
+                tracing::info!("  -> commit_code: committing '{}' before switch", commit_text);
+                eng.clear_composition();
+            }
             
             eng.set_option("ascii_mode", new_mode);
             ascii_mode.store(new_mode, Ordering::Release);
@@ -303,9 +311,17 @@ fn process_request(
             window.hide();
             
             if new_mode {
-                let commit = eng.get_commit();
-                let ctx = get_ipc_context(&eng, &commit);
-                update_context(&mut eng, &context, &commit);
+                // Return commit if we had input
+                let ctx = if !commit_text.is_empty() {
+                    Some(winxime_ipc::Context {
+                        preedit: winxime_ipc::Text { str: String::new() },
+                        commit: Some(commit_text),
+                        candidates: winxime_ipc::CandidateInfo::default(),
+                    })
+                } else {
+                    None
+                };
+                update_context(&mut eng, &context, &None);
                 
                 IpcResponse {
                     success: true,

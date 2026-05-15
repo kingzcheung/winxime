@@ -9,7 +9,7 @@ use winxime_ipc::{
 };
 use librime::{
     vk_to_xk, get_key_modifiers, VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN,
-    VK_RETURN, VK_BACK, VK_TAB, VK_ESCAPE, VK_SPACE, VK_DELETE, K_SHIFT_MASK,
+    VK_RETURN, VK_BACK, VK_TAB, VK_ESCAPE, VK_SPACE, K_SHIFT_MASK,
 };
 
 const TF_INVALID_COOKIE: u32 = 0xFFFFFFFF;
