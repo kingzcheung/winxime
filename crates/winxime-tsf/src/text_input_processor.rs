@@ -1,5 +1,4 @@
 ﻿use tracing::debug;
-use crate::tsf_debug;
 use std::sync::Arc;
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
@@ -435,7 +434,7 @@ impl ITfCompositionSink_Impl for CompositionSink_Impl {
 
 impl ITfEditSession_Impl for XimeEditSession_Impl {
     fn DoEditSession(&self, ec: u32) -> Result<()> {
-        tsf_debug!(
+        debug!(
             "DoEditSession: ec={}, commit={}, composing={}, preedit='{}'",
             ec,
             self.output.commit.is_some(),
@@ -485,7 +484,7 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
             debug!("DoEditSession: start composition '{}'", preedit_text);
             self.start_composition(&context, ec, &preedit_text);
         } else if self.output.composing && !preedit_text.is_empty() {
-            tsf_debug!("DoEditSession: update composition text '{}' (has_comp={})", preedit_text, has_comp);
+            debug!("DoEditSession: update composition text '{}' (has_comp={})", preedit_text, has_comp);
             self.update_composition_text(&context, ec, &preedit_text);
         } else if !self.output.composing && has_comp {
             debug!("DoEditSession: end composition");
@@ -522,7 +521,7 @@ impl XimeEditSession_Impl {
     }
 
     fn start_composition(&self, context: &ITfContext, ec: u32, preedit: &str) {
-        tsf_debug!("start_composition: preedit='{}'", preedit);
+        debug!("start_composition: preedit='{}'", preedit);
         use windows::Win32::UI::TextServices::{ITfInsertAtSelection, TF_IAS_QUERYONLY};
         
         let insert_at_selection: ITfInsertAtSelection = match context.cast() {
@@ -566,7 +565,7 @@ impl XimeEditSession_Impl {
                     debug!("start_composition: setting text {} chars", wide.len());
                     match comp_range.SetText(ec, 0, &wide) {
                         Ok(_) => {
-                            tsf_debug!("start_composition: SetText succeeded, weasel mode");
+                            debug!("start_composition: SetText succeeded, weasel mode");
                             // Weasel: collapse to end, set selection with TF_AE_NONE
                             comp_range.Collapse(ec, TF_ANCHOR_END).ok();
                             use std::mem::ManuallyDrop;
@@ -600,11 +599,11 @@ impl XimeEditSession_Impl {
     }
 
     fn update_composition_text(&self, context: &ITfContext, ec: u32, preedit: &str) {
-        tsf_debug!("update_composition_text: preedit='{}'", preedit);
+        debug!("update_composition_text: preedit='{}'", preedit);
         let comp = match self.composition.try_lock() {
             Ok(g) => g,
             Err(_) => {
-                tsf_debug!("update_composition_text: lock failed");
+                debug!("update_composition_text: lock failed");
                 return;
             }
         };
@@ -614,7 +613,7 @@ impl XimeEditSession_Impl {
                     let wide: Vec<u16> = preedit.encode_utf16().collect();
                     match range.SetText(ec, 0, &wide) {
                         Ok(_) => {
-                            tsf_debug!("update_composition_text: SetText succeeded");
+                            debug!("update_composition_text: SetText succeeded");
                             // Weasel: collapse to end, set selection with TF_AE_NONE
                             range.Collapse(ec, TF_ANCHOR_END).ok();
                             use std::mem::ManuallyDrop;
@@ -624,14 +623,14 @@ impl XimeEditSession_Impl {
                             sel.style.fInterimChar = FALSE;
                             context.SetSelection(ec, &[sel]).ok();
                         }
-                        Err(e) => tsf_debug!("update_composition_text: SetText failed: {:?}", e),
+                        Err(e) => debug!("update_composition_text: SetText failed: {:?}", e),
                     }
                 } else {
-                    tsf_debug!("update_composition_text: GetRange failed");
+                    debug!("update_composition_text: GetRange failed");
                 }
             }
         } else {
-            tsf_debug!("update_composition_text: no composition");
+            debug!("update_composition_text: no composition");
         }
     }
 
