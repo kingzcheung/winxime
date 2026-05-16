@@ -101,6 +101,12 @@ pub unsafe extern "system" fn DllMain(
     if reason == DLL_PROCESS_ATTACH {
         DLL_MODULE.store(hinst.0 as usize, Ordering::Release);
         crate::language_bar::set_instance(hinst);
+        // Use simple file logging for DLL
+        let log_path = std::env::var("TEMP")
+            .map(|p| std::path::PathBuf::from(p).join("winxime").join("tsf.log"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("tsf.log"));
+        std::fs::create_dir_all(log_path.parent().unwrap()).ok();
+        // Simple initialization without tracing_appender
         winxime_core::init_logging("tsf");
     }
     BOOL(1)

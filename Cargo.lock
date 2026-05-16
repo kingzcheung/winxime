@@ -7064,6 +7064,7 @@ dependencies = [
 name = "winxime-core"
 version = "0.2.0"
 dependencies = [
+ "chrono",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -7130,6 +7131,7 @@ dependencies = [
 name = "winxime-tsf"
 version = "0.2.0"
 dependencies = [
+ "chrono",
  "librime",
  "tracing",
  "windows 0.62.2",

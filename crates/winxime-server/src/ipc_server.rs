@@ -235,6 +235,10 @@ fn process_request(
                 tracing::info!("  commit: {:?}", commit);
                 info!("  input: {:?}", eng.get_input());
                 info!("  composing: {}", eng.is_composing());
+                
+                if let Some(ref commit_text) = commit {
+                    tracing::info!(">>> COMMIT_TO_SCREEN: '{}'", commit_text);
+                }
 
                 let ipc_ctx = get_ipc_context(&eng, &commit);
                 update_context(&mut eng, context, &commit);
@@ -301,15 +305,17 @@ fn process_request(
             let new_mode = !current;
             tracing::info!("  -> current={}, setting to {}", current, new_mode);
             
-            // commit_code behavior: if composing, commit the input code first
-            let commit_text = if eng.is_composing() {
+            // Check if we were composing before the switch
+            let was_composing = eng.is_composing();
+            let input_text = if was_composing {
                 eng.get_input().unwrap_or_default()
             } else {
                 String::new()
             };
             
-            if !commit_text.is_empty() {
-                tracing::info!("  -> commit_code: committing '{}' before switch", commit_text);
+            // Clear composition in the engine
+            if was_composing {
+                tracing::info!("  -> clearing composition before switch");
                 eng.clear_composition();
             }
             
@@ -319,36 +325,38 @@ fn process_request(
             
             window.hide();
             
-            if new_mode {
-                // Return commit if we had input
-                let ctx = if !commit_text.is_empty() {
-                    Some(winxime_ipc::Context {
-                        preedit: winxime_ipc::Text { str: String::new() },
-                        commit: Some(commit_text),
-                        candidates: winxime_ipc::CandidateInfo::default(),
-                    })
-                } else {
-                    None
-                };
-                update_context(&mut eng, &context, &None);
-                
-                IpcResponse {
-                    success: true,
-                    session_id: request.session_id,
-                    context: ctx,
-                    status: Some(get_ipc_status(&eng)),
-                    schema_list: None,
-                }
+            // Build context response
+            // When switching to ASCII mode with input, commit the input code
+            // When switching to Chinese mode or no input, just clear the composition
+            let ctx = if new_mode && !input_text.is_empty() {
+                // Switching to ASCII mode: commit the input code
+                tracing::info!("  -> commit_code: committing '{}' before switch to ASCII", input_text);
+                tracing::info!(">>> COMMIT_TO_SCREEN (toggle): '{}'", input_text);
+                Some(winxime_ipc::Context {
+                    preedit: winxime_ipc::Text { str: String::new() },
+                    commit: Some(input_text),
+                    candidates: winxime_ipc::CandidateInfo::default(),
+                })
+            } else if was_composing {
+                // Was composing but not committing: indicate composition should be cleared
+                tracing::info!("  -> clearing composition in TSF (no commit)");
+                Some(winxime_ipc::Context {
+                    preedit: winxime_ipc::Text { str: String::new() },
+                    commit: None,
+                    candidates: winxime_ipc::CandidateInfo::default(),
+                })
             } else {
-                update_context(&mut eng, &context, &None);
-                
-                IpcResponse {
-                    success: true,
-                    session_id: request.session_id,
-                    context: None,
-                    status: Some(get_ipc_status(&eng)),
-                    schema_list: None,
-                }
+                None
+            };
+            
+            update_context(&mut eng, &context, &None);
+            
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: ctx,
+                status: Some(get_ipc_status(&eng)),
+                schema_list: None,
             }
         }
 

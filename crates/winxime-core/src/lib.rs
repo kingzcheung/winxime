@@ -1,7 +1,17 @@
 use std::path::PathBuf;
 use tracing_subscriber::{fmt, EnvFilter, prelude::*};
+use std::sync::Mutex;
 
-static LOG_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> = std::sync::OnceLock::new();
+static LOG_GUARD: Mutex<Option<tracing_appender::non_blocking::WorkerGuard>> = Mutex::new(None);
+
+struct LocalTimer;
+
+impl tracing_subscriber::fmt::time::FormatTime for LocalTimer {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
+        let now = chrono::Local::now();
+        write!(w, "{}", now.format("%Y-%m-%dT%H:%M:%S%.6f"))
+    }
+}
 
 pub fn init_logging(component: &str) {
     let log_dir = get_log_dir();
@@ -14,7 +24,11 @@ pub fn init_logging(component: &str) {
     );
     
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-    LOG_GUARD.set(guard).ok();
+    
+    // Store guard in mutex, allowing replacement
+    if let Ok(mut g) = LOG_GUARD.lock() {
+        *g = Some(guard);
+    }
     
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("debug"));
@@ -25,7 +39,8 @@ pub fn init_logging(component: &str) {
             .with_writer(non_blocking)
             .with_ansi(false)
             .with_target(false)
-            .with_line_number(true))
+            .with_line_number(true)
+            .with_timer(LocalTimer))
         .try_init()
         .ok();
 }
@@ -41,7 +56,11 @@ pub fn init_logging_with_console(component: &str) {
     );
     
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-    LOG_GUARD.set(guard).ok();
+    
+    // Store guard in mutex, allowing replacement
+    if let Ok(mut g) = LOG_GUARD.lock() {
+        *g = Some(guard);
+    }
     
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("debug"));
@@ -52,7 +71,8 @@ pub fn init_logging_with_console(component: &str) {
             .with_writer(non_blocking)
             .with_ansi(false)
             .with_target(false)
-            .with_line_number(true))
+            .with_line_number(true)
+            .with_timer(LocalTimer))
         .with(fmt::layer()
             .with_writer(std::io::stdout)
             .with_ansi(true))
@@ -72,7 +92,6 @@ pub fn log_dir() -> PathBuf {
 }
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
 
 #[derive(Debug, Clone, Default)]
 pub struct CompositionInfo {

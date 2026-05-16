@@ -3,6 +3,9 @@
 $iconPath = "$PSScriptRoot\resource\icon.ico"
 $registerExe = "$PSScriptRoot\target\debug\winxime-tsf-register.exe"
 
+Write-Host "Step 0: Clearing old logs..." -ForegroundColor Yellow
+Remove-Item "$env:TEMP\winxime\*.log" -Force -ErrorAction SilentlyContinue
+
 Write-Host "Step 1: Stopping server..." -ForegroundColor Yellow
 cargo run -p winxime-server -- /q 2>&1 | Out-Null
 Start-Sleep -Seconds 3
@@ -20,7 +23,7 @@ if ($serverProcess) {
 }
 
 Write-Host "Step 2: Unregistering COM DLL..." -ForegroundColor Yellow
-Start-Process -Verb RunAs -Wait -FilePath "regsvr32.exe" -ArgumentList "/u /s", "$PSScriptRoot\target\debug\winxime_tsf.dll" -ErrorAction SilentlyContinue
+Start-Process -Verb RunAs -Wait -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "$PSScriptRoot\target\debug\winxime_tsf.dll" -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 3
 
 Write-Host "Step 3: Unregistering profile..." -ForegroundColor Yellow

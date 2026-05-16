@@ -1,4 +1,5 @@
 ﻿use tracing::debug;
+use crate::tsf_debug;
 use std::sync::Arc;
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
@@ -434,7 +435,7 @@ impl ITfCompositionSink_Impl for CompositionSink_Impl {
 
 impl ITfEditSession_Impl for XimeEditSession_Impl {
     fn DoEditSession(&self, ec: u32) -> Result<()> {
-        debug!(
+        tsf_debug!(
             "DoEditSession: ec={}, commit={}, composing={}, preedit='{}'",
             ec,
             self.output.commit.is_some(),
@@ -452,50 +453,43 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
         let context = unsafe { doc_mgr.GetBase() }?;
         debug!("DoEditSession: got context");
 
-        // Handle commit and composition in one transaction (like chewing-tsf)
+        // Handle commit and composition (weasel pattern)
         let commit_text = self.output.commit.clone().unwrap_or_default();
         let preedit_text = self.output.preedit.clone();
 
         if !commit_text.is_empty() {
-            debug!("DoEditSession: committing '{}' first", commit_text);
+            debug!("DoEditSession: COMMIT '{}'", commit_text);
             
-            let comp = match self.composition.try_lock() {
-                Ok(g) => g.clone(),
-                Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner().clone(),
-                Err(std::sync::TryLockError::WouldBlock) => {
-                    debug!("DoEditSession: composition lock would block");
-                    return Ok(());
-                }
+            // If not composing, start a composition for the commit
+            let has_comp = match self.composition.try_lock() {
+                Ok(g) => g.is_some(),
+                Err(_) => false,
             };
-            if let Some(ref composition) = comp {
-                unsafe {
-                    if let Ok(range) = composition.GetRange() {
-                        let wide: Vec<u16> = commit_text.encode_utf16().collect();
-                        if range.SetText(ec, 0, &wide).is_ok() {
-                            range.Collapse(ec, TF_ANCHOR_END).ok();
-                            
-                            use std::mem::ManuallyDrop;
-                            let mut selections = [TF_SELECTION::default(); 1];
-                            selections[0].range = ManuallyDrop::new(Some(range));
-                            selections[0].style.ase = TF_AE_END;
-                            selections[0].style.fInterimChar = FALSE;
-                            context.SetSelection(ec, &selections).ok();
-                            let [TF_SELECTION { range, .. }] = selections;
-                            ManuallyDrop::into_inner(range);
-                        }
-                    }
-                }
+            if !has_comp {
+                debug!("DoEditSession: creating composition for commit");
+                self.start_composition(&context, ec, "");
             }
             
+            // Set commit text and end composition (clear=false to keep text)
+            self.update_composition_text(&context, ec, &commit_text);
             self.end_composition(ec);
-            debug!("DoEditSession: commit done, composition ended");
+            debug!("DoEditSession: commit done");
         }
 
-        if self.output.composing && !preedit_text.is_empty() {
-            debug!("DoEditSession: starting new composition with '{}'", preedit_text);
+        // Handle composing state changes and inline preedit update
+        let has_comp = match self.composition.try_lock() {
+            Ok(g) => g.is_some(),
+            Err(_) => false,
+        };
+        if self.output.composing && !has_comp {
+            debug!("DoEditSession: start composition '{}'", preedit_text);
             self.start_composition(&context, ec, &preedit_text);
-        } else if !self.output.composing {
-            debug!("DoEditSession: not composing, done");
+        } else if self.output.composing && !preedit_text.is_empty() {
+            tsf_debug!("DoEditSession: update composition text '{}' (has_comp={})", preedit_text, has_comp);
+            self.update_composition_text(&context, ec, &preedit_text);
+        } else if !self.output.composing && has_comp {
+            debug!("DoEditSession: end composition");
+            self.end_composition(ec);
         }
 
         Ok(())
@@ -528,7 +522,7 @@ impl XimeEditSession_Impl {
     }
 
     fn start_composition(&self, context: &ITfContext, ec: u32, preedit: &str) {
-        debug!("start_composition: preedit='{}'", preedit);
+        tsf_debug!("start_composition: preedit='{}'", preedit);
         use windows::Win32::UI::TextServices::{ITfInsertAtSelection, TF_IAS_QUERYONLY};
         
         let insert_at_selection: ITfInsertAtSelection = match context.cast() {
@@ -572,26 +566,23 @@ impl XimeEditSession_Impl {
                     debug!("start_composition: setting text {} chars", wide.len());
                     match comp_range.SetText(ec, 0, &wide) {
                         Ok(_) => {
-                            debug!("start_composition: SetText succeeded");
-                            let preedit_len = preedit.chars().count() as i32;
-                            let mut moved = 0;
-                            comp_range.Collapse(ec, TF_ANCHOR_START).ok();
-                            comp_range.ShiftEnd(ec, preedit_len, &mut moved, std::ptr::null_mut()).ok();
-                            comp_range.ShiftStart(ec, preedit_len, &mut moved, std::ptr::null_mut()).ok();
-                            
+                            tsf_debug!("start_composition: SetText succeeded, weasel mode");
+                            // Weasel: collapse to end, set selection with TF_AE_NONE
+                            comp_range.Collapse(ec, TF_ANCHOR_END).ok();
                             use std::mem::ManuallyDrop;
-                            let mut selections = [TF_SELECTION::default(); 1];
-                            selections[0].range = ManuallyDrop::new(Some(comp_range));
-                            selections[0].style.ase = TF_AE_END;
-                            selections[0].style.fInterimChar = FALSE;
-                            context.SetSelection(ec, &selections).ok();
-                            let [TF_SELECTION { range, .. }] = selections;
-                            ManuallyDrop::into_inner(range);
+                            let mut sel = TF_SELECTION::default();
+                            sel.range = ManuallyDrop::new(Some(comp_range));
+                            sel.style.ase = TF_AE_NONE;
+                            sel.style.fInterimChar = FALSE;
+                            context.SetSelection(ec, &[sel]).ok();
                             
                             match self.composition.try_lock() {
                                 Ok(mut guard) => *guard = Some(comp),
                                 Err(std::sync::TryLockError::Poisoned(e)) => *e.into_inner() = Some(comp),
-                                Err(std::sync::TryLockError::WouldBlock) => {}
+                                Err(std::sync::TryLockError::WouldBlock) => {
+                                    // End the composition we just created since we can't track it
+                                    comp.EndComposition(ec).ok();
+                                }
                             }
                             
                             Self::update_caret_position_in_session(context, ec, &self.ipc);
@@ -608,22 +599,39 @@ impl XimeEditSession_Impl {
         }
     }
 
-    fn update_composition_text(&self, _context: &ITfContext, ec: u32, preedit: &str) {
-        debug!("update_composition_text: preedit='{}'", preedit);
+    fn update_composition_text(&self, context: &ITfContext, ec: u32, preedit: &str) {
+        tsf_debug!("update_composition_text: preedit='{}'", preedit);
         let comp = match self.composition.try_lock() {
             Ok(g) => g,
-            Err(_) => return,
+            Err(_) => {
+                tsf_debug!("update_composition_text: lock failed");
+                return;
+            }
         };
         if let Some(ref composition) = *comp {
             unsafe {
                 if let Ok(range) = composition.GetRange() {
                     let wide: Vec<u16> = preedit.encode_utf16().collect();
                     match range.SetText(ec, 0, &wide) {
-                        Ok(_) => debug!("update_composition_text: SetText succeeded"),
-                        Err(e) => debug!("update_composition_text: SetText failed: {:?}", e),
+                        Ok(_) => {
+                            tsf_debug!("update_composition_text: SetText succeeded");
+                            // Weasel: collapse to end, set selection with TF_AE_NONE
+                            range.Collapse(ec, TF_ANCHOR_END).ok();
+                            use std::mem::ManuallyDrop;
+                            let mut sel = TF_SELECTION::default();
+                            sel.range = ManuallyDrop::new(Some(range));
+                            sel.style.ase = TF_AE_NONE;
+                            sel.style.fInterimChar = FALSE;
+                            context.SetSelection(ec, &[sel]).ok();
+                        }
+                        Err(e) => tsf_debug!("update_composition_text: SetText failed: {:?}", e),
                     }
+                } else {
+                    tsf_debug!("update_composition_text: GetRange failed");
                 }
             }
+        } else {
+            tsf_debug!("update_composition_text: no composition");
         }
     }
 
@@ -643,7 +651,9 @@ impl XimeEditSession_Impl {
                     }
                 }
             }
-            Err(std::sync::TryLockError::WouldBlock) => {}
+            Err(std::sync::TryLockError::WouldBlock) => {
+                // Lock held by another thread - skip to avoid deadlock
+            }
         }
     }
 }
@@ -1023,10 +1033,29 @@ impl XimeTextService_Impl {
         debug!("  -> returning false");
         false
     }
+
+    fn abort_composition(&self) {
+        debug!("abort_composition");
+        self.composing.set(false);
+        // Release composition reference if held (OnCompositionTerminated will clean up TSF side)
+        if let Ok(mut guard) = self.composition.try_lock() {
+            *guard = None;
+        }
+    }
 }
 
 impl ITfKeyEventSink_Impl for XimeTextService_Impl {
-    fn OnSetFocus(&self, _fforeground: BOOL) -> Result<()> {
+    fn OnSetFocus(&self, fforeground: BOOL) -> Result<()> {
+        if fforeground.as_bool() {
+            if self.ipc.is_connected() {
+                self.ipc.focus_in();
+            }
+        } else {
+            if self.ipc.is_connected() {
+                self.ipc.focus_out();
+            }
+            self.abort_composition();
+        }
         Ok(())
     }
 
@@ -1532,7 +1561,7 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
             if self.ipc.is_connected() {
                 self.ipc.focus_out();
             }
-            self.composing.set(false);
+            self.abort_composition();
             return Ok(());
         }
         
