@@ -5,8 +5,14 @@
 
 ## 快速开始
 - 开发构建： `.\rebuild.ps1` (构建+注册+启动服务器)
-- 打包 MSI： `.\msi-build.ps1` (生成安装包)
-- 卸载 MSI： `.\uninstall-msi.ps1` (完整卸载安装)
+- 打包 MSI： `.\msi-build.ps1` (生成安装包，版本号自动从 Cargo.toml 读取)
+- 完全卸载： `.\full-uninstall.ps1` (删除所有文件+注册表+用户数据)
+
+## MSI 构建
+- 构建 MSI： `.\msi-build.ps1`
+- 输出文件： `target\wix\xime-{version}-x86_64.msi`
+- 安装测试： `msiexec /i target\wix\xime-{version}-x86_64.msi`
+- 版本号： 自动从 `Cargo.toml` 的 `workspace.package.version` 读取
 
 ## 硬性规则（必须遵守，CI 会验证）
 - 所有命令使用 powershell

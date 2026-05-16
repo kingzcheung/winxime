@@ -13,7 +13,7 @@ winxime-config = { path = "../winxime-config" }
 winxime-ipc = { path = "../winxime-ipc" }
 librime.workspace = true
 anyhow = "1.0"
-windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Registry", "Win32_System_Threading"] }
+windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Registry", "Win32_System_Threading", "Win32_System_Com"] }
 raw-window-handle = "0.6"
 rust-embed = { version = "8", features = ["interpolate-folder-path"] }
 serde_yaml = "0.9"

@@ -1,7 +1,96 @@
 use std::fs;
 use std::path::PathBuf;
 use std::collections::HashMap;
+use std::sync::Mutex;
 use serde::Deserialize;
+use tracing_subscriber::{fmt, EnvFilter, prelude::*};
+
+static LOG_GUARD: Mutex<Option<tracing_appender::non_blocking::WorkerGuard>> = Mutex::new(None);
+
+struct LocalTimer;
+
+impl tracing_subscriber::fmt::time::FormatTime for LocalTimer {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
+        let now = chrono::Local::now();
+        write!(w, "{}", now.format("%Y-%m-%dT%H:%M:%S%.6f"))
+    }
+}
+
+pub fn init_logging(component: &str) {
+    let log_dir = get_log_dir();
+    std::fs::create_dir_all(&log_dir).ok();
+    
+    let file_appender = tracing_appender::rolling::RollingFileAppender::new(
+        tracing_appender::rolling::Rotation::NEVER,
+        log_dir,
+        format!("{}.log", component),
+    );
+    
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    
+    if let Ok(mut g) = LOG_GUARD.lock() {
+        *g = Some(guard);
+    }
+    
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("debug"));
+    
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer()
+            .with_writer(non_blocking)
+            .with_ansi(false)
+            .with_target(false)
+            .with_line_number(true)
+            .with_timer(LocalTimer))
+        .try_init()
+        .ok();
+}
+
+pub fn init_logging_with_console(component: &str) {
+    let log_dir = get_log_dir();
+    std::fs::create_dir_all(&log_dir).ok();
+    
+    let file_appender = tracing_appender::rolling::RollingFileAppender::new(
+        tracing_appender::rolling::Rotation::NEVER,
+        log_dir,
+        format!("{}.log", component),
+    );
+    
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    
+    if let Ok(mut g) = LOG_GUARD.lock() {
+        *g = Some(guard);
+    }
+    
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("debug"));
+    
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer()
+            .with_writer(non_blocking)
+            .with_ansi(false)
+            .with_target(false)
+            .with_line_number(true)
+            .with_timer(LocalTimer))
+        .with(fmt::layer()
+            .with_writer(std::io::stdout)
+            .with_ansi(true))
+        .try_init()
+        .ok();
+}
+
+fn get_log_dir() -> PathBuf {
+    std::env::var("TEMP")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("winxime")
+}
+
+pub fn log_dir() -> PathBuf {
+    get_log_dir()
+}
 
 #[derive(Debug, Deserialize, Default)]
 pub struct XimeConfig {

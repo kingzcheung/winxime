@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/librime",
-    "crates/winxime-core",
     "crates/winxime-tsf",
     "crates/winxime-rime",
     "crates/winxime-ipc",
@@ -21,7 +20,6 @@ repository = "https://github.com/ximeiorg/winxime"
 
 [workspace.dependencies]
 librime = { path = "crates/librime" }
-winxime-core = { path = "crates/winxime-core" }
 winxime-tsf = { path = "crates/winxime-tsf" }
 winxime-rime = { path = "crates/winxime-rime" }
 winxime-ipc = { path = "crates/winxime-ipc" }

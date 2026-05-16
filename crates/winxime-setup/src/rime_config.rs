@@ -3,7 +3,6 @@ use librime::{
     create_session, start_maintenance, join_maintenance_thread,
     levers::CustomSettings,
 };
-use librime::levers::SwitcherSettings;
 pub use librime::levers::SchemaInfo;
 pub use librime::levers::deploy_all;
 use std::ffi::CString;
@@ -18,6 +17,7 @@ fn init_rime_deployer() -> Result<(), String> {
         let (shared_data_dir, user_data_dir) = get_data_dirs();
         
         ensure_user_config_files(&user_data_dir);
+        ensure_schemas_in_user_dir(&shared_data_dir, &user_data_dir);
         
         let mut traits = Traits::new();
         traits
@@ -66,15 +66,6 @@ fn ensure_user_config_files(user_data_dir: &std::path::Path) {
         std::fs::create_dir_all(user_data_dir).ok();
     }
     
-    let default_custom = user_data_dir.join("default.custom.yaml");
-    let wubi_schema = user_data_dir.join("wubi86.schema.yaml");
-    let wubi_dict = user_data_dir.join("wubi86.dict.yaml");
-    
-    if !default_custom.exists() || !wubi_schema.exists() || !wubi_dict.exists() {
-        eprintln!("User configs missing, downloading from {}", DEFAULT_USER_CONFIG_URL);
-        download_and_extract_user_configs(user_data_dir);
-    }
-    
     let config_source_dir = get_config_source_dir();
     
     let xime_yaml = user_data_dir.join("xime.yaml");
@@ -84,18 +75,47 @@ fn ensure_user_config_files(user_data_dir: &std::path::Path) {
             std::fs::copy(&source, &xime_yaml).ok();
         }
     }
-    
-    let xime_custom = user_data_dir.join("xime.custom.yaml");
-    if !xime_custom.exists() {
-        std::fs::write(&xime_custom, 
+}
+
+fn ensure_schemas_in_user_dir(shared_data_dir: &std::path::Path, user_data_dir: &std::path::Path) {
+    let default_custom = user_data_dir.join("default.custom.yaml");
+    if !default_custom.exists() {
+        let schema_list = if let Ok(entries) = std::fs::read_dir(shared_data_dir) {
+            let schemas: Vec<String> = entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    if name.ends_with(".schema.yaml") {
+                        Some(name.replace(".schema.yaml", ""))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            
+            if schemas.is_empty() {
+                "    - schema: wubi86\n".to_string()
+            } else {
+                schemas.iter()
+                    .map(|s| format!("    - schema: {}\n", s))
+                    .collect::<Vec<_>>()
+                    .join("")
+            }
+        } else {
+            "    - schema: wubi86\n".to_string()
+        };
+        
+        let content = format!(
 r#"customization:
   distribution_code_name: Xime
   distribution_version: 1.0
-  generator: "Xime::ConfigManager"
-  rime_version: 1.16.1
 
-patch: {}
-"#).ok();
+patch:
+  schema_list:
+{}
+"#, schema_list);
+        
+        std::fs::write(&default_custom, content).ok();
     }
 }
 
@@ -216,82 +236,149 @@ fn get_config_source_dir() -> std::path::PathBuf {
     }
 }
 
-pub struct RimeConfigManager {
-    settings: CustomSettings,
-}
-
-impl RimeConfigManager {
-    pub fn new() -> Result<Self, String> {
-        init_rime_deployer()?;
-        let settings = CustomSettings::new("xime", "Xime::ConfigManager")
-            .map_err(|e| e.to_string())?;
-        Ok(Self { settings })
-    }
-
-    pub fn get_string(&self, key: &str) -> Option<String> {
-        self.settings.get_string(key)
-    }
-
-    pub fn get_int(&self, key: &str) -> Option<i32> {
-        self.settings.get_int(key)
-    }
-
-    pub fn get_bool(&self, key: &str) -> Option<bool> {
-        self.settings.get_bool(key)
-    }
-
-    pub fn get_double(&self, key: &str) -> Option<f64> {
-        self.settings.get_double(key)
-    }
-
-    pub fn set_string(&self, key: &str, value: &str) -> Result<(), String> {
-        self.settings.set_string(key, value).map_err(|e| e.to_string())
-    }
-
-    pub fn set_int(&self, key: &str, value: i32) -> Result<(), String> {
-        self.settings.set_int(key, value).map_err(|e| e.to_string())
-    }
-
-    pub fn set_bool(&self, key: &str, value: bool) -> Result<(), String> {
-        self.settings.set_bool(key, value).map_err(|e| e.to_string())
-    }
-
-    pub fn set_double(&self, key: &str, value: f64) -> Result<(), String> {
-        self.settings.set_double(key, value).map_err(|e| e.to_string())
-    }
-
-    pub fn save(&self) -> Result<(), String> {
-        self.settings.save().map_err(|e| e.to_string())
-    }
-}
-
 pub struct SchemaManager {
-    settings: SwitcherSettings,
+    user_dir: std::path::PathBuf,
 }
 
 impl SchemaManager {
     pub fn new() -> Result<Self, String> {
         init_rime_deployer()?;
-        let settings = SwitcherSettings::new()
-            .map_err(|e| e.to_string())?;
-        Ok(Self { settings })
+        let (_, user_dir) = get_data_dirs();
+        Ok(Self { user_dir })
     }
     
     pub fn get_schema_list(&self) -> Vec<SchemaInfo> {
-        self.settings.get_schema_list()
+        let (shared_data_dir, user_data_dir) = get_data_dirs();
+        let mut schemas = Vec::new();
+        let mut seen_ids = std::collections::HashSet::new();
+        
+        if let Ok(entries) = std::fs::read_dir(&user_data_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.ends_with(".schema.yaml") {
+                        let schema_id = name.replace(".schema.yaml", "");
+                        
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            let schema_name = extract_schema_name(&content, &schema_id);
+                            schemas.push(SchemaInfo { schema_id: schema_id.clone(), name: schema_name });
+                            seen_ids.insert(schema_id);
+                        }
+                    }
+                }
+            }
+        }
+        
+        if let Ok(entries) = std::fs::read_dir(&shared_data_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.ends_with(".schema.yaml") {
+                        let schema_id = name.replace(".schema.yaml", "");
+                        
+                        if seen_ids.contains(&schema_id) {
+                            continue;
+                        }
+                        
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            let schema_name = extract_schema_name(&content, &schema_id);
+                            schemas.push(SchemaInfo { schema_id, name: schema_name });
+                        }
+                    }
+                }
+            }
+        }
+        
+        schemas.sort_by(|a, b| a.name.cmp(&b.name));
+        schemas
     }
     
     pub fn set_schema_list(&self, schema_ids: &[&str]) -> Result<(), String> {
-        self.settings.set_schema_list(schema_ids).map_err(|e| e.to_string())
+        let default_custom = self.user_dir.join("default.custom.yaml");
+        
+        let schema_list_yaml = schema_ids
+            .iter()
+            .map(|id| format!("    - schema: {}", id))
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        let content = format!(
+r#"customization:
+  distribution_code_name: Xime
+  distribution_version: 1.0
+
+patch:
+  schema_list:
+{}
+"#, schema_list_yaml);
+        
+        std::fs::write(&default_custom, content)
+            .map_err(|e| format!("Failed to write default.custom.yaml: {}", e))?;
+        
+        Ok(())
     }
     
     pub fn save(&self) -> Result<(), String> {
-        self.settings.save().map_err(|e| e.to_string())
+        Ok(())
     }
     
     pub fn get_selected_schema(&self) -> Option<String> {
-        self.settings.get_selected_schema()
+        let default_custom = self.user_dir.join("default.custom.yaml");
+        if !default_custom.exists() {
+            return None;
+        }
+        
+        let content = std::fs::read_to_string(&default_custom).ok()?;
+        extract_selected_schema(&content)
     }
+}
+
+fn extract_selected_schema(content: &str) -> Option<String> {
+    for line in content.lines() {
+        if line.contains("schema:") {
+            let schema = line.split("schema:")
+                .nth(1)
+                .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string());
+            if let Some(s) = schema {
+                if !s.is_empty() {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn extract_schema_name(content: &str, schema_id: &str) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut in_schema_block = false;
+    let mut indent_level = 0;
+    
+    for line in &lines {
+        let trimmed = line.trim();
+        
+        if trimmed == "schema:" {
+            in_schema_block = true;
+            indent_level = line.len() - line.trim_start().len();
+            continue;
+        }
+        
+        if in_schema_block {
+            let current_indent = line.len() - line.trim_start().len();
+            
+            if current_indent <= indent_level && !trimmed.is_empty() && !trimmed.starts_with('#') {
+                break;
+            }
+            
+            if trimmed.starts_with("name:") {
+                return trimmed.split(':').nth(1)
+                    .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
+                    .unwrap_or_else(|| schema_id.to_string());
+            }
+        }
+    }
+    
+    schema_id.to_string()
 }
 
 pub fn deploy_all_schemas() -> Result<(), String> {
@@ -304,46 +391,6 @@ pub struct SchemaConfigManager {
     schema_id: String,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct SpellerConfig {
-    pub max_code_length: Option<i32>,
-    pub auto_select: Option<bool>,
-    pub auto_clear: Option<String>,
-    pub alphabet: Option<String>,
-    pub delimiter: Option<String>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct TranslatorConfig {
-    pub enable_charset_filter: Option<bool>,
-    pub enable_completion: Option<bool>,
-    pub enable_sentence: Option<bool>,
-    pub enable_user_dict: Option<bool>,
-    pub enable_encoder: Option<bool>,
-    pub encode_commit_history: Option<bool>,
-    pub max_phrase_length: Option<i32>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct ReverseLookupConfig {
-    pub prefix: Option<String>,
-    pub suffix: Option<String>,
-    pub tips: Option<String>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct TraditionConfig {
-    pub opencc_config: Option<String>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct SchemaConfig {
-    pub speller: SpellerConfig,
-    pub translator: TranslatorConfig,
-    pub reverse_lookup: ReverseLookupConfig,
-    pub tradition: TraditionConfig,
-}
-
 impl SchemaConfigManager {
     pub fn new(schema_id: &str) -> Result<Self, String> {
         init_rime_deployer()?;
@@ -352,183 +399,33 @@ impl SchemaConfigManager {
         Ok(Self { settings, schema_id: schema_id.to_string() })
     }
     
-    fn get_patch_value_string(&self, key: &str) -> Option<String> {
-        let (_, user_data_dir) = get_data_dirs();
-        let custom_yaml_path = user_data_dir.join(format!("{}.custom.yaml", self.schema_id));
-        
-        if !custom_yaml_path.exists() {
-            return None;
-        }
-        
-        let content = std::fs::read_to_string(&custom_yaml_path).ok()?;
-        
-        #[derive(Deserialize)]
-        struct CustomYaml {
-            patch: Option<serde_yaml::Value>,
-        }
-        
-        let yaml: CustomYaml = serde_yaml::from_str(&content).ok()?;
-        let patch = yaml.patch?;
-        
-        if let Some(value) = patch.get(key) {
-            if let serde_yaml::Value::String(s) = value {
-                return Some(s.clone());
-            } else if let serde_yaml::Value::Bool(b) = value {
-                return Some(b.to_string());
-            } else if let serde_yaml::Value::Number(n) = value {
-                return Some(n.to_string());
-            }
-        }
-        
-        let key_parts: Vec<&str> = key.split('/').collect();
-        if key_parts.len() > 1 {
-            let mut current = patch;
-            for part in &key_parts {
-                if let Some(next) = current.get(part) {
-                    current = next.clone();
-                } else {
-                    return None;
-                }
-            }
-            if let serde_yaml::Value::String(s) = current {
-                return Some(s);
-            } else if let serde_yaml::Value::Bool(b) = current {
-                return Some(b.to_string());
-            } else if let serde_yaml::Value::Number(n) = current {
-                return Some(n.to_string());
-            }
-        }
-        
-        None
-    }
-    
-    fn get_patch_value_int(&self, key: &str) -> Option<i32> {
-        let (_, user_data_dir) = get_data_dirs();
-        let custom_yaml_path = user_data_dir.join(format!("{}.custom.yaml", self.schema_id));
-        
-        if !custom_yaml_path.exists() {
-            return None;
-        }
-        
-        let content = std::fs::read_to_string(&custom_yaml_path).ok()?;
-        
-        #[derive(Deserialize)]
-        struct CustomYaml {
-            patch: Option<serde_yaml::Value>,
-        }
-        
-        let yaml: CustomYaml = serde_yaml::from_str(&content).ok()?;
-        let patch = yaml.patch?;
-        
-        if let Some(value) = patch.get(key) {
-            if let serde_yaml::Value::Number(n) = value {
-                return n.as_i64().map(|v| v as i32);
-            }
-        }
-        
-        let key_parts: Vec<&str> = key.split('/').collect();
-        if key_parts.len() > 1 {
-            let mut current = patch;
-            for part in &key_parts {
-                if let Some(next) = current.get(part) {
-                    current = next.clone();
-                } else {
-                    return None;
-                }
-            }
-            if let serde_yaml::Value::Number(n) = current {
-                return n.as_i64().map(|v| v as i32);
-            }
-        }
-        
-        None
-    }
-    
-    fn get_patch_value_bool(&self, key: &str) -> Option<bool> {
-        let (_, user_data_dir) = get_data_dirs();
-        let custom_yaml_path = user_data_dir.join(format!("{}.custom.yaml", self.schema_id));
-        
-        if !custom_yaml_path.exists() {
-            return None;
-        }
-        
-        let content = std::fs::read_to_string(&custom_yaml_path).ok()?;
-        
-        #[derive(Deserialize)]
-        struct CustomYaml {
-            patch: Option<serde_yaml::Value>,
-        }
-        
-        let yaml: CustomYaml = serde_yaml::from_str(&content).ok()?;
-        let patch = yaml.patch?;
-        
-        if let Some(value) = patch.get(key) {
-            if let serde_yaml::Value::Bool(b) = value {
-                return Some(*b);
-            }
-        }
-        
-        let key_parts: Vec<&str> = key.split('/').collect();
-        if key_parts.len() > 1 {
-            let mut current = patch;
-            for part in &key_parts {
-                if let Some(next) = current.get(part) {
-                    current = next.clone();
-                } else {
-                    return None;
-                }
-            }
-            if let serde_yaml::Value::Bool(b) = current {
-                return Some(b);
-            }
-        }
-        
-        None
-    }
-    
-    fn get_merged_string(&self, key: &str) -> Option<String> {
-        self.get_patch_value_string(key).or_else(|| self.settings.get_string(key))
-    }
-    
-    fn get_merged_int(&self, key: &str) -> Option<i32> {
-        self.get_patch_value_int(key).or_else(|| self.settings.get_int(key))
-    }
-    
-    fn get_merged_bool(&self, key: &str) -> Option<bool> {
-        self.get_patch_value_bool(key).or_else(|| self.settings.get_bool(key))
-    }
-    
     pub fn get_config(&self) -> SchemaConfig {
         SchemaConfig {
             speller: SpellerConfig {
-                max_code_length: self.get_merged_int("speller/max_code_length"),
-                auto_select: self.get_merged_bool("speller/auto_select"),
-                auto_clear: self.get_merged_string("speller/auto_clear"),
-                alphabet: self.get_merged_string("speller/alphabet"),
-                delimiter: self.get_merged_string("speller/delimiter"),
+                max_code_length: self.settings.get_int("speller/max_code_length"),
+                auto_select: self.settings.get_bool("speller/auto_select"),
+                auto_clear: self.settings.get_string("speller/auto_clear"),
+                alphabet: self.settings.get_string("speller/alphabet"),
+                delimiter: self.settings.get_string("speller/delimiter"),
             },
             translator: TranslatorConfig {
-                enable_charset_filter: self.get_merged_bool("translator/enable_charset_filter"),
-                enable_completion: self.get_merged_bool("translator/enable_completion"),
-                enable_sentence: self.get_merged_bool("translator/enable_sentence"),
-                enable_user_dict: self.get_merged_bool("translator/enable_user_dict"),
-                enable_encoder: self.get_merged_bool("translator/enable_encoder"),
-                encode_commit_history: self.get_merged_bool("translator/encode_commit_history"),
-                max_phrase_length: self.get_merged_int("translator/max_phrase_length"),
+                enable_charset_filter: self.settings.get_bool("translator/enable_charset_filter"),
+                enable_completion: self.settings.get_bool("translator/enable_completion"),
+                enable_sentence: self.settings.get_bool("translator/enable_sentence"),
+                enable_user_dict: self.settings.get_bool("translator/enable_user_dict"),
+                enable_encoder: self.settings.get_bool("translator/enable_encoder"),
+                encode_commit_history: self.settings.get_bool("translator/encode_commit_history"),
+                max_phrase_length: self.settings.get_int("translator/max_phrase_length"),
             },
             reverse_lookup: ReverseLookupConfig {
-                prefix: self.get_merged_string("reverse_lookup/prefix"),
-                suffix: self.get_merged_string("reverse_lookup/suffix"),
-                tips: self.get_merged_string("reverse_lookup/tips"),
+                prefix: self.settings.get_string("reverse_lookup/prefix"),
+                suffix: self.settings.get_string("reverse_lookup/suffix"),
+                tips: self.settings.get_string("reverse_lookup/tips"),
             },
             tradition: TraditionConfig {
-                opencc_config: self.get_merged_string("tradition/opencc_config"),
+                opencc_config: self.settings.get_string("tradition/opencc_config"),
             },
         }
-    }
-    
-    pub fn set_string(&self, key: &str, value: &str) -> Result<(), String> {
-        self.settings.set_string(key, value).map_err(|e| e.to_string())
     }
     
     pub fn set_int(&self, key: &str, value: i32) -> Result<(), String> {
@@ -539,11 +436,188 @@ impl SchemaConfigManager {
         self.settings.set_bool(key, value).map_err(|e| e.to_string())
     }
     
+    pub fn set_string(&self, key: &str, value: &str) -> Result<(), String> {
+        self.settings.set_string(key, value).map_err(|e| e.to_string())
+    }
+    
     pub fn save(&self) -> Result<(), String> {
         self.settings.save().map_err(|e| e.to_string())
     }
     
     pub fn schema_id(&self) -> &str {
         &self.schema_id
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SpellerConfig {
+    pub max_code_length: Option<i32>,
+    pub auto_select: Option<bool>,
+    pub auto_clear: Option<String>,
+    pub alphabet: Option<String>,
+    pub delimiter: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TranslatorConfig {
+    pub enable_charset_filter: Option<bool>,
+    pub enable_completion: Option<bool>,
+    pub enable_sentence: Option<bool>,
+    pub enable_user_dict: Option<bool>,
+    pub enable_encoder: Option<bool>,
+    pub encode_commit_history: Option<bool>,
+    pub max_phrase_length: Option<i32>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ReverseLookupConfig {
+    pub prefix: Option<String>,
+    pub suffix: Option<String>,
+    pub tips: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TraditionConfig {
+    pub opencc_config: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SchemaConfig {
+    pub speller: SpellerConfig,
+    pub translator: TranslatorConfig,
+    pub reverse_lookup: ReverseLookupConfig,
+    pub tradition: TraditionConfig,
+}
+
+pub struct RimeConfigManager {
+    user_dir: std::path::PathBuf,
+}
+
+impl RimeConfigManager {
+    pub fn new() -> Result<Self, String> {
+        let (_, user_dir) = get_data_dirs();
+        Ok(Self { user_dir })
+    }
+    
+    pub fn get_double(&self, key: &str) -> Option<f64> {
+        self.get_value(key).and_then(|v| v.parse::<f64>().ok())
+    }
+    
+    pub fn get_int(&self, key: &str) -> Option<i32> {
+        self.get_value(key).and_then(|v| v.parse::<i32>().ok())
+    }
+    
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get_value(key).and_then(|v| v.parse::<bool>().ok())
+    }
+    
+    pub fn get_string(&self, key: &str) -> Option<String> {
+        self.get_value(key)
+    }
+    
+    fn get_value(&self, key: &str) -> Option<String> {
+        let xime_yaml = self.user_dir.join("xime.yaml");
+        let xime_custom = self.user_dir.join("xime.custom.yaml");
+        
+        if xime_custom.exists() {
+            let content = std::fs::read_to_string(&xime_custom).ok()?;
+            if let Some(v) = get_yaml_value(&content, key) {
+                return Some(v);
+            }
+        }
+        
+        if xime_yaml.exists() {
+            let content = std::fs::read_to_string(&xime_yaml).ok()?;
+            get_yaml_value(&content, key)
+        } else {
+            None
+        }
+    }
+    
+    pub fn set_double(&self, key: &str, value: f64) -> Result<(), String> {
+        self.set_value(key, value.to_string())
+    }
+    
+    pub fn set_int(&self, key: &str, value: i32) -> Result<(), String> {
+        self.set_value(key, value.to_string())
+    }
+    
+    pub fn set_bool(&self, key: &str, value: bool) -> Result<(), String> {
+        self.set_value(key, value.to_string())
+    }
+    
+    pub fn set_string(&self, key: &str, value: &str) -> Result<(), String> {
+        self.set_value(key, value.to_string())
+    }
+    
+    fn set_value(&self, key: &str, value: String) -> Result<(), String> {
+        let xime_custom = self.user_dir.join("xime.custom.yaml");
+        
+        let existing_content = if xime_custom.exists() {
+            std::fs::read_to_string(&xime_custom).ok()
+        } else {
+            None
+        };
+        
+        let mut lines: Vec<String> = existing_content
+            .map(|c| c.lines().map(|l| l.to_string()).collect())
+            .unwrap_or_else(|| {
+                vec![
+                    "customization:".to_string(),
+                    "  distribution_code_name: Xime".to_string(),
+                    "  distribution_version: 1.0".to_string(),
+                    "".to_string(),
+                    "patch:".to_string(),
+                ]
+            });
+        
+        let key_parts: Vec<&str> = key.split('/').collect();
+        let formatted_key = if key_parts.len() > 1 {
+            format!("{}{}", "  ".repeat(key_parts.len()), key_parts.join("_"))
+        } else {
+            format!("  {}", key)
+        };
+        
+        let new_line = format!("{}: {}", formatted_key, value);
+        
+        let patch_idx = lines.iter().position(|l| l.trim() == "patch:");
+        if let Some(idx) = patch_idx {
+            let key_prefix = format!("{}:", formatted_key);
+            let existing_idx = lines.iter().skip(idx + 1)
+                .position(|l| l.starts_with(&key_prefix));
+            
+            if let Some(e_idx) = existing_idx {
+                lines[idx + 1 + e_idx] = new_line;
+            } else {
+                lines.insert(idx + 1, new_line);
+            }
+        }
+        
+        std::fs::write(&xime_custom, lines.join("\n") + "\n")
+            .map_err(|e| format!("Failed to write: {}", e))?;
+        
+        Ok(())
+    }
+    
+    pub fn save(&self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+fn get_yaml_value(content: &str, key: &str) -> Option<String> {
+    let key_parts: Vec<&str> = key.split('/').collect();
+    
+    let yaml: serde_yaml::Value = serde_yaml::from_str(content).ok()?;
+    let mut current = &yaml;
+    
+    for part in &key_parts {
+        current = current.get(part)?;
+    }
+    
+    match current {
+        serde_yaml::Value::String(s) => Some(s.clone()),
+        serde_yaml::Value::Number(n) => Some(n.to_string()),
+        serde_yaml::Value::Bool(b) => Some(b.to_string()),
+        _ => None,
     }
 }

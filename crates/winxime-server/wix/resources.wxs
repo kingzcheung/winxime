@@ -1,12 +1,32 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Fragment>
-        <DirectoryRef Id="ResourcesFolder" />
+        <DirectoryRef Id="ResourcesFolder">
+            <Directory Id="dirE32F60420847B10FD6022A7442CD765C" Name="trayicon" />
+        </DirectoryRef>
     </Fragment>
     <Fragment>
         <ComponentGroup Id="ResourcesFiles">
+            <Component Id="cmp5CB3846385B3E0E562AA0D508002CA47" Directory="ResourcesFolder" Guid="*">
+                <File Id="fil598CBEAF69AA28730096164150B5A7AE" KeyPath="yes" Source="$(var.ResourcesDir)\icon.ico" />
+            </Component>
+            <Component Id="cmpAB1F9E833B89DF6451F2EE4AAFE8ADC8" Directory="ResourcesFolder" Guid="*">
+                <File Id="fil616ACC8B4397EBD746EFA96FEF0A07EB" KeyPath="yes" Source="$(var.ResourcesDir)\icon_dark.svg" />
+            </Component>
             <Component Id="cmp8A87009ED609CD479F7BDB005EC596AC" Directory="ResourcesFolder" Guid="*">
                 <File Id="fil937AE4E822B823419465CF039FB884CA" KeyPath="yes" Source="$(var.ResourcesDir)\xime.yaml" />
+            </Component>
+            <Component Id="cmp2D039C780C0A9A572D042106F5B23331" Directory="dirE32F60420847B10FD6022A7442CD765C" Guid="*">
+                <File Id="filF39ED55364D8CFFB3EF2192391528E00" KeyPath="yes" Source="$(var.ResourcesDir)\trayicon\en_dark.ico" />
+            </Component>
+            <Component Id="cmp56DB5DC5B940F3162874E7A5480917A1" Directory="dirE32F60420847B10FD6022A7442CD765C" Guid="*">
+                <File Id="fil9CDA77D1E15850CF2CB6E4EE469471BC" KeyPath="yes" Source="$(var.ResourcesDir)\trayicon\en_light.ico" />
+            </Component>
+            <Component Id="cmp79E71C0E900B30D0E58E82EC690A23ED" Directory="dirE32F60420847B10FD6022A7442CD765C" Guid="*">
+                <File Id="fil090D8E97D4AA150424E947A0A6B267FA" KeyPath="yes" Source="$(var.ResourcesDir)\trayicon\zh_dark.ico" />
+            </Component>
+            <Component Id="cmp4CBA55DF90EF8791E360C018B540926F" Directory="dirE32F60420847B10FD6022A7442CD765C" Guid="*">
+                <File Id="fil0361E3F591201549568CAC80E1252DF7" KeyPath="yes" Source="$(var.ResourcesDir)\trayicon\zh_light.ico" />
             </Component>
         </ComponentGroup>
     </Fragment>

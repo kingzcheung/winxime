@@ -7056,15 +7056,9 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 name = "winxime-config"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_yaml",
-]
-
-[[package]]
-name = "winxime-core"
-version = "0.2.0"
-dependencies = [
- "chrono",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -7101,7 +7095,6 @@ dependencies = [
  "windows-core 0.62.2",
  "windows-numerics 0.3.1",
  "winxime-config",
- "winxime-core",
  "winxime-ipc",
  "winxime-rime",
 ]
@@ -7137,7 +7130,7 @@ dependencies = [
  "windows 0.62.2",
  "windows-core 0.62.2",
  "winreg 0.52.0",
- "winxime-core",
+ "winxime-config",
  "winxime-ipc",
 ]
 

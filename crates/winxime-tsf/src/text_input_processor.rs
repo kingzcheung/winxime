@@ -1237,7 +1237,7 @@ impl XimeTextService {
 
 impl XimeTextService_Impl {
     fn activate_impl(&self, ptim: Option<&ITfThreadMgr>, tid: u32) -> Result<()> {
-        winxime_core::init_logging("tsf");
+        winxime_config::init_logging("tsf");
         debug!("Activate called, tid={}", tid);
 
         *self.thread_mgr.borrow_mut() = ptim.cloned();

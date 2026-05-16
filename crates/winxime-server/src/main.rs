@@ -1,24 +1,24 @@
 ﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
+mod context;
 mod ipc_server;
 mod tray;
 mod ui;
 
-use tracing::info;
-use winxime_core::init_logging_with_console;
-
+use crate::context::SharedInputContext;
 use std::sync::{Arc, atomic::AtomicBool};
+use tracing::info;
+use winxime_config::init_logging_with_console;
+use winxime_ipc::{check_server_running, IpcClient};
+use winxime_rime::RimeEngine;
 use windows::Win32::{
     System::Recovery::{REGISTER_APPLICATION_RESTART_FLAGS, RegisterApplicationRestart},
     UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext},
 };
-use winxime_core::SharedInputContext;
-use winxime_ipc::{check_server_running, IpcClient};
-use winxime_rime::RimeEngine;
 
 fn main() {
-    winxime_core::init_logging_with_console("server");
+    init_logging_with_console("server");
     info!("Server starting");
     let args: Vec<String> = std::env::args().collect();
 
@@ -85,7 +85,7 @@ fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
         let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
         (
-            workspace_dir.join("rime-wubi"),
+            workspace_dir.join("librime").join("data").join("minimal"),
             workspace_dir.join("target").join("debug").join("user-data"),
         )
     }

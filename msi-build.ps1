@@ -1,62 +1,113 @@
 # MSI build script
 
 param(
-    [string]$Version = "0.1.0"
+    [string]$Version = ""
 )
 
-Write-Host "Building Xime MSI v$Version..." -ForegroundColor Cyan
+$ErrorActionPreference = "Stop"
 
 # Add WiX v3.14 to PATH
 $env:PATH += ";C:\Program Files (x86)\WiX Toolset v3.14\bin"
 
+# Auto-detect version from Cargo.toml
+if ($Version -eq "") {
+    $cargoTomlContent = Get-Content "Cargo.toml" -Raw
+    if ($cargoTomlContent -match 'version\s*=\s*"([^"]+)"') {
+        $Version = $matches[1]
+    } else {
+        $Version = "0.1.0"
+    }
+}
+
+Write-Host "Building Xime MSI v$Version..." -ForegroundColor Cyan
+
 # 1. Build release
 Write-Host "Step 1: Building release..." -ForegroundColor Yellow
-$files = Get-ChildItem -Path "crates/winxime-setup/src" -Recurse -Filter "*.rs"
-foreach ($f in $files) { $f.LastWriteTime = Get-Date }
-$files = Get-ChildItem -Path "crates/winxime-config/src" -Recurse -Filter "*.rs"
-foreach ($f in $files) { $f.LastWriteTime = Get-Date }
-cargo build --release
+cargo build --release --quiet
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed!" -ForegroundColor Red
     exit 1
 }
 
-# 2. Copy data files (librime/data/minimal -> target/release/data)
+# 2. Copy data files
 Write-Host "Step 2: Copying data files..." -ForegroundColor Yellow
 if (Test-Path "target\release\data") {
     Remove-Item "target\release\data" -Recurse -Force
 }
-Copy-Item "librime\data\minimal" "target\release\data" -Recurse
+New-Item "target\release\data" -ItemType Directory -Force | Out-Null
 
-# 2.5 Copy resources files (resources -> target/release/resources)
-Write-Host "Step 2.5: Copying resources files..." -ForegroundColor Yellow
+Copy-Item "librime\data\minimal\*" "target\release\data" -Recurse -Force
+
+$files = Get-ChildItem -Path "rime-wubi" -Recurse -File | Where-Object {
+    $dir = $_.DirectoryName
+    $name = $_.Name
+    -not ($dir -like "*\.git*") -and
+    -not ($dir -like "*\.github*") -and
+    -not ($dir -like "*imgs*") -and
+    -not ($name -like "*.md") -and
+    -not ($name -like ".gitignore") -and
+    -not ($name -like "macOS-*") -and
+    -not ($name -like "*.command") -and
+    -not ($name -like "LICENSE") -and
+    -not ($name -like "squirrel.custom.yaml") -and
+    -not ($name -like "trime.custom.yaml")
+}
+
+foreach ($file in $files) {
+    $relativePath = $file.FullName.Substring($PWD.Path.Length + "rime-wubi".Length + 2)
+    $destPath = "target\release\data\$relativePath"
+    $destDir = Split-Path -Parent $destPath
+    if (-not (Test-Path $destDir)) {
+        New-Item $destDir -ItemType Directory -Force | Out-Null
+    }
+    Copy-Item $file.FullName $destPath -Force
+}
+
+# 3. Copy resources
+Write-Host "Step 3: Copying resources..." -ForegroundColor Yellow
 if (Test-Path "target\release\resources") {
     Remove-Item "target\release\resources" -Recurse -Force
 }
 Copy-Item "resources" "target\release\resources" -Recurse
 
-# 3. Harvest data files with heat
-Write-Host "Step 3: Harvesting data files..." -ForegroundColor Yellow
+# 4. Harvest data and resources
+Write-Host "Step 4: Harvesting data and resources..." -ForegroundColor Yellow
 heat dir "target\release\data" -o "crates\winxime-server\wix\data.wxs" -dr DataFolder -cg DataFiles -var var.DataDir -sreg -srd -ag
-
-# 3.5 Harvest resources files with heat
-Write-Host "Step 3.5: Harvesting resources files..." -ForegroundColor Yellow
 heat dir "target\release\resources" -o "crates\winxime-server\wix\resources.wxs" -dr ResourcesFolder -cg ResourcesFiles -var var.ResourcesDir -sreg -srd -ag
 
-# 4. Compile and link MSI
-Write-Host "Step 4: Building MSI..." -ForegroundColor Yellow
+# 5. Compile with candle
+Write-Host "Step 5: Compiling WiX sources..." -ForegroundColor Yellow
 if (-not (Test-Path "target\wix")) {
     New-Item "target\wix" -ItemType Directory -Force | Out-Null
 }
-candle -arch x64 "crates\winxime-server\wix\main.wxs" "crates\winxime-server\wix\data.wxs" "crates\winxime-server\wix\resources.wxs" -ext WixUIExtension -ext WixUtilExtension "-dCargoTargetBinDir=target\release" "-dDataDir=target\release\data" "-dResourcesDir=target\release\resources" "-dVersion=$Version" -out "target\wix\"
+
+candle -arch x64 "crates\winxime-server\wix\main.wxs" "crates\winxime-server\wix\data.wxs" "crates\winxime-server\wix\resources.wxs" `
+    -ext WixUIExtension -ext WixUtilExtension `
+    "-dCargoTargetBinDir=target\release" `
+    "-dDataDir=target\release\data" `
+    "-dResourcesDir=target\release\resources" `
+    "-dVersion=$Version" `
+    -out "target\wix\"
+
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Candle failed!" -ForegroundColor Red
     exit 1
 }
-light "target\wix\main.wixobj" "target\wix\data.wixobj" "target\wix\resources.wixobj" -ext WixUIExtension -ext WixUtilExtension -cultures:zh-CN -loc "crates\winxime-server\wix\zh-cn.wxl" -out "target\wix\xime-$Version.msi"
-$lightExit = $LASTEXITCODE
 
-# 5. Check result
+# 6. Link with light
+Write-Host "Step 6: Linking MSI..." -ForegroundColor Yellow
+light "target\wix\main.wixobj" "target\wix\data.wixobj" "target\wix\resources.wixobj" `
+    -ext WixUIExtension -ext WixUtilExtension `
+    -cultures:zh-CN `
+    -loc "crates\winxime-server\wix\zh-cn.wxl" `
+    -out "target\wix\xime-$Version.msi"
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Light failed!" -ForegroundColor Red
+    exit 1
+}
+
+# 7. Check result
 $msiPath = "target\wix\xime-$Version.msi"
 if (Test-Path $msiPath) {
     $msi = Get-Item $msiPath
@@ -66,6 +117,6 @@ if (Test-Path $msiPath) {
     Write-Host ""
     Write-Host "Install: msiexec /i $($msi.FullName)" -ForegroundColor Yellow
 } else {
-    Write-Host "MSI build failed! (light exit code: $lightExit)" -ForegroundColor Red
+    Write-Host "MSI build failed!" -ForegroundColor Red
     exit 1
 }

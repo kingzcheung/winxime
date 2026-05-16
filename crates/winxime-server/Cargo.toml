@@ -12,7 +12,6 @@ path = "src/main.rs"
 [dependencies]
 winxime-ipc = { path = "../winxime-ipc" }
 winxime-rime = { path = "../winxime-rime" }
-winxime-core = { path = "../winxime-core" }
 winxime-config = { path = "../winxime-config" }
 librime.workspace = true
 librime-sys2 = { path = "../librime-sys" }

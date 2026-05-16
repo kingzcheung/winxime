@@ -1,14 +1,14 @@
-﻿use crate::ui::CandidateWindow;
+﻿use crate::context::SharedInputContext;
+use crate::ui::CandidateWindow;
 use interprocess::os::windows::named_pipe::{pipe_mode::Bytes, PipeListenerOptions};
 use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::{Duration, Instant};
+use tracing::{info, error, debug};
 use widestring::u16cstr;
-use winxime_core::SharedInputContext;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
 use winxime_rime::RimeEngine;
-use tracing::{info, error, debug};
 
 const MAX_BUFFER_SIZE: usize = 1024 * 1024;
 const READ_TIMEOUT_MS: u64 = 10000;
@@ -480,6 +480,7 @@ fn process_request(
 }
 
 fn update_context(eng: &mut RimeEngine, context: &Arc<SharedInputContext>, commit: &Option<String>) {
+    use crate::context::CandidateInfo;
     context.update(|ctx| {
         ctx.is_composing = eng.is_composing();
         ctx.composition.preedit = eng.get_input().unwrap_or_default();
@@ -489,7 +490,7 @@ fn update_context(eng: &mut RimeEngine, context: &Arc<SharedInputContext>, commi
         ctx.candidates = cand_list
             .candidates
             .iter()
-            .map(|c| winxime_core::CandidateInfo {
+            .map(|c| CandidateInfo {
                 text: c.text.clone(),
                 comment: c.comment.clone().unwrap_or_default(),
             })

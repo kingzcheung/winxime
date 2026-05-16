@@ -2,6 +2,8 @@
 
 $iconPath = "$PSScriptRoot\resource\icon.ico"
 $registerExe = "$PSScriptRoot\target\debug\winxime-tsf-register.exe"
+$userDataDir = "$PSScriptRoot\target\debug\user-data"
+$sharedDataDir = "$PSScriptRoot\librime\data\minimal"
 
 Write-Host "Step 0: Clearing old logs..." -ForegroundColor Yellow
 Remove-Item "$env:TEMP\winxime\*.log" -Force -ErrorAction SilentlyContinue
@@ -38,6 +40,30 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed!" -ForegroundColor Red
     exit 1
 }
+
+Write-Host "Step 4.5: Setting up user data directory..." -ForegroundColor Yellow
+if (Test-Path $userDataDir) {
+    Remove-Item $userDataDir -Recurse -Force
+}
+New-Item -ItemType Directory -Path $userDataDir -Force | Out-Null
+
+Copy-Item $sharedDataDir $userDataDir -Recurse
+
+$exclude = @('.git', '.github', 'imgs', 'README.md', '.gitignore', 'macOS-*', '*.command', 'LICENSE', 'squirrel.custom.yaml', 'trime.custom.yaml')
+Get-ChildItem -Path "$PSScriptRoot\rime-wubi" -Recurse -File | Where-Object {
+    $dir = $_.DirectoryName
+    $name = $_.Name
+    -not ($exclude | Where-Object { $dir -like "*$_*" -or $name -like $_ })
+} | ForEach-Object {
+    $relativePath = $_.FullName.Substring("$PSScriptRoot\rime-wubi".Length + 1)
+    $destPath = "$userDataDir\$relativePath"
+    $destDir = Split-Path -Parent $destPath
+    if (-not (Test-Path $destDir)) {
+        New-Item $destDir -ItemType Directory -Force | Out-Null
+    }
+    Copy-Item $_.FullName $destPath -Force
+}
+Write-Host "  User data directory ready: $userDataDir" -ForegroundColor Gray
 
 Write-Host "Step 5: Registering COM DLL (no profile)..." -ForegroundColor Yellow
 Start-Process -Verb RunAs -Wait -FilePath "regsvr32.exe" -ArgumentList "/s", "$PSScriptRoot\target\debug\winxime_tsf.dll"

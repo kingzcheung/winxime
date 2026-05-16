@@ -9,7 +9,7 @@ license.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-winxime-core.workspace = true
+winxime-config.workspace = true
 winxime-ipc.workspace = true
 librime.workspace = true
 tracing = "0.1"

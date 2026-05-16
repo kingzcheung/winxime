@@ -107,7 +107,7 @@ pub unsafe extern "system" fn DllMain(
             .unwrap_or_else(|_| std::path::PathBuf::from("tsf.log"));
         std::fs::create_dir_all(log_path.parent().unwrap()).ok();
         // Simple initialization without tracing_appender
-        winxime_core::init_logging("tsf");
+        winxime_config::init_logging("tsf");
     }
     BOOL(1)
 }
