@@ -10,15 +10,17 @@ impl SystemTheme {
     pub fn detect() -> Self {
         #[cfg(windows)]
         {
-            use windows::Win32::System::Registry::*;
             use windows::core::w;
+            use windows::Win32::System::Registry::*;
 
             let key_path = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
             let value_name = w!("AppsUseLightTheme");
 
             let mut handle = HKEY::default();
-            
-            if unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, key_path, Some(0), KEY_READ, &mut handle).is_ok() } {
+
+            if unsafe {
+                RegOpenKeyExW(HKEY_CURRENT_USER, key_path, Some(0), KEY_READ, &mut handle).is_ok()
+            } {
                 let mut data: u32 = 0;
                 let mut data_size: u32 = 4;
 
@@ -33,7 +35,9 @@ impl SystemTheme {
                     )
                 };
 
-                unsafe { let _ = RegCloseKey(handle); };
+                unsafe {
+                    let _ = RegCloseKey(handle);
+                };
 
                 if result.is_ok() {
                     if data == 0 {
@@ -72,27 +76,34 @@ pub struct ThemeColors {
 
 impl ThemeColors {
     pub fn from_theme(theme: &SystemTheme, primary_color: u32) -> Self {
-        let (r, g, b) = ((primary_color >> 16) as u8, (primary_color >> 8) as u8, primary_color as u8);
+        let (r, g, b) = (
+            (primary_color >> 16) as u8,
+            (primary_color >> 8) as u8,
+            primary_color as u8,
+        );
         let hover_r = (r as f32 * 0.9) as u8;
         let hover_g = (g as f32 * 0.9) as u8;
         let hover_b = (b as f32 * 0.9) as u8;
         let primary_hover = ((hover_r as u32) << 16) | ((hover_g as u32) << 8) | hover_b as u32;
-        
+
         let sidebar_r = (r as f32 * 0.35) as u8;
         let sidebar_g = (g as f32 * 0.35) as u8;
         let sidebar_b = (b as f32 * 0.35) as u8;
         let sidebar_bg = ((sidebar_r as u32) << 16) | ((sidebar_g as u32) << 8) | sidebar_b as u32;
-        
+
         let selection_r = (r as f32 * 0.15 + 255.0 * 0.85) as u8;
         let selection_g = (g as f32 * 0.15 + 255.0 * 0.85) as u8;
         let selection_b = (b as f32 * 0.15 + 255.0 * 0.85) as u8;
-        let selection_light = ((selection_r as u32) << 16) | ((selection_g as u32) << 8) | selection_b as u32;
-        
+        let selection_light =
+            ((selection_r as u32) << 16) | ((selection_g as u32) << 8) | selection_b as u32;
+
         let selection_dark_r = (r as f32 * 0.3) as u8;
         let selection_dark_g = (g as f32 * 0.3) as u8;
         let selection_dark_b = (b as f32 * 0.3) as u8;
-        let selection_dark = ((selection_dark_r as u32) << 16) | ((selection_dark_g as u32) << 8) | selection_dark_b as u32;
-        
+        let selection_dark = ((selection_dark_r as u32) << 16)
+            | ((selection_dark_g as u32) << 8)
+            | selection_dark_b as u32;
+
         if theme.is_dark() {
             Self {
                 background: hsla(0.0, 0.0, 0.05, 0.85),

@@ -1,9 +1,9 @@
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::collections::HashMap;
 use std::sync::Mutex;
-use serde::Deserialize;
-use tracing_subscriber::{fmt, EnvFilter, prelude::*};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 static LOG_GUARD: Mutex<Option<tracing_appender::non_blocking::WorkerGuard>> = Mutex::new(None);
 
@@ -19,30 +19,31 @@ impl tracing_subscriber::fmt::time::FormatTime for LocalTimer {
 pub fn init_logging(component: &str) {
     let log_dir = get_log_dir();
     std::fs::create_dir_all(&log_dir).ok();
-    
+
     let file_appender = tracing_appender::rolling::RollingFileAppender::new(
         tracing_appender::rolling::Rotation::NEVER,
         log_dir,
         format!("{}.log", component),
     );
-    
+
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-    
+
     if let Ok(mut g) = LOG_GUARD.lock() {
         *g = Some(guard);
     }
-    
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("debug"));
-    
+
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"));
+
     tracing_subscriber::registry()
         .with(filter)
-        .with(fmt::layer()
-            .with_writer(non_blocking)
-            .with_ansi(false)
-            .with_target(false)
-            .with_line_number(true)
-            .with_timer(LocalTimer))
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false)
+                .with_target(false)
+                .with_line_number(true)
+                .with_timer(LocalTimer),
+        )
         .try_init()
         .ok();
 }
@@ -50,33 +51,32 @@ pub fn init_logging(component: &str) {
 pub fn init_logging_with_console(component: &str) {
     let log_dir = get_log_dir();
     std::fs::create_dir_all(&log_dir).ok();
-    
+
     let file_appender = tracing_appender::rolling::RollingFileAppender::new(
         tracing_appender::rolling::Rotation::NEVER,
         log_dir,
         format!("{}.log", component),
     );
-    
+
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-    
+
     if let Ok(mut g) = LOG_GUARD.lock() {
         *g = Some(guard);
     }
-    
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("debug"));
-    
+
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"));
+
     tracing_subscriber::registry()
         .with(filter)
-        .with(fmt::layer()
-            .with_writer(non_blocking)
-            .with_ansi(false)
-            .with_target(false)
-            .with_line_number(true)
-            .with_timer(LocalTimer))
-        .with(fmt::layer()
-            .with_writer(std::io::stdout)
-            .with_ansi(true))
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false)
+                .with_target(false)
+                .with_line_number(true)
+                .with_timer(LocalTimer),
+        )
+        .with(fmt::layer().with_writer(std::io::stdout).with_ansi(true))
         .try_init()
         .ok();
 }
@@ -143,25 +143,41 @@ impl Default for StyleConfig {
     }
 }
 
-fn default_font_size() -> f32 { 14.0 }
-fn default_candidate_count() -> i32 { 5 }
-fn default_horizontal() -> bool { true }
-fn default_corner_radius() -> f32 { 8.0 }
-fn default_color_scheme() -> String { "lavender_purple".to_string() }
+fn default_font_size() -> f32 {
+    14.0
+}
+fn default_candidate_count() -> i32 {
+    5
+}
+fn default_horizontal() -> bool {
+    true
+}
+fn default_corner_radius() -> f32 {
+    8.0
+}
+fn default_color_scheme() -> String {
+    "lavender_purple".to_string()
+}
 
 #[derive(Debug, Deserialize, Default)]
 #[allow(dead_code)]
 pub struct ColorScheme {
     #[serde(default)]
     pub name: String,
-    #[serde(deserialize_with = "deserialize_hex_color", default = "default_primary_color")]
+    #[serde(
+        deserialize_with = "deserialize_hex_color",
+        default = "default_primary_color"
+    )]
     pub primary_color: u32,
 }
 
-fn default_primary_color() -> u32 { 0x8F73E2 }
+fn default_primary_color() -> u32 {
+    0x8F73E2
+}
 
 fn deserialize_hex_color<'de, D>(deserializer: D) -> Result<u32, D::Error>
-where D: serde::Deserializer<'de>,
+where
+    D: serde::Deserializer<'de>,
 {
     let value: serde_yaml::Value = serde::Deserialize::deserialize(deserializer)?;
     match value {
@@ -177,7 +193,8 @@ where D: serde::Deserializer<'de>,
             }
         }
         _ => Some(0x8F73E2),
-    }.ok_or_else(|| serde::de::Error::custom("Invalid color"))
+    }
+    .ok_or_else(|| serde::de::Error::custom("Invalid color"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -197,35 +214,62 @@ impl Default for HotkeyConfig {
     }
 }
 
-fn default_show_last_key() -> String { "Ctrl".to_string() }
+fn default_show_last_key() -> String {
+    "Ctrl".to_string()
+}
 
 #[derive(Debug, Deserialize, Default)]
 pub struct WubiRootConfig {
-    #[serde(default)] pub g: String,
-    #[serde(default)] pub f: String,
-    #[serde(default)] pub d: String,
-    #[serde(default)] pub s: String,
-    #[serde(default)] pub a: String,
-    #[serde(default)] pub h: String,
-    #[serde(default)] pub j: String,
-    #[serde(default)] pub k: String,
-    #[serde(default)] pub l: String,
-    #[serde(default)] pub m: String,
-    #[serde(default)] pub t: String,
-    #[serde(default)] pub r: String,
-    #[serde(default)] pub e: String,
-    #[serde(default)] pub w: String,
-    #[serde(default)] pub q: String,
-    #[serde(default)] pub y: String,
-    #[serde(default)] pub u: String,
-    #[serde(default)] pub i: String,
-    #[serde(default)] pub o: String,
-    #[serde(default)] pub p: String,
-    #[serde(default)] pub n: String,
-    #[serde(default)] pub b: String,
-    #[serde(default)] pub v: String,
-    #[serde(default)] pub c: String,
-    #[serde(default)] pub x: String,
+    #[serde(default)]
+    pub g: String,
+    #[serde(default)]
+    pub f: String,
+    #[serde(default)]
+    pub d: String,
+    #[serde(default)]
+    pub s: String,
+    #[serde(default)]
+    pub a: String,
+    #[serde(default)]
+    pub h: String,
+    #[serde(default)]
+    pub j: String,
+    #[serde(default)]
+    pub k: String,
+    #[serde(default)]
+    pub l: String,
+    #[serde(default)]
+    pub m: String,
+    #[serde(default)]
+    pub t: String,
+    #[serde(default)]
+    pub r: String,
+    #[serde(default)]
+    pub e: String,
+    #[serde(default)]
+    pub w: String,
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub y: String,
+    #[serde(default)]
+    pub u: String,
+    #[serde(default)]
+    pub i: String,
+    #[serde(default)]
+    pub o: String,
+    #[serde(default)]
+    pub p: String,
+    #[serde(default)]
+    pub n: String,
+    #[serde(default)]
+    pub b: String,
+    #[serde(default)]
+    pub v: String,
+    #[serde(default)]
+    pub c: String,
+    #[serde(default)]
+    pub x: String,
 }
 
 impl XimeConfig {
@@ -234,10 +278,13 @@ impl XimeConfig {
         let user_config = Self::load_user_config();
         Self::merge_configs(system_config, user_config)
     }
-    
+
     fn load_system_config() -> Self {
         let exe_path = std::env::current_exe().unwrap_or_default();
-        let system_path = exe_path.parent().map(|p| p.join("data").join("xime.yaml")).unwrap_or_default();
+        let system_path = exe_path
+            .parent()
+            .map(|p| p.join("data").join("xime.yaml"))
+            .unwrap_or_default();
         if system_path.exists() {
             if let Ok(content) = fs::read_to_string(&system_path) {
                 if let Ok(config) = serde_yaml::from_str::<XimeConfig>(&content) {
@@ -247,12 +294,12 @@ impl XimeConfig {
         }
         Self::builtin_default()
     }
-    
+
     fn builtin_default() -> Self {
         const DEFAULT_CONFIG: &[u8] = include_bytes!("../resources/xime.yaml");
         serde_yaml::from_slice(DEFAULT_CONFIG).unwrap_or_default()
     }
-    
+
     fn load_user_config() -> Option<Self> {
         let config_path = Self::user_config_path();
         if config_path.exists() {
@@ -262,7 +309,7 @@ impl XimeConfig {
         }
         None
     }
-    
+
     fn merge_configs(system: Self, user: Option<Self>) -> Self {
         match user {
             Some(user) => Self {
@@ -275,19 +322,25 @@ impl XimeConfig {
                     },
                 },
                 style: user.style,
-                color_schemes: if user.color_schemes.is_empty() { system.color_schemes } else { user.color_schemes },
+                color_schemes: if user.color_schemes.is_empty() {
+                    system.color_schemes
+                } else {
+                    user.color_schemes
+                },
             },
             None => system,
         }
     }
-    
+
     fn user_config_path() -> PathBuf {
         std::env::var("APPDATA")
             .map(|p| PathBuf::from(p).join("Xime").join("rime").join("xime.yaml"))
             .unwrap_or_else(|_| PathBuf::from("xime.yaml"))
     }
 
-    pub fn config_path() -> PathBuf { Self::user_config_path() }
+    pub fn config_path() -> PathBuf {
+        Self::user_config_path()
+    }
 
     pub fn get_last_key_root_binding(&self) -> String {
         self.wubi_radicals.hotkeys.show_last_key.clone()
@@ -296,7 +349,11 @@ impl XimeConfig {
     pub fn get_primary_color(&self) -> (u8, u8, u8) {
         let scheme_name = &self.style.color_scheme;
         if let Some(scheme) = self.color_schemes.get(scheme_name) {
-            ((scheme.primary_color >> 16) as u8, (scheme.primary_color >> 8) as u8, scheme.primary_color as u8)
+            (
+                (scheme.primary_color >> 16) as u8,
+                (scheme.primary_color >> 8) as u8,
+                scheme.primary_color as u8,
+            )
         } else {
             (0x8F, 0x73, 0xE2)
         }
@@ -304,17 +361,38 @@ impl XimeConfig {
 
     pub fn get_root_for_key(&self, key: char) -> Option<String> {
         let root = match key.to_lowercase().next()? {
-            'g' => &self.wubi_radicals.key_radicals.g, 'f' => &self.wubi_radicals.key_radicals.f, 'd' => &self.wubi_radicals.key_radicals.d,
-            's' => &self.wubi_radicals.key_radicals.s, 'a' => &self.wubi_radicals.key_radicals.a, 'h' => &self.wubi_radicals.key_radicals.h,
-            'j' => &self.wubi_radicals.key_radicals.j, 'k' => &self.wubi_radicals.key_radicals.k, 'l' => &self.wubi_radicals.key_radicals.l,
-            'm' => &self.wubi_radicals.key_radicals.m, 't' => &self.wubi_radicals.key_radicals.t, 'r' => &self.wubi_radicals.key_radicals.r,
-            'e' => &self.wubi_radicals.key_radicals.e, 'w' => &self.wubi_radicals.key_radicals.w, 'q' => &self.wubi_radicals.key_radicals.q,
-            'y' => &self.wubi_radicals.key_radicals.y, 'u' => &self.wubi_radicals.key_radicals.u, 'i' => &self.wubi_radicals.key_radicals.i,
-            'o' => &self.wubi_radicals.key_radicals.o, 'p' => &self.wubi_radicals.key_radicals.p, 'n' => &self.wubi_radicals.key_radicals.n,
-            'b' => &self.wubi_radicals.key_radicals.b, 'v' => &self.wubi_radicals.key_radicals.v, 'c' => &self.wubi_radicals.key_radicals.c,
-            'x' => &self.wubi_radicals.key_radicals.x, _ => return None,
+            'g' => &self.wubi_radicals.key_radicals.g,
+            'f' => &self.wubi_radicals.key_radicals.f,
+            'd' => &self.wubi_radicals.key_radicals.d,
+            's' => &self.wubi_radicals.key_radicals.s,
+            'a' => &self.wubi_radicals.key_radicals.a,
+            'h' => &self.wubi_radicals.key_radicals.h,
+            'j' => &self.wubi_radicals.key_radicals.j,
+            'k' => &self.wubi_radicals.key_radicals.k,
+            'l' => &self.wubi_radicals.key_radicals.l,
+            'm' => &self.wubi_radicals.key_radicals.m,
+            't' => &self.wubi_radicals.key_radicals.t,
+            'r' => &self.wubi_radicals.key_radicals.r,
+            'e' => &self.wubi_radicals.key_radicals.e,
+            'w' => &self.wubi_radicals.key_radicals.w,
+            'q' => &self.wubi_radicals.key_radicals.q,
+            'y' => &self.wubi_radicals.key_radicals.y,
+            'u' => &self.wubi_radicals.key_radicals.u,
+            'i' => &self.wubi_radicals.key_radicals.i,
+            'o' => &self.wubi_radicals.key_radicals.o,
+            'p' => &self.wubi_radicals.key_radicals.p,
+            'n' => &self.wubi_radicals.key_radicals.n,
+            'b' => &self.wubi_radicals.key_radicals.b,
+            'v' => &self.wubi_radicals.key_radicals.v,
+            'c' => &self.wubi_radicals.key_radicals.c,
+            'x' => &self.wubi_radicals.key_radicals.x,
+            _ => return None,
         };
-        if root.is_empty() { None } else { Some(root.clone()) }
+        if root.is_empty() {
+            None
+        } else {
+            Some(root.clone())
+        }
     }
 
     pub fn user_data_dir() -> PathBuf {
@@ -325,6 +403,9 @@ impl XimeConfig {
 
     pub fn shared_data_dir() -> PathBuf {
         let exe_path = std::env::current_exe().unwrap_or_default();
-        exe_path.parent().map(|p| p.join("data")).unwrap_or_default()
+        exe_path
+            .parent()
+            .map(|p| p.join("data"))
+            .unwrap_or_default()
     }
 }

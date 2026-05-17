@@ -1,15 +1,16 @@
-﻿use tracing::debug;
+use librime::{
+    get_key_modifiers, vk_to_xk, K_ALT_MASK, K_CONTROL_MASK, K_SHIFT_MASK, VK_BACK, VK_DOWN,
+    VK_END, VK_ESCAPE, VK_HOME, VK_LEFT, VK_NEXT, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_SPACE, VK_TAB,
+    VK_UP,
+};
 use std::sync::Arc;
+use tracing::debug;
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::TextServices::*;
-use windows_core::{*, Interface};
+use windows_core::{Interface, *};
 use winxime_ipc::{
     IpcClient, IpcCommand, IpcRequest, IpcRequestData, IpcResponse, KeyEventData, Position,
-};
-use librime::{
-    vk_to_xk, get_key_modifiers, VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN,
-    VK_RETURN, VK_BACK, VK_TAB, VK_ESCAPE, VK_SPACE, K_SHIFT_MASK, K_CONTROL_MASK, K_ALT_MASK,
 };
 
 const TF_INVALID_COOKIE: u32 = 0xFFFFFFFF;
@@ -71,7 +72,9 @@ impl IpcClientHandle {
             Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
             Err(std::sync::TryLockError::WouldBlock) => {
                 debug!("  -> lock would block, returning error");
-                return Err(winxime_ipc::IpcError::ConnectionFailed("lock would block".to_string()));
+                return Err(winxime_ipc::IpcError::ConnectionFailed(
+                    "lock would block".to_string(),
+                ));
             }
         };
         if guard.client.is_some() {
@@ -121,8 +124,15 @@ impl IpcClientHandle {
             debug!("start_session: sending request, session_id=0");
             match client.send_request(&request) {
                 Ok(response) => {
-                    debug!("start_session: got response, session_id={}, ascii_mode={}", response.session_id, 
-                        response.status.as_ref().map(|s| s.ascii_mode).unwrap_or(false));
+                    debug!(
+                        "start_session: got response, session_id={}, ascii_mode={}",
+                        response.session_id,
+                        response
+                            .status
+                            .as_ref()
+                            .map(|s| s.ascii_mode)
+                            .unwrap_or(false)
+                    );
                     guard.session_id = response.session_id;
                     return (guard.session_id, Some(response));
                 }
@@ -353,7 +363,10 @@ impl IpcClientHandle {
                 session_id,
                 data: IpcRequestData::None,
             };
-            debug!("  -> sending HideCandidates request (session_id={})", session_id);
+            debug!(
+                "  -> sending HideCandidates request (session_id={})",
+                session_id
+            );
             if client.send_oneway(&request).is_ok() {
                 debug!("  -> HideCandidates sent successfully");
             } else {
@@ -469,7 +482,11 @@ struct CompositionSink {
 }
 
 impl ITfCompositionSink_Impl for CompositionSink_Impl {
-    fn OnCompositionTerminated(&self, _ecwrite: u32, _pcomposition: Ref<'_, ITfComposition>) -> Result<()> {
+    fn OnCompositionTerminated(
+        &self,
+        _ecwrite: u32,
+        _pcomposition: Ref<'_, ITfComposition>,
+    ) -> Result<()> {
         debug!("OnCompositionTerminated: composition terminated");
         match self.composition.try_lock() {
             Ok(mut guard) => *guard = None,
@@ -506,7 +523,7 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
 
         if !commit_text.is_empty() {
             debug!("DoEditSession: COMMIT '{}'", commit_text);
-            
+
             // If not composing, start a composition for the commit
             let has_comp = match self.composition.try_lock() {
                 Ok(g) => g.is_some(),
@@ -516,7 +533,7 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
                 debug!("DoEditSession: creating composition for commit");
                 self.start_composition(&context, ec, "");
             }
-            
+
             // Set commit text and end composition (clear=false to keep text)
             self.update_composition_text(&context, ec, &commit_text);
             self.end_composition(ec);
@@ -532,7 +549,10 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
             debug!("DoEditSession: start composition '{}'", preedit_text);
             self.start_composition(&context, ec, &preedit_text);
         } else if self.output.composing && !preedit_text.is_empty() {
-            debug!("DoEditSession: update composition text '{}' (has_comp={})", preedit_text, has_comp);
+            debug!(
+                "DoEditSession: update composition text '{}' (has_comp={})",
+                preedit_text, has_comp
+            );
             self.update_composition_text(&context, ec, &preedit_text);
         } else if !self.output.composing && has_comp {
             debug!("DoEditSession: end composition");
@@ -551,13 +571,22 @@ impl XimeEditSession_Impl {
         unsafe {
             let mut selection = [TF_SELECTION::default(); 1];
             let mut selection_len = 0;
-            if context.GetSelection(ec, TF_DEFAULT_SELECTION, &mut selection, &mut selection_len).is_ok() {
+            if context
+                .GetSelection(ec, TF_DEFAULT_SELECTION, &mut selection, &mut selection_len)
+                .is_ok()
+            {
                 if let Some(sel_range) = selection[0].range.deref() {
                     if let Ok(view) = context.GetActiveView() {
                         let mut rc = RECT::default();
                         let mut clipped = BOOL::default();
-                        if view.GetTextExt(ec, sel_range, &mut rc, &mut clipped).is_ok() {
-                            debug!("update_caret_position_in_session: left={}, bottom={}", rc.left, rc.bottom);
+                        if view
+                            .GetTextExt(ec, sel_range, &mut rc, &mut clipped)
+                            .is_ok()
+                        {
+                            debug!(
+                                "update_caret_position_in_session: left={}, bottom={}",
+                                rc.left, rc.bottom
+                            );
                             let _ = ipc.update_position(rc.left, rc.bottom);
                         }
                     }
@@ -571,11 +600,14 @@ impl XimeEditSession_Impl {
     fn start_composition(&self, context: &ITfContext, ec: u32, preedit: &str) {
         debug!("start_composition: preedit='{}'", preedit);
         use windows::Win32::UI::TextServices::{ITfInsertAtSelection, TF_IAS_QUERYONLY};
-        
+
         let insert_at_selection: ITfInsertAtSelection = match context.cast() {
             Ok(s) => s,
             Err(e) => {
-                debug!("start_composition: cast ITfInsertAtSelection failed: {:?}", e);
+                debug!(
+                    "start_composition: cast ITfInsertAtSelection failed: {:?}",
+                    e
+                );
                 return;
             }
         };
@@ -583,7 +615,10 @@ impl XimeEditSession_Impl {
         let ctx_comp: ITfContextComposition = match context.cast() {
             Ok(c) => c,
             Err(e) => {
-                debug!("start_composition: cast ITfContextComposition failed: {:?}", e);
+                debug!(
+                    "start_composition: cast ITfContextComposition failed: {:?}",
+                    e
+                );
                 return;
             }
         };
@@ -608,7 +643,7 @@ impl XimeEditSession_Impl {
                             return;
                         }
                     };
-                    
+
                     let wide: Vec<u16> = preedit.encode_utf16().collect();
                     debug!("start_composition: setting text {} chars", wide.len());
                     match comp_range.SetText(ec, 0, &wide) {
@@ -622,16 +657,18 @@ impl XimeEditSession_Impl {
                             sel.style.ase = TF_AE_NONE;
                             sel.style.fInterimChar = FALSE;
                             context.SetSelection(ec, &[sel]).ok();
-                            
+
                             match self.composition.try_lock() {
                                 Ok(mut guard) => *guard = Some(comp),
-                                Err(std::sync::TryLockError::Poisoned(e)) => *e.into_inner() = Some(comp),
+                                Err(std::sync::TryLockError::Poisoned(e)) => {
+                                    *e.into_inner() = Some(comp)
+                                }
                                 Err(std::sync::TryLockError::WouldBlock) => {
                                     // End the composition we just created since we can't track it
                                     comp.EndComposition(ec).ok();
                                 }
                             }
-                            
+
                             Self::update_caret_position_in_session(context, ec, &self.ipc);
                         }
                         Err(e) => {
@@ -716,19 +753,19 @@ impl XimeTextService_Impl {
 
     fn should_handle_key(&self, vk: VIRTUAL_KEY) -> bool {
         let code = vk.0;
-        
+
         if self.is_composing() {
             debug!("should_handle_key: composing=true, handle {}", code);
             return true;
         }
-        
+
         let is_ascii = self.ascii_mode.load(std::sync::atomic::Ordering::Acquire);
         debug!("should_handle_key: code={}, is_ascii={}", code, is_ascii);
         if is_ascii {
             debug!("  -> ascii mode, not handling");
             return false;
         }
-        
+
         if (VK_X_A..=VK_X_Z).contains(&code) {
             return true;
         }
@@ -785,7 +822,7 @@ impl XimeTextService_Impl {
 
         use windows::Win32::Foundation::RECT;
         use windows::Win32::UI::TextServices::{
-            ITfEditSession, TF_DEFAULT_SELECTION, TF_ES_READ, TF_ES_ASYNCDONTCARE,
+            ITfEditSession, TF_DEFAULT_SELECTION, TF_ES_ASYNCDONTCARE, TF_ES_READ,
         };
 
         #[implement(ITfEditSession)]
@@ -844,7 +881,11 @@ impl XimeTextService_Impl {
         let session = SelectionRect::new(context.clone()).into_object();
 
         let _ = unsafe {
-            context.RequestEditSession(tid, session.as_interface(), TF_ES_ASYNCDONTCARE | TF_ES_READ)
+            context.RequestEditSession(
+                tid,
+                session.as_interface(),
+                TF_ES_ASYNCDONTCARE | TF_ES_READ,
+            )
         };
 
         let rect = session.rect();
@@ -1131,7 +1172,7 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
     fn OnKeyDown(&self, pic: Ref<'_, ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = VIRTUAL_KEY(wparam.0 as u16);
         debug!("OnKeyDown: vk={}", vk.0);
-        
+
         if vk.0 == VK_CONTROL.0 {
             if self.is_composing() && !self.ctrl_root_visible.get() {
                 let last_key = self.last_input_key.get();
@@ -1139,8 +1180,8 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
                 if let Some(letter) = last_key {
                     let mods = get_key_modifiers();
                     debug!("  -> mods={}", mods);
-                    let ctrl_only = (mods & K_CONTROL_MASK as i32) != 0 
-                        && (mods & K_SHIFT_MASK as i32) == 0 
+                    let ctrl_only = (mods & K_CONTROL_MASK as i32) != 0
+                        && (mods & K_SHIFT_MASK as i32) == 0
                         && (mods & K_ALT_MASK as i32) == 0;
                     if ctrl_only {
                         debug!("  -> sending ShowRoot for '{}'", letter);
@@ -1151,7 +1192,7 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
             }
             return Ok(BOOL(0));
         }
-        
+
         if !self.should_handle_key(vk) {
             debug!("  -> not handling");
             return Ok(BOOL(0));
@@ -1182,7 +1223,7 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
     fn OnKeyUp(&self, pic: Ref<'_, ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = VIRTUAL_KEY(wparam.0 as u16);
         debug!("OnKeyUp: vk={}", vk.0);
-        
+
         if vk.0 == VK_CONTROL.0 {
             if self.ctrl_root_visible.get() {
                 debug!("  -> Ctrl released, sending HideRoot");
@@ -1191,7 +1232,7 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
             }
             return Ok(BOOL(0));
         }
-        
+
         if vk.0 != VK_SHIFT.0 {
             return Ok(BOOL(0));
         }
@@ -1204,23 +1245,33 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
         debug!("  -> calling toggle_ascii_mode");
         let response = self.ipc.toggle_ascii_mode();
         debug!("  -> response: {:?}", response);
-        
+
         if let Some(response) = response {
             if response.success {
                 if let Some(ref status) = response.status {
-                    debug!("  -> server ascii_mode: {}, updating local", status.ascii_mode);
-                    self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                    debug!(
+                        "  -> server ascii_mode: {}, updating local",
+                        status.ascii_mode
+                    );
+                    self.ascii_mode
+                        .store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                     let verify = self.ascii_mode.load(std::sync::atomic::Ordering::Acquire);
                     debug!("  -> verified local ascii_mode: {}", verify);
                     self.update_lang_bar();
                 }
-                
+
                 let output = RimeOutput::from_response(&response);
-                debug!("  -> output: commit={}, composing={}", output.commit.is_some(), output.composing);
+                debug!(
+                    "  -> output: commit={}, composing={}",
+                    output.commit.is_some(),
+                    output.composing
+                );
                 self.set_composing(output.composing);
-                
+
                 if output.commit.is_some() {
-                    debug!("  -> has commit, scheduling edit session to commit and end composition");
+                    debug!(
+                        "  -> has commit, scheduling edit session to commit and end composition"
+                    );
                     if let Some(ctx) = pic.as_ref() {
                         self.schedule_edit_session(ctx, output);
                     }
@@ -1228,19 +1279,22 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
                     debug!("  -> composing changed to false, ending composition");
                     self.set_composing(false);
                     if let Some(ctx) = pic.as_ref() {
-                        self.schedule_edit_session(ctx, RimeOutput {
-                            commit: None,
-                            preedit: String::new(),
-                            _candidates: Vec::new(),
-                            composing: false,
-                        });
+                        self.schedule_edit_session(
+                            ctx,
+                            RimeOutput {
+                                commit: None,
+                                preedit: String::new(),
+                                _candidates: Vec::new(),
+                                composing: false,
+                            },
+                        );
                     }
                 }
-                
+
                 return Ok(BOOL(1));
             }
         }
-        
+
         Ok(BOOL(0))
     }
 
@@ -1249,7 +1303,13 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
     }
 }
 
-#[implement(ITfTextInputProcessor, ITfActiveLanguageProfileNotifySink, ITfThreadFocusSink, ITfThreadMgrEventSink, ITfKeyEventSink)]
+#[implement(
+    ITfTextInputProcessor,
+    ITfActiveLanguageProfileNotifySink,
+    ITfThreadFocusSink,
+    ITfThreadMgrEventSink,
+    ITfKeyEventSink
+)]
 pub struct XimeTextService {
     thread_mgr: std::cell::RefCell<Option<ITfThreadMgr>>,
     client_id: std::cell::Cell<u32>,
@@ -1306,7 +1366,7 @@ impl XimeTextService {
             self.ipc.debug_ptr()
         );
         if connected {
-            return Ok(())
+            return Ok(());
         }
         debug!("ensure_ipc: attempting connect...");
         match self.ipc.connect() {
@@ -1315,7 +1375,8 @@ impl XimeTextService {
                 if let Some(response) = response {
                     if let Some(status) = response.status {
                         debug!("ensure_ipc: initial ascii_mode={}", status.ascii_mode);
-                        self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                        self.ascii_mode
+                            .store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                     }
                 }
                 debug!("ensure_ipc: connect OK");
@@ -1343,7 +1404,8 @@ impl XimeTextService_Impl {
                 self.ipc.show_tray_icon();
                 if let Some(response) = self.ipc.start_session().1 {
                     if let Some(status) = response.status {
-                        self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+                        self.ascii_mode
+                            .store(status.ascii_mode, std::sync::atomic::Ordering::Release);
                     }
                 }
             }
@@ -1396,12 +1458,17 @@ impl XimeTextService_Impl {
             if let Ok(source) = thread_mgr.cast::<ITfSource>() {
                 debug!("Got ITfSource from thread_mgr, registering sinks...");
                 use windows_core::ComObjectInterface;
-                
+
                 // Register ITfActiveLanguageProfileNotifySink
-                let profile_sink_ref = ComObjectInterface::<ITfActiveLanguageProfileNotifySink>::as_interface_ref(self);
+                let profile_sink_ref =
+                    ComObjectInterface::<ITfActiveLanguageProfileNotifySink>::as_interface_ref(
+                        self,
+                    );
                 let profile_sink: ITfActiveLanguageProfileNotifySink = profile_sink_ref.to_owned();
                 unsafe {
-                    if let Ok(cookie) = source.AdviseSink(&ITfActiveLanguageProfileNotifySink::IID, &profile_sink) {
+                    if let Ok(cookie) =
+                        source.AdviseSink(&ITfActiveLanguageProfileNotifySink::IID, &profile_sink)
+                    {
                         debug!("Profile sink registered, cookie={}", cookie);
                         self.profile_sink_cookie.set(cookie);
                         *self.profile_source.borrow_mut() = Some(source.clone());
@@ -1409,12 +1476,15 @@ impl XimeTextService_Impl {
                         debug!("Failed to AdviseSink for profile");
                     }
                 }
-                
+
                 // Register ITfThreadFocusSink
-                let thread_focus_sink_ref = ComObjectInterface::<ITfThreadFocusSink>::as_interface_ref(self);
+                let thread_focus_sink_ref =
+                    ComObjectInterface::<ITfThreadFocusSink>::as_interface_ref(self);
                 let thread_focus_sink: ITfThreadFocusSink = thread_focus_sink_ref.to_owned();
                 unsafe {
-                    if let Ok(cookie) = source.AdviseSink(&ITfThreadFocusSink::IID, &thread_focus_sink) {
+                    if let Ok(cookie) =
+                        source.AdviseSink(&ITfThreadFocusSink::IID, &thread_focus_sink)
+                    {
                         debug!("Thread focus sink registered, cookie={}", cookie);
                         self.thread_focus_sink_cookie.set(cookie);
                         *self.thread_focus_source.borrow_mut() = Some(source.clone());
@@ -1422,12 +1492,16 @@ impl XimeTextService_Impl {
                         debug!("Failed to AdviseSink for thread focus");
                     }
                 }
-                
+
                 // Register ITfThreadMgrEventSink (for document focus changes)
-                let thread_mgr_event_sink_ref = ComObjectInterface::<ITfThreadMgrEventSink>::as_interface_ref(self);
-                let thread_mgr_event_sink: ITfThreadMgrEventSink = thread_mgr_event_sink_ref.to_owned();
+                let thread_mgr_event_sink_ref =
+                    ComObjectInterface::<ITfThreadMgrEventSink>::as_interface_ref(self);
+                let thread_mgr_event_sink: ITfThreadMgrEventSink =
+                    thread_mgr_event_sink_ref.to_owned();
                 unsafe {
-                    if let Ok(cookie) = source.AdviseSink(&ITfThreadMgrEventSink::IID, &thread_mgr_event_sink) {
+                    if let Ok(cookie) =
+                        source.AdviseSink(&ITfThreadMgrEventSink::IID, &thread_mgr_event_sink)
+                    {
                         debug!("ThreadMgrEventSink registered, cookie={}", cookie);
                         self.thread_mgr_event_sink_cookie.set(cookie);
                     } else {
@@ -1447,7 +1521,7 @@ impl XimeTextService_Impl {
     fn deactivate_impl(&self) -> Result<()> {
         debug!("Deactivate called");
         self.ipc.hide_tray_icon();
-        
+
         // Unregister profile sink
         if self.profile_sink_cookie.get() != TF_INVALID_COOKIE {
             if let Some(source) = self.profile_source.borrow_mut().take() {
@@ -1457,7 +1531,7 @@ impl XimeTextService_Impl {
             }
             self.profile_sink_cookie.set(TF_INVALID_COOKIE);
         }
-        
+
         // Unregister thread focus sink
         if self.thread_focus_sink_cookie.get() != TF_INVALID_COOKIE {
             if let Some(source) = self.thread_focus_source.borrow_mut().take() {
@@ -1467,7 +1541,7 @@ impl XimeTextService_Impl {
             }
             self.thread_focus_sink_cookie.set(TF_INVALID_COOKIE);
         }
-        
+
         // Unregister thread mgr event sink
         if self.thread_mgr_event_sink_cookie.get() != TF_INVALID_COOKIE {
             if let Some(thread_mgr) = self.thread_mgr.borrow().as_ref() {
@@ -1479,7 +1553,7 @@ impl XimeTextService_Impl {
             }
             self.thread_mgr_event_sink_cookie.set(TF_INVALID_COOKIE);
         }
-        
+
         // UnadviseKeyEventSink using thread_mgr
         if let Some(thread_mgr) = self.thread_mgr.borrow().as_ref() {
             if let Ok(kmgr) = thread_mgr.cast::<ITfKeystrokeMgr>() {
@@ -1522,15 +1596,20 @@ impl ITfTextInputProcessor_Impl for XimeTextService_Impl {
 }
 
 impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
-    fn OnActivated(&self, clsid: *const GUID, guidprofile: *const GUID, factivated: BOOL) -> Result<()> {
+    fn OnActivated(
+        &self,
+        clsid: *const GUID,
+        guidprofile: *const GUID,
+        factivated: BOOL,
+    ) -> Result<()> {
         let clsid_ref = unsafe { clsid.as_ref() };
         let profile_ref = unsafe { guidprofile.as_ref() };
-        
+
         debug!("ITfActiveLanguageProfileNotifySink::OnActivated: clsid={:?}, profile={:?}, activated={}", clsid_ref, profile_ref, factivated.0);
-        
+
         let our_clsid = crate::class_factory::CLSID_XIME;
         debug!("  -> our_clsid = {:?}", our_clsid);
-        
+
         if let Some(clsid_val) = clsid_ref {
             debug!("  -> clsid_val = {:?}", clsid_val);
             debug!("  -> clsid_val == our_clsid? {}", clsid_val == &our_clsid);
@@ -1542,12 +1621,12 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
         } else {
             debug!("  -> clsid_ref is None");
         }
-        
+
         debug!("  -> factivated.as_bool() = {}", factivated.as_bool());
-        
+
         if factivated.as_bool() {
             debug!("  -> Our TIP is being activated!");
-            
+
             if !self.ipc.is_connected() {
                 debug!("  -> IPC not connected, attempting reconnect...");
                 if self.ipc.connect().is_err() {
@@ -1556,12 +1635,13 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
                 }
                 debug!("  -> Reconnected!");
             }
-            
+
             if let Some(response) = self.ipc.start_session().1 {
                 if let Some(status) = response.status {
                     debug!("  -> ascii_mode from server: {}", status.ascii_mode);
-                    self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
-                    
+                    self.ascii_mode
+                        .store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+
                     let sink = match self.lang_bar_sink_ref.try_lock() {
                         Ok(g) => g,
                         Err(_) => return Ok(()),
@@ -1573,14 +1653,14 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
                     }
                 }
             }
-            
+
             self.ipc.show_tray_icon();
         } else {
             debug!("  -> Our TIP is being deactivated");
             self.ipc.hide_candidates();
             self.ipc.hide_tray_icon();
         }
-        
+
         Ok(())
     }
 }
@@ -1588,7 +1668,7 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
 impl ITfThreadFocusSink_Impl for XimeTextService_Impl {
     fn OnSetThreadFocus(&self) -> Result<()> {
         debug!("ITfThreadFocusSink::OnSetThreadFocus");
-        
+
         // Ensure IPC connected
         if !self.ipc.is_connected() {
             debug!("  -> IPC not connected, attempting reconnect...");
@@ -1598,13 +1678,14 @@ impl ITfThreadFocusSink_Impl for XimeTextService_Impl {
             }
             debug!("  -> Reconnected!");
         }
-        
+
         // Sync status with server
         if let Some(response) = self.ipc.start_session().1 {
             if let Some(status) = response.status {
                 debug!("  -> ascii_mode from server: {}", status.ascii_mode);
-                self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
-                
+                self.ascii_mode
+                    .store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+
                 let sink = match self.lang_bar_sink_ref.try_lock() {
                     Ok(g) => g,
                     Err(_) => return Ok(()),
@@ -1616,19 +1697,19 @@ impl ITfThreadFocusSink_Impl for XimeTextService_Impl {
                 }
             }
         }
-        
+
         // Show tray icon
         self.ipc.show_tray_icon();
-        
+
         Ok(())
     }
-    
+
     fn OnKillThreadFocus(&self) -> Result<()> {
         debug!("ITfThreadFocusSink::OnKillThreadFocus");
-        
+
         // Hide UI when thread loses focus
         self.ipc.hide_tray_icon();
-        
+
         Ok(())
     }
 }
@@ -1647,8 +1728,11 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
         pdimfocus: Ref<'_, ITfDocumentMgr>,
         _pdimprevfocus: Ref<'_, ITfDocumentMgr>,
     ) -> Result<()> {
-        debug!("ITfThreadMgrEventSink::OnSetFocus (pdimfocus.is_null={})", pdimfocus.is_null());
-        
+        debug!(
+            "ITfThreadMgrEventSink::OnSetFocus (pdimfocus.is_null={})",
+            pdimfocus.is_null()
+        );
+
         if pdimfocus.is_null() {
             debug!("  -> Focus lost (pdimfocus is null)");
             if self.ipc.is_connected() {
@@ -1657,9 +1741,9 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
             self.abort_composition();
             return Ok(());
         }
-        
+
         debug!("  -> Focus gained (pdimfocus is valid)");
-        
+
         if !self.ipc.is_connected() {
             debug!("  -> IPC not connected, attempting reconnect...");
             if self.ipc.connect().is_err() {
@@ -1668,12 +1752,13 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
             }
             debug!("  -> Reconnected!");
         }
-        
+
         if let Some(response) = self.ipc.start_session().1 {
             if let Some(status) = response.status {
                 debug!("  -> ascii_mode from server: {}", status.ascii_mode);
-                self.ascii_mode.store(status.ascii_mode, std::sync::atomic::Ordering::Release);
-                
+                self.ascii_mode
+                    .store(status.ascii_mode, std::sync::atomic::Ordering::Release);
+
                 let sink = match self.lang_bar_sink_ref.try_lock() {
                     Ok(g) => g,
                     Err(_) => return Ok(()),
@@ -1685,10 +1770,10 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
                 }
             }
         }
-        
+
         self.ipc.show_tray_icon();
         self.ipc.focus_in();
-        
+
         Ok(())
     }
 

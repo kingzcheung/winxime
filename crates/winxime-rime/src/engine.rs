@@ -1,18 +1,20 @@
 use librime::{
-    create_session, finalize, get_api, initialize, setup, is_maintenance_mode,
-    Traits, Session, 
-    start_maintenance, join_maintenance_thread, full_deploy_and_wait,
-    DeployResult,
+    create_session, finalize, full_deploy_and_wait, get_api, initialize, is_maintenance_mode,
+    join_maintenance_thread, setup, start_maintenance, DeployResult, Session, Traits,
 };
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::ptr;
+use std::sync::Mutex;
 
 fn log_to_file(msg: &str) {
     if let Ok(temp) = std::env::var("TEMP") {
         let log_path = std::path::PathBuf::from(temp).join("winxime-rime.log");
-        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
             let _ = writeln!(file, "[rime] {}", msg);
             let _ = file.flush();
         }
@@ -65,11 +67,14 @@ impl RimeEngine {
         }
 
         log_to_file("Creating session...");
-        let session = create_session().map_err(|e| RimeError::SessionCreateFailed(e.to_string()))?;
-        
+        let session =
+            create_session().map_err(|e| RimeError::SessionCreateFailed(e.to_string()))?;
+
         log_to_file("Session created");
 
-        let status = session.status().map_err(|e| RimeError::StatusError(e.to_string()))?;
+        let status = session
+            .status()
+            .map_err(|e| RimeError::StatusError(e.to_string()))?;
         log_to_file(&format!("Current schema: {}", status.schema_id()));
 
         Ok(Self {
@@ -128,35 +133,44 @@ impl RimeEngine {
     }
 
     pub fn get_candidates(&self) -> CandidateList {
-        self.session.context().map(|ctx| {
-            let menu = ctx.menu();
-            let candidates = menu.candidates.iter().map(|c| Candidate {
-                text: c.text.to_string(),
-                comment: c.comment.map(|s: &str| s.to_string()),
-            }).collect();
-            
-            CandidateList {
-                candidates,
-                highlighted: menu.highlighted_candidate_index,
-                page_no: menu.page_no,
-                is_last_page: menu.is_last_page,
-            }
-        }).unwrap_or_else(|| CandidateList {
-            candidates: Vec::new(),
-            highlighted: 0,
-            page_no: 0,
-            is_last_page: true,
-        })
+        self.session
+            .context()
+            .map(|ctx| {
+                let menu = ctx.menu();
+                let candidates = menu
+                    .candidates
+                    .iter()
+                    .map(|c| Candidate {
+                        text: c.text.to_string(),
+                        comment: c.comment.map(|s: &str| s.to_string()),
+                    })
+                    .collect();
+
+                CandidateList {
+                    candidates,
+                    highlighted: menu.highlighted_candidate_index,
+                    page_no: menu.page_no,
+                    is_last_page: menu.is_last_page,
+                }
+            })
+            .unwrap_or_else(|| CandidateList {
+                candidates: Vec::new(),
+                highlighted: 0,
+                page_no: 0,
+                is_last_page: true,
+            })
     }
 
     pub fn is_composing(&self) -> bool {
-        self.session.status()
+        self.session
+            .status()
             .map(|s| s.is_composing)
             .unwrap_or(false)
     }
 
     pub fn is_ascii_mode(&self) -> bool {
-        self.session.status()
+        self.session
+            .status()
             .map(|s| s.is_ascii_mode)
             .unwrap_or(false)
     }
@@ -233,9 +247,12 @@ impl RimeEngine {
             if api.is_null() {
                 return Vec::new();
             }
-            
-            let mut list = librime_sys2::RimeSchemaList { size: 0, list: ptr::null_mut() };
-            
+
+            let mut list = librime_sys2::RimeSchemaList {
+                size: 0,
+                list: ptr::null_mut(),
+            };
+
             let mut result = Vec::new();
             if let Some(get_list) = (*api).get_schema_list {
                 if get_list(&mut list) != 0 {
@@ -263,16 +280,19 @@ impl RimeEngine {
     }
 
     pub fn get_current_schema(&self) -> Option<String> {
-        self.session.status().ok().map(|s| s.schema_id().to_string())
+        self.session
+            .status()
+            .ok()
+            .map(|s| s.schema_id().to_string())
     }
 
     pub fn redeploy(&mut self) -> bool {
         log_to_file("Redeploying Rime...");
-        
+
         log_to_file("Finalizing old session...");
         self.initialized = false;
         finalize();
-        
+
         log_to_file("Creating new traits...");
         let mut traits = Traits::new();
         traits
@@ -296,7 +316,7 @@ impl RimeEngine {
         log_to_file("Running full_deploy_and_wait...");
         let result = full_deploy_and_wait();
         log_to_file(&format!("Deploy result: {:?}", result));
-        
+
         if is_maintenance_mode() {
             log_to_file("Joining maintenance thread...");
             join_maintenance_thread();
@@ -308,11 +328,11 @@ impl RimeEngine {
                 self.session = session;
                 self.initialized = true;
                 log_to_file("New session created successfully");
-                
+
                 if let Ok(status) = self.session.status() {
                     log_to_file(&format!("Current schema: {}", status.schema_id()));
                 }
-                
+
                 true
             }
             Err(e) => {
@@ -403,7 +423,9 @@ impl std::fmt::Display for RimeError {
         match self {
             RimeError::ApiNotFound => write!(f, "Rime API not found (rime.dll missing)"),
             RimeError::InitFailed(msg) => write!(f, "Rime initialization failed: {}", msg),
-            RimeError::SessionCreateFailed(msg) => write!(f, "Failed to create Rime session: {}", msg),
+            RimeError::SessionCreateFailed(msg) => {
+                write!(f, "Failed to create Rime session: {}", msg)
+            }
             RimeError::StatusError(msg) => write!(f, "Failed to get status: {}", msg),
             RimeError::LockFailed => write!(f, "Failed to acquire initialization lock"),
         }

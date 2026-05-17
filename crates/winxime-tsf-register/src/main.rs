@@ -1,17 +1,20 @@
 use std::{env, fs, process};
 use windows::{
+    core::*,
     Win32::{
         Foundation::{E_FAIL, WIN32_ERROR},
         Globalization::*,
         System::{
             Com::*,
-            Console::{ATTACH_PARENT_PROCESS, AttachConsole},
+            Console::{AttachConsole, ATTACH_PARENT_PROCESS},
             LibraryLoader::{GetProcAddress, LoadLibraryW},
-            Registry::{RegDeleteKeyW, RegDeleteKeyValueW, RegOpenKeyW, HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER, HKEY},
+            Registry::{
+                RegDeleteKeyValueW, RegDeleteKeyW, RegOpenKeyW, HKEY, HKEY_CURRENT_USER,
+                HKEY_LOCAL_MACHINE,
+            },
         },
         UI::{Input::KeyboardAndMouse::HKL, TextServices::*},
     },
-    core::*,
 };
 use winxime_ipc::IpcClient;
 
@@ -21,7 +24,8 @@ const ILOT_UNINSTALL: u32 = 0x00000001;
 
 const XIME_TSF_CLSID: GUID = GUID::from_u128(0x5C1E4D8A_F3B2_4A7E_9CD1_2A3B4C5D6E7F);
 const XIME_PROFILE_GUID: GUID = GUID::from_u128(0x5C1E4D8A_F3B2_4A7E_9CD1_2A3B4C5D6E7F);
-const XIME_TIP_DESC: PCWSTR = w!("0x0804:{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
+const XIME_TIP_DESC: PCWSTR =
+    w!("0x0804:{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
 
 const CATEGORIES: [GUID; 7] = [
     GUID_TFCAT_TIP_KEYBOARD,
@@ -41,26 +45,26 @@ fn get_system_dir() -> std::path::PathBuf {
 fn copy_dll_to_system(source: &std::path::Path) -> Result<std::path::PathBuf> {
     let system_dir = get_system_dir();
     let dest = system_dir.join("winxime_tsf.dll");
-    
+
     if dest.exists() {
         fs::remove_file(&dest).ok();
     }
-    
+
     fs::copy(source, &dest).map_err(|_| Error::from(E_FAIL))?;
     println!("  Copied {} -> {}", source.display(), dest.display());
-    
+
     Ok(dest)
 }
 
 fn remove_dll_from_system() -> Result<()> {
     let system_dir = get_system_dir();
     let dll_path = system_dir.join("winxime_tsf.dll");
-    
+
     if dll_path.exists() {
         fs::remove_file(&dll_path).map_err(|_| Error::from(E_FAIL))?;
         println!("  Removed {}", dll_path.display());
     }
-    
+
     Ok(())
 }
 
@@ -72,12 +76,12 @@ fn get_user_data_dir() -> std::path::PathBuf {
 
 fn remove_user_data_dir() -> Result<()> {
     let user_data_dir = get_user_data_dir();
-    
+
     if user_data_dir.exists() {
         fs::remove_dir_all(&user_data_dir).map_err(|_| Error::from(E_FAIL))?;
         println!("  Removed {}", user_data_dir.display());
     }
-    
+
     Ok(())
 }
 
@@ -90,13 +94,17 @@ fn get_install_dir() -> std::path::PathBuf {
 
 fn remove_install_dir() -> Result<()> {
     let install_dir = get_install_dir();
-    
+
     if !install_dir.exists() {
         println!("  Install directory does not exist");
-        return Ok(())
+        return Ok(());
     }
-    
-    if install_dir.to_string_lossy().contains("Program Files") || install_dir.to_string_lossy().contains("Program Files (x86)") {
+
+    if install_dir.to_string_lossy().contains("Program Files")
+        || install_dir
+            .to_string_lossy()
+            .contains("Program Files (x86)")
+    {
         let cmd = std::process::Command::new("cmd")
             .args([
                 "/c",
@@ -109,36 +117,42 @@ fn remove_install_dir() -> Result<()> {
                 "rmdir",
                 "/s",
                 "/q",
-                &install_dir.to_string_lossy().to_string()
+                &install_dir.to_string_lossy().to_string(),
             ])
             .spawn();
-        
+
         match cmd {
-            Ok(_) => println!("  Scheduled removal of {} (will execute after this process exits)", install_dir.display()),
+            Ok(_) => println!(
+                "  Scheduled removal of {} (will execute after this process exits)",
+                install_dir.display()
+            ),
             Err(e) => println!("  Failed to schedule removal: {:?}", e),
         }
     } else {
-        println!("  Skipping {} (not in Program Files, appears to be dev directory)", install_dir.display());
+        println!(
+            "  Skipping {} (not in Program Files, appears to be dev directory)",
+            install_dir.display()
+        );
     }
-    
+
     Ok(())
 }
 
 fn remove_registry_keys() -> Result<()> {
     unsafe {
         let hklm = HKEY_LOCAL_MACHINE;
-        
+
         let xime_key = w!("SOFTWARE\\Xime");
         let result = RegDeleteKeyW(hklm, xime_key);
         if result == WIN32_ERROR(0) || result == WIN32_ERROR(2) {
             println!("  Removed HKLM\\SOFTWARE\\Xime");
         }
-        
+
         let run_key = w!("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run");
         let xime_server = w!("XimeServer");
         RegDeleteKeyValueW(hklm, run_key, xime_server);
         println!("  Removed Run startup entry");
-        
+
         let hkcu = HKEY_CURRENT_USER;
         let xime_cu_key = w!("SOFTWARE\\Xime");
         let result = RegDeleteKeyW(hkcu, xime_cu_key);
@@ -146,7 +160,7 @@ fn remove_registry_keys() -> Result<()> {
             println!("  Removed HKCU\\SOFTWARE\\Xime");
         }
     }
-    
+
     Ok(())
 }
 
@@ -154,12 +168,12 @@ fn register_dll(dll_path: &str) -> Result<()> {
     unsafe {
         let dll_path_wide: Vec<u16> = dll_path.encode_utf16().chain(std::iter::once(0)).collect();
         let hmodule = LoadLibraryW(PCWSTR::from_raw(dll_path_wide.as_ptr()))?;
-        
+
         let proc = GetProcAddress(hmodule, s!("DllRegisterServer"));
         if proc.is_none() {
             return Err(Error::from(E_FAIL));
         }
-        
+
         let func: extern "system" fn() -> HRESULT = std::mem::transmute(proc.unwrap());
         let result = func();
         if result.is_err() {
@@ -173,12 +187,12 @@ fn unregister_dll(dll_path: &str) -> Result<()> {
     unsafe {
         let dll_path_wide: Vec<u16> = dll_path.encode_utf16().chain(std::iter::once(0)).collect();
         let hmodule = LoadLibraryW(PCWSTR::from_raw(dll_path_wide.as_ptr()))?;
-        
+
         let proc = GetProcAddress(hmodule, s!("DllUnregisterServer"));
         if proc.is_none() {
             return Err(Error::from(E_FAIL));
         }
-        
+
         let func: extern "system" fn() -> HRESULT = std::mem::transmute(proc.unwrap());
         let result = func();
         if result.is_err() {
@@ -193,7 +207,10 @@ fn register(icon_path: String) -> Result<()> {
         let input_processor_profile_mgr: ITfInputProcessorProfileMgr =
             CoCreateInstance(&CLSID_TF_InputProcessorProfiles, None, CLSCTX_INPROC_SERVER)?;
 
-        let pw_icon_path = icon_path.encode_utf16().chain(std::iter::once(0)).collect::<Vec<_>>();
+        let pw_icon_path = icon_path
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
 
         let mut lcid = LocaleNameToLCID(w!("zh-CN"), 0);
         if matches!(lcid, 0 | 0x0C00 | 0x1000) {
@@ -248,11 +265,11 @@ fn unregister() -> Result<()> {
             &XIME_PROFILE_GUID,
             0,
         )?;
-        
+
         let hklm = HKEY_LOCAL_MACHINE;
         let clsid_key = w!("CLSID\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
         RegDeleteKeyW(hklm, clsid_key).ok();
-        
+
         let tip_key = w!("SOFTWARE\\Microsoft\\CTF\\TIP\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
         RegDeleteKeyW(hklm, tip_key).ok();
     }
@@ -277,12 +294,12 @@ fn stop() {
         println!("Server stopped via IPC");
         return;
     }
-    
+
     println!("IPC shutdown failed, trying taskkill...");
     let result = std::process::Command::new("taskkill")
         .args(["/F", "/IM", "winxime-server.exe"])
         .output();
-    
+
     match result {
         Ok(output) => {
             if output.status.success() {
@@ -310,15 +327,25 @@ fn main() -> Result<()> {
             println!("  winxime-tsf-register -install         完整安装(复制DLL到System32+注册)");
             println!("  winxime-tsf-register -uninstall       完整卸载");
             println!("  winxime-tsf-register -register <DllPath> <IconPath>  HKLM注册(不复制DLL,需要管理员权限)");
-            println!("  winxime-tsf-register -unregister <DllPath>           HKLM卸载(需要管理员权限)");
-            println!("  winxime-tsf-register -register-user <DllPath> <IconPath>  用户级注册(不复制DLL)");
+            println!(
+                "  winxime-tsf-register -unregister <DllPath>           HKLM卸载(需要管理员权限)"
+            );
+            println!(
+                "  winxime-tsf-register -register-user <DllPath> <IconPath>  用户级注册(不复制DLL)"
+            );
             println!("  winxime-tsf-register -unregister-user <DllPath>           用户级卸载");
             println!("  winxime-tsf-register -register-only <IconPath>            仅注册Profile(DLL已在System32)");
             println!("  winxime-tsf-register -unregister-only                    仅注销Profile");
-            println!("  winxime-tsf-register -copy-to-system <DllPath>           仅复制DLL到System32");
+            println!(
+                "  winxime-tsf-register -copy-to-system <DllPath>           仅复制DLL到System32"
+            );
             println!("  winxime-tsf-register -copy-and-register <DllPath> <IconPath>  复制DLL到System32+注册(MSI安装用)");
-            println!("  winxime-tsf-register -remove-from-system                仅删除System32中的DLL");
-            println!("  winxime-tsf-register -unregister-and-remove             MSI卸载(保留用户数据)");
+            println!(
+                "  winxime-tsf-register -remove-from-system                仅删除System32中的DLL"
+            );
+            println!(
+                "  winxime-tsf-register -unregister-and-remove             MSI卸载(保留用户数据)"
+            );
             println!("  winxime-tsf-register -full-uninstall                    完整卸载(删除用户数据,脚本用)");
             println!("  winxime-tsf-register -r <IconPath>    注册TSF Profile");
             println!("  winxime-tsf-register -dll             注册DLL");
@@ -332,13 +359,15 @@ fn main() -> Result<()> {
 
         match arg1.as_str() {
             "-register" => {
-                let dll_path = env::args().nth(2)
+                let dll_path = env::args()
+                    .nth(2)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少 DLL 路径参数");
-                let icon_path = env::args().nth(3)
+                let icon_path = env::args()
+                    .nth(3)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少 Icon 路径参数");
-                
+
                 println!("Step 1: Registering DLL to HKLM...");
                 println!("  DLL path: {}", dll_path);
                 match register_dll(&dll_path) {
@@ -366,10 +395,11 @@ fn main() -> Result<()> {
                 println!("HKLM registration complete!");
             }
             "-copy-to-system" => {
-                let src_dll = env::args().nth(2)
+                let src_dll = env::args()
+                    .nth(2)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少源 DLL 路径参数");
-                
+
                 println!("Copying DLL to System32...");
                 println!("  Source: {}", src_dll);
                 let src_path = std::path::Path::new(&src_dll);
@@ -384,13 +414,15 @@ fn main() -> Result<()> {
                 println!("Copy complete!");
             }
             "-copy-and-register" => {
-                let src_dll = env::args().nth(2)
+                let src_dll = env::args()
+                    .nth(2)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少源 DLL 路径参数");
-                let icon_path = env::args().nth(3)
+                let icon_path = env::args()
+                    .nth(3)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少 Icon 路径参数");
-                
+
                 println!("Step 1: Copying DLL to System32...");
                 println!("  Source: {}", src_dll);
                 let src_path = std::path::Path::new(&src_dll);
@@ -432,10 +464,11 @@ fn main() -> Result<()> {
                 println!("Copy-and-register complete!");
             }
             "-unregister" => {
-                let dll_path = env::args().nth(2)
+                let dll_path = env::args()
+                    .nth(2)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少 DLL 路径参数");
-                
+
                 println!("Step 1: Stopping server...");
                 stop();
 
@@ -499,7 +532,7 @@ fn main() -> Result<()> {
             }
             "-full-uninstall" => {
                 println!("=== Full Uninstall ===");
-                
+
                 println!("Step 1: Stopping server...");
                 stop();
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -548,7 +581,7 @@ fn main() -> Result<()> {
 
                 println!("Step 8: Verifying uninstall...");
                 let mut errors = Vec::new();
-                
+
                 if system_dll.exists() {
                     errors.push("System32 DLL still exists");
                 }
@@ -558,7 +591,7 @@ fn main() -> Result<()> {
                 if install_dir.exists() && install_dir.to_string_lossy().contains("Program Files") {
                     errors.push("Install directory still exists");
                 }
-                
+
                 unsafe {
                     let hklm = HKEY_LOCAL_MACHINE;
                     let clsid_key = w!("CLSID\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
@@ -566,14 +599,15 @@ fn main() -> Result<()> {
                     if RegOpenKeyW(hklm, clsid_key, &mut result_key).is_ok() {
                         errors.push("CLSID registry key still exists");
                     }
-                    
-                    let tip_key = w!("SOFTWARE\\Microsoft\\CTF\\TIP\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
+
+                    let tip_key =
+                        w!("SOFTWARE\\Microsoft\\CTF\\TIP\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
                     let mut result_key: HKEY = HKEY::default();
                     if RegOpenKeyW(hklm, tip_key, &mut result_key).is_ok() {
                         errors.push("TIP registry key still exists");
                     }
                 }
-                
+
                 if errors.is_empty() {
                     println!("=== Uninstall Complete ===");
                     println!("All components removed successfully.");
@@ -588,13 +622,15 @@ fn main() -> Result<()> {
                 }
             }
             "-register-user" => {
-                let dll_path = env::args().nth(2)
+                let dll_path = env::args()
+                    .nth(2)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少 DLL 路径参数");
-                let icon_path = env::args().nth(3)
+                let icon_path = env::args()
+                    .nth(3)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少 Icon 路径参数");
-                
+
                 println!("Step 1: Registering DLL from user directory...");
                 println!("  DLL path: {}", dll_path);
                 match register_dll(&dll_path) {
@@ -622,10 +658,11 @@ fn main() -> Result<()> {
                 println!("User-level registration complete!");
             }
             "-unregister-user" => {
-                let dll_path = env::args().nth(2)
+                let dll_path = env::args()
+                    .nth(2)
                     .map(|p| p.trim_matches('"').to_string())
                     .expect("缺少 DLL 路径参数");
-                
+
                 println!("Step 1: Stopping server...");
                 stop();
 
@@ -712,7 +749,7 @@ fn main() -> Result<()> {
                 // Icon path is passed as argument, or use exe directory
                 let system_dir = get_system_dir();
                 let system_dll = system_dir.join("winxime_tsf.dll");
-                
+
                 println!("Step 1: Registering DLL...");
                 match register_dll(&system_dll.to_string_lossy()) {
                     Ok(_) => println!("  DLL registered"),
@@ -723,7 +760,8 @@ fn main() -> Result<()> {
                 }
 
                 // Use passed icon path, or fallback to exe directory
-                let icon_path = env::args().nth(2)
+                let icon_path = env::args()
+                    .nth(2)
                     .map(|p| p.trim_matches('"').to_string())
                     .unwrap_or_else(|| exe_dir.join("icon.ico").to_string_lossy().to_string());
                 println!("Step 2: Registering TSF Profile with icon: {}", icon_path);

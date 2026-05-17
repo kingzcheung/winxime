@@ -1,6 +1,6 @@
+use crate::theme::ThemeColors;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use crate::theme::ThemeColors;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -24,27 +24,27 @@ impl NumberInput {
             colors: None,
         }
     }
-    
+
     pub fn min(mut self, min: f64) -> Self {
         self.min = min;
         self
     }
-    
+
     pub fn max(mut self, max: f64) -> Self {
         self.max = max;
         self
     }
-    
+
     pub fn step(mut self, step: f64) -> Self {
         self.step = step;
         self
     }
-    
+
     pub fn on_change(mut self, callback: impl Fn(f64, &mut Window, &mut App) + 'static) -> Self {
         self.on_change = Some(Arc::new(callback));
         self
     }
-    
+
     pub fn theme(mut self, colors: ThemeColors) -> Self {
         self.colors = Some(colors);
         self
@@ -55,14 +55,16 @@ impl IntoElement for NumberInput {
     type Element = Div;
 
     fn into_element(self) -> Self::Element {
-        let colors = self.colors.unwrap_or_else(|| ThemeColors::from_theme(&crate::theme::SystemTheme::Light, 0x8F73E2));
-        
+        let colors = self.colors.unwrap_or_else(|| {
+            ThemeColors::from_theme(&crate::theme::SystemTheme::Light, 0x8F73E2)
+        });
+
         let value = self.value;
         let min = self.min;
         let max = self.max;
         let step = self.step;
         let on_change = self.on_change.clone();
-        
+
         div()
             .flex()
             .items_center()
@@ -97,7 +99,7 @@ impl IntoElement for NumberInput {
                             cb(new_value, window, cx);
                         })
                     })
-                    .child("-")
+                    .child("-"),
             )
             .child(
                 div()
@@ -109,7 +111,7 @@ impl IntoElement for NumberInput {
                     .text_size(px(14.0))
                     .text_color(colors.primary)
                     .font_weight(FontWeight::MEDIUM)
-                    .child(format!("{}", value as i32))
+                    .child(format!("{}", value as i32)),
             )
             .child(
                 div()
@@ -135,7 +137,7 @@ impl IntoElement for NumberInput {
                             cb(new_value, window, cx);
                         })
                     })
-                    .child("+")
+                    .child("+"),
             )
     }
 }

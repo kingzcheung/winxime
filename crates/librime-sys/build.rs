@@ -1,4 +1,4 @@
-﻿use std::env;
+use std::env;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -27,7 +27,7 @@ fn main() {
     if rime_dll.exists() {
         println!("cargo:rustc-link-search=native={}", dist_lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=rime");
-        
+
         // Copy rime.dll to target directories for both debug and release
         let profiles = ["debug", "release"];
         for profile in &profiles {

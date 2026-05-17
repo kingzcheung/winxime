@@ -1,21 +1,24 @@
-use gpui::*;
-use crate::components::{SettingsPage, SettingsGroup, SettingsItem, SettingsControl};
-use crate::state::SettingsState;
+use crate::components::{SettingsControl, SettingsGroup, SettingsItem, SettingsPage};
 use crate::pages::SettingsApp;
+use crate::state::SettingsState;
+use gpui::*;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
     let (enabled, history_count, retention_days, colors) = cx.read_entity(&settings, |state, _| {
-        (state.clipboard.enabled, state.clipboard.history_count, state.clipboard.retention_days, state.colors())
+        (
+            state.clipboard.enabled,
+            state.clipboard.history_count,
+            state.clipboard.retention_days,
+            state.colors(),
+        )
     });
-    
+
     let settings_clone = settings.clone();
     let settings_clone2 = settings.clone();
     let settings_clone3 = settings.clone();
-    
+
     SettingsPage::new("剪切板", colors.clone())
-        .group(
-            SettingsGroup::new("剪切板功能", colors.clone())
-                .items(vec![
+        .group(SettingsGroup::new("剪切板功能", colors.clone()).items(vec![
                     SettingsItem::new("启用剪切板", 
                         SettingsControl::switch_with(enabled,
                             move |val, _window, cx| {
@@ -55,7 +58,6 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             }
                         )
                     ).description("剪切板历史保留天数"),
-                ])
-        )
+                ]))
         .into_any_element()
 }

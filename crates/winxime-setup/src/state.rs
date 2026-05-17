@@ -1,6 +1,9 @@
-use gpui::*;
+use crate::rime_config::{
+    deploy_all, RimeConfigManager, SchemaConfig, SchemaConfigManager, SchemaManager,
+    XimeStyleManager,
+};
 use crate::theme::{SystemTheme, ThemeColors};
-use crate::rime_config::{RimeConfigManager, SchemaManager, SchemaConfig, SchemaConfigManager, deploy_all, XimeStyleManager};
+use gpui::*;
 use winxime_ipc::IpcClient;
 
 pub struct SettingsState {
@@ -42,14 +45,15 @@ impl SettingsState {
         }
     }
 
-pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
+    pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
         if self.input_schema.config_loaded {
             return;
         }
         if self.input_schema.selected_schema >= self.input_schema.available_schemas.len() {
             return;
         }
-        let schema_id = &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
+        let schema_id =
+            &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
         if let Ok(manager) = SchemaConfigManager::new(schema_id) {
             self.input_schema.schema_config = Some(manager.get_config());
             self.input_schema.config_loaded = true;
@@ -84,10 +88,9 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
     fn load_input_schema_config() -> InputSchemaState {
         if let Ok(manager) = SchemaManager::new() {
             let schemas = manager.get_schema_list();
-            let selected_schema = manager.get_selected_schema()
-                .and_then(|selected_id| {
-                    schemas.iter().position(|s| s.schema_id == selected_id)
-                })
+            let selected_schema = manager
+                .get_selected_schema()
+                .and_then(|selected_id| schemas.iter().position(|s| s.schema_id == selected_id))
                 .unwrap_or(0);
             InputSchemaState {
                 selected_schema,
@@ -104,15 +107,16 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
         let primary_color = self.get_primary_color();
         ThemeColors::from_theme(&self.system_theme, primary_color)
     }
-    
+
     fn get_primary_color(&self) -> u32 {
-        self.appearance.available_color_schemes
+        self.appearance
+            .available_color_schemes
             .iter()
             .find(|(id, _, _)| id == &self.appearance.color_scheme)
             .map(|(_, _, color)| *color)
             .unwrap_or(0x8F73E2)
     }
-    
+
     pub fn load_color_schemes(&mut self, cx: &mut Context<Self>) {
         if self.appearance.color_schemes_loaded {
             return;
@@ -129,7 +133,7 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
             cx.notify();
         }
     }
-    
+
     pub fn save_color_scheme(&self) -> Result<(), String> {
         let mut manager = XimeStyleManager::load()?;
         manager.set_color_scheme(&self.appearance.color_scheme)?;
@@ -138,12 +142,12 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
 
     pub fn save_appearance(&self) -> Result<(), String> {
         let mut manager = XimeStyleManager::load()?;
-        
+
         manager.set_font_size(self.appearance.font_size as f32)?;
         manager.set_candidate_count(self.appearance.candidate_count)?;
         manager.set_show_code_hint(self.appearance.show_code_hint)?;
         manager.set_horizontal(self.appearance.horizontal)?;
-        
+
         if !IpcClient::reload_config() {
             eprintln!("Server not running, appearance will apply on next start");
         }
@@ -152,33 +156,35 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
 
     pub fn save_schema(&self) -> Result<(), String> {
         if self.input_schema.selected_schema < self.input_schema.available_schemas.len() {
-            let selected_id = &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
-            
+            let selected_id =
+                &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
+
             let manager = RimeConfigManager::new()?;
             manager.set_string("default_schema", selected_id)?;
             manager.save()?;
-            
+
             let schema_manager = SchemaManager::new()?;
             schema_manager.set_schema_list(&[selected_id])?;
             schema_manager.save()?;
-            
+
             deploy_all().map_err(|e| e.to_string())?;
-            
+
             if !IpcClient::reload_config() {
                 eprintln!("Server not running, config will apply on next start");
             }
         }
         Ok(())
     }
-    
+
     pub fn save_schema_config(&self) -> Result<(), String> {
         if self.input_schema.selected_schema >= self.input_schema.available_schemas.len() {
             return Ok(());
         }
-        
-        let schema_id = &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
+
+        let schema_id =
+            &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
         let manager = SchemaConfigManager::new(schema_id)?;
-        
+
         if let Some(config) = &self.input_schema.schema_config {
             if let Some(v) = config.speller.max_code_length {
                 manager.set_int("speller/max_code_length", v)?;
@@ -191,7 +197,7 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
                     manager.set_string("speller/auto_clear", v)?;
                 }
             }
-            
+
             if let Some(v) = config.translator.enable_charset_filter {
                 manager.set_bool("translator/enable_charset_filter", v)?;
             }
@@ -213,48 +219,63 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
             if let Some(v) = config.translator.max_phrase_length {
                 manager.set_int("translator/max_phrase_length", v)?;
             }
-            
+
             if let Some(v) = &config.reverse_lookup.prefix {
                 manager.set_string("reverse_lookup/prefix", v)?;
             }
             if let Some(v) = &config.reverse_lookup.suffix {
                 manager.set_string("reverse_lookup/suffix", v)?;
             }
-            
+
             if let Some(v) = &config.tradition.opencc_config {
                 manager.set_string("tradition/opencc_config", v)?;
             }
-            
+
             manager.save()?;
         }
-        
+
         Ok(())
     }
 
     pub fn save_clipboard(&self) -> Result<(), String> {
         let manager = RimeConfigManager::new()?;
-        
+
         manager.set_bool("clipboard/enabled", self.clipboard.enabled)?;
         manager.set_int("clipboard/history_count", self.clipboard.history_count)?;
         manager.set_int("clipboard/retention_days", self.clipboard.retention_days)?;
-        
+
         manager.save()?;
-        
+
         Ok(())
     }
 
     pub fn save_smart_suggestion(&self) -> Result<(), String> {
         let manager = RimeConfigManager::new()?;
-        
+
         manager.set_bool("smart_suggestion/enabled", self.smart_suggestion.enabled)?;
-        manager.set_int("smart_suggestion/suggestion_count", self.smart_suggestion.suggestion_count)?;
-        manager.set_bool("smart_suggestion/prefer_common_words", self.smart_suggestion.prefer_common_words)?;
-        manager.set_bool("smart_suggestion/record_user_frequency", self.smart_suggestion.record_user_frequency)?;
-        manager.set_bool("smart_suggestion/auto_adjust_frequency", self.smart_suggestion.auto_adjust_frequency)?;
-        manager.set_int("smart_suggestion/learning_threshold", self.smart_suggestion.learning_threshold)?;
-        
+        manager.set_int(
+            "smart_suggestion/suggestion_count",
+            self.smart_suggestion.suggestion_count,
+        )?;
+        manager.set_bool(
+            "smart_suggestion/prefer_common_words",
+            self.smart_suggestion.prefer_common_words,
+        )?;
+        manager.set_bool(
+            "smart_suggestion/record_user_frequency",
+            self.smart_suggestion.record_user_frequency,
+        )?;
+        manager.set_bool(
+            "smart_suggestion/auto_adjust_frequency",
+            self.smart_suggestion.auto_adjust_frequency,
+        )?;
+        manager.set_int(
+            "smart_suggestion/learning_threshold",
+            self.smart_suggestion.learning_threshold,
+        )?;
+
         manager.save()?;
-        
+
         Ok(())
     }
 
@@ -265,7 +286,8 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
                 if IpcClient::reload_config() {
                     self.deploy_message = Some("部署成功！配置已重载。".to_string());
                 } else {
-                    self.deploy_message = Some("部署成功！(服务器未运行，配置将在下次启动时生效)".to_string());
+                    self.deploy_message =
+                        Some("部署成功！(服务器未运行，配置将在下次启动时生效)".to_string());
                 }
             }
             Err(e) => {

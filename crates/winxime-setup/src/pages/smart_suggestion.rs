@@ -1,33 +1,38 @@
-use gpui::*;
-use crate::components::{SettingsPage, SettingsGroup, SettingsItem, SettingsControl};
-use crate::state::SettingsState;
+use crate::components::{SettingsControl, SettingsGroup, SettingsItem, SettingsPage};
 use crate::pages::SettingsApp;
+use crate::state::SettingsState;
+use gpui::*;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
-    let (enabled, suggestion_count, prefer_common_words, record_user_frequency, auto_adjust_frequency, learning_threshold, colors) = 
-        cx.read_entity(&settings, |state, _| {
-            (
-                state.smart_suggestion.enabled,
-                state.smart_suggestion.suggestion_count,
-                state.smart_suggestion.prefer_common_words,
-                state.smart_suggestion.record_user_frequency,
-                state.smart_suggestion.auto_adjust_frequency,
-                state.smart_suggestion.learning_threshold,
-                state.colors(),
-            )
-        });
-    
+    let (
+        enabled,
+        suggestion_count,
+        prefer_common_words,
+        record_user_frequency,
+        auto_adjust_frequency,
+        learning_threshold,
+        colors,
+    ) = cx.read_entity(&settings, |state, _| {
+        (
+            state.smart_suggestion.enabled,
+            state.smart_suggestion.suggestion_count,
+            state.smart_suggestion.prefer_common_words,
+            state.smart_suggestion.record_user_frequency,
+            state.smart_suggestion.auto_adjust_frequency,
+            state.smart_suggestion.learning_threshold,
+            state.colors(),
+        )
+    });
+
     let s1 = settings.clone();
     let s2 = settings.clone();
     let s3 = settings.clone();
     let s4 = settings.clone();
     let s5 = settings.clone();
     let s6 = settings.clone();
-    
+
     SettingsPage::new("智能联想", colors.clone())
-        .group(
-            SettingsGroup::new("联想功能", colors.clone())
-                .items(vec![
+        .group(SettingsGroup::new("联想功能", colors.clone()).items(vec![
                     SettingsItem::new("启用智能联想", 
                         SettingsControl::switch_with(enabled,
                             move |val, _window, cx| {
@@ -67,11 +72,8 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             }
                         )
                     ).description("优先显示常用词"),
-                ])
-        )
-        .group(
-            SettingsGroup::new("学习功能", colors.clone())
-                .items(vec![
+                ]))
+        .group(SettingsGroup::new("学习功能", colors.clone()).items(vec![
                     SettingsItem::new("记录用户词频", 
                         SettingsControl::switch_with(record_user_frequency,
                             move |val, _window, cx| {
@@ -111,7 +113,6 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             }
                         )
                     ).description("输入次数达到阈值后开始调整词序"),
-                ])
-        )
+                ]))
         .into_any_element()
 }

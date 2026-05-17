@@ -145,21 +145,32 @@ fn do_register() -> Result<()> {
     eprintln!("[Xime] DllRegisterServer: module_path={}", module_path);
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let software = hklm.create_subkey("Software").map_err(|e| {
-        eprintln!("[Xime] ERROR: Failed to open HKLM\\Software: {}", e);
-        e
-    })?.0;
-    
-    let classes = software.create_subkey("Classes").map_err(|e| {
-        eprintln!("[Xime] ERROR: Failed to open HKLM\\Software\\Classes: {}", e);
-        e
-    })?.0;
+    let software = hklm
+        .create_subkey("Software")
+        .map_err(|e| {
+            eprintln!("[Xime] ERROR: Failed to open HKLM\\Software: {}", e);
+            e
+        })?
+        .0;
+
+    let classes = software
+        .create_subkey("Classes")
+        .map_err(|e| {
+            eprintln!(
+                "[Xime] ERROR: Failed to open HKLM\\Software\\Classes: {}",
+                e
+            );
+            e
+        })?
+        .0;
 
     eprintln!("[Xime] Step 1: Creating CLSID registry key...");
-    let (clsid_key, _) = classes.create_subkey(&format!("CLSID\\{}", cs)).map_err(|e| {
-        eprintln!("[Xime] ERROR: Failed to create CLSID key: {}", e);
-        e
-    })?;
+    let (clsid_key, _) = classes
+        .create_subkey(&format!("CLSID\\{}", cs))
+        .map_err(|e| {
+            eprintln!("[Xime] ERROR: Failed to create CLSID key: {}", e);
+            e
+        })?;
 
     eprintln!("[Xime] Step 2: Setting default value...");
     clsid_key.set_value("", &name).map_err(|e| {

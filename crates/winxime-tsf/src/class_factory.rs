@@ -23,7 +23,7 @@ impl IClassFactory_Impl for ClassFactory_Impl {
         }
 
         crate::dll::increment_instance_count();
-        
+
         let service = crate::XimeTextService::new();
         let unknown: IUnknown = service.into();
         unsafe {

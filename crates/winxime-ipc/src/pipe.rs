@@ -26,7 +26,9 @@ impl std::fmt::Display for IpcError {
             IpcError::WriteFailed(s) => write!(f, "WriteFailed: {}", s),
             IpcError::ReadFailed(s) => write!(f, "ReadFailed: {}", s),
             IpcError::EmptyResponse => write!(f, "EmptyResponse"),
-            IpcError::ResponseTooLarge => write!(f, "ResponseTooLarge (max {} bytes)", MAX_RESPONSE_SIZE),
+            IpcError::ResponseTooLarge => {
+                write!(f, "ResponseTooLarge (max {} bytes)", MAX_RESPONSE_SIZE)
+            }
             IpcError::Timeout => write!(f, "Timeout ({}ms)", READ_TIMEOUT_MS),
         }
     }
@@ -66,7 +68,8 @@ impl IpcClient {
         &mut self,
         request: &crate::IpcRequest,
     ) -> Result<crate::IpcResponse, IpcError> {
-        let json = serde_json::to_vec(request).map_err(|e| IpcError::SerializeFailed(format!("{:?}", e)))?;
+        let json = serde_json::to_vec(request)
+            .map_err(|e| IpcError::SerializeFailed(format!("{:?}", e)))?;
 
         self.pipe
             .write_all(&json)
@@ -74,7 +77,9 @@ impl IpcClient {
         self.pipe
             .write_all(&[0])
             .map_err(|e| IpcError::WriteFailed(format!("write_all terminator: {:?}", e)))?;
-        self.pipe.flush().map_err(|e| IpcError::WriteFailed(format!("flush: {:?}", e)))?;
+        self.pipe
+            .flush()
+            .map_err(|e| IpcError::WriteFailed(format!("flush: {:?}", e)))?;
 
         let mut response_buf = Vec::new();
         let mut byte = [0u8; 1];
@@ -103,23 +108,27 @@ impl IpcClient {
             return Err(IpcError::EmptyResponse);
         }
 
-        serde_json::from_slice(&response_buf).map_err(|e| IpcError::DeserializeFailed(format!("{:?}", e)))
+        serde_json::from_slice(&response_buf)
+            .map_err(|e| IpcError::DeserializeFailed(format!("{:?}", e)))
     }
 
     pub fn send_oneway(&mut self, request: &crate::IpcRequest) -> Result<(), IpcError> {
-        let json = serde_json::to_vec(request).map_err(|e| IpcError::SerializeFailed(format!("{:?}", e)))?;
+        let json = serde_json::to_vec(request)
+            .map_err(|e| IpcError::SerializeFailed(format!("{:?}", e)))?;
         self.pipe
             .write_all(&json)
             .map_err(|e| IpcError::WriteFailed(format!("{:?}", e)))?;
         self.pipe
             .write_all(&[0])
             .map_err(|e| IpcError::WriteFailed(format!("{:?}", e)))?;
-        self.pipe.flush().map_err(|e| IpcError::WriteFailed(format!("{:?}", e)))?;
+        self.pipe
+            .flush()
+            .map_err(|e| IpcError::WriteFailed(format!("{:?}", e)))?;
 
         let mut response_buf = Vec::new();
         let mut byte = [0u8; 1];
         let start_time = Instant::now();
-        
+
         loop {
             if response_buf.len() > MAX_RESPONSE_SIZE {
                 return Err(IpcError::ResponseTooLarge);

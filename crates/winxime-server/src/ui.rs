@@ -1,41 +1,59 @@
-﻿use std::cell::RefCell;
+use std::cell::RefCell;
 use std::sync::Arc;
-use tracing::{debug, info, error};
+use tracing::{debug, error, info};
 
 use windows::Win32::{
     Foundation::*,
     Graphics::{
-        Direct2D::Common::{D2D1_COLOR_F, D2D_RECT_F, D2D1_PIXEL_FORMAT, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D_SIZE_F, D2D1_COMPOSITE_MODE_SOURCE_OVER},
-        Direct2D::{D2D1_BITMAP_OPTIONS_TARGET, D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_ROUNDED_RECT, D2D1CreateFactory, ID2D1DeviceContext, ID2D1Factory1, D2D1_BITMAP_PROPERTIES1, D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE, D2D1_INTERPOLATION_MODE_LINEAR, CLSID_D2D1GaussianBlur, ID2D1BitmapRenderTarget},
+        Direct2D::Common::{
+            D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_COMPOSITE_MODE_SOURCE_OVER,
+            D2D1_PIXEL_FORMAT, D2D_RECT_F, D2D_SIZE_F,
+        },
+        Direct2D::{
+            CLSID_D2D1GaussianBlur, D2D1CreateFactory, ID2D1BitmapRenderTarget, ID2D1DeviceContext,
+            ID2D1Factory1, D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1_BITMAP_OPTIONS_TARGET,
+            D2D1_BITMAP_PROPERTIES1, D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE,
+            D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_DRAW_TEXT_OPTIONS_NONE,
+            D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_ROUNDED_RECT,
+        },
         Direct3D::D3D_DRIVER_TYPE_WARP,
         Direct3D11::{D3D11CreateDevice, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_SDK_VERSION},
         DirectComposition::{DCompositionCreateDevice, IDCompositionDevice, IDCompositionTarget},
         DirectWrite::{
-            DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_MEASURING_MODE_NATURAL, DWRITE_TEXT_METRICS,
-            DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
-            DWriteCreateFactory, IDWriteFactory1,
+            DWriteCreateFactory, IDWriteFactory1, DWRITE_FACTORY_TYPE_SHARED,
+            DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_NORMAL,
+            DWRITE_MEASURING_MODE_NATURAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+            DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_TEXT_METRICS,
         },
-        Dxgi::Common::{DXGI_ALPHA_MODE_PREMULTIPLIED, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
-        Dxgi::{IDXGIDevice, IDXGIFactory2, IDXGISwapChain1, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_USAGE_RENDER_TARGET_OUTPUT, DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG},
-        Gdi::{BeginPaint, EndPaint, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT},
+        Dxgi::Common::{
+            DXGI_ALPHA_MODE_PREMULTIPLIED, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC,
+        },
+        Dxgi::{
+            IDXGIDevice, IDXGIFactory2, IDXGISwapChain1, DXGI_PRESENT, DXGI_SWAP_CHAIN_DESC1,
+            DXGI_SWAP_CHAIN_FLAG, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
+            DXGI_USAGE_RENDER_TARGET_OUTPUT,
+        },
+        Gdi::{
+            BeginPaint, EndPaint, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow,
+            MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT,
+        },
     },
     System::LibraryLoader::GetModuleHandleW,
     UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
     UI::WindowsAndMessaging::{
-        CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, DefWindowProcW, GetWindowLongPtrW,
-        LoadCursorW, PostMessageW, RegisterClassW, SetWindowLongPtrW, SetWindowPos,
-        ShowWindow, IDC_ARROW, HWND_TOPMOST, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE,
-        SWP_NOSIZE, SWP_NOMOVE, SWP_NOCOPYBITS, WM_DESTROY, WM_NCCREATE, WM_PAINT, WM_USER, WM_WINDOWPOSCHANGING, 
-        WINDOWPOS, WNDCLASSW, CREATESTRUCTW,
-        WS_EX_NOACTIVATE, WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, GWLP_USERDATA,
+        DefWindowProcW, GetWindowLongPtrW, LoadCursorW, PostMessageW, RegisterClassW,
+        SetWindowLongPtrW, SetWindowPos, ShowWindow, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW,
+        CW_USEDEFAULT, GWLP_USERDATA, HWND_TOPMOST, IDC_ARROW, SWP_NOACTIVATE, SWP_NOCOPYBITS,
+        SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNA, WINDOWPOS, WM_DESTROY, WM_NCCREATE, WM_PAINT,
+        WM_USER, WM_WINDOWPOSCHANGING, WNDCLASSW, WS_EX_NOACTIVATE, WS_EX_NOREDIRECTIONBITMAP,
+        WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
     },
 };
-use windows_core::{w, HSTRING, Interface, PCWSTR};
+use windows_core::{w, Interface, HSTRING, PCWSTR};
 use windows_numerics::Vector2;
 
-use winxime_ipc::Context;
 use crate::config::UiConfig;
+use winxime_ipc::Context;
 
 pub const WM_SHOW_CANDIDATE: u32 = WM_USER + 1;
 pub const WM_HIDE_CANDIDATE: u32 = WM_USER + 2;
@@ -101,15 +119,25 @@ impl From<(char, String)> for RootModel {
     fn from((letter, root): (char, String)) -> Self {
         let config = UiConfig::load();
         let (_, _, _, selkey_color, _, _, _) = config.get_colors();
-        
+
         Self {
             letter,
             root,
             font_family: config.font_family,
             font_size: config.font_size,
             primary_color: selkey_color,
-            bg_color: D2D1_COLOR_F { r: 0.98, g: 0.98, b: 0.98, a: 1.0 },
-            fg_color: D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 },
+            bg_color: D2D1_COLOR_F {
+                r: 0.98,
+                g: 0.98,
+                b: 0.98,
+                a: 1.0,
+            },
+            fg_color: D2D1_COLOR_F {
+                r: 0.2,
+                g: 0.2,
+                b: 0.2,
+                a: 1.0,
+            },
         }
     }
 }
@@ -117,22 +145,39 @@ impl From<(char, String)> for RootModel {
 impl From<&Context> for CandidateModel {
     fn from(ctx: &Context) -> Self {
         let config = UiConfig::load();
-        let (bg_color, border_color, fg_color, selkey_color, comment_color, highlight_bg_color, highlight_fg_color) = config.get_colors();
-        
+        let (
+            bg_color,
+            border_color,
+            fg_color,
+            selkey_color,
+            comment_color,
+            highlight_bg_color,
+            highlight_fg_color,
+        ) = config.get_colors();
+
         let cand_per_row = if config.horizontal {
             config.candidate_count
         } else {
             1
         };
-        
+
         let comments: Vec<String> = if config.show_code_hint {
-            ctx.candidates.comments.iter().map(|c| c.str.clone()).collect()
+            ctx.candidates
+                .comments
+                .iter()
+                .map(|c| c.str.clone())
+                .collect()
         } else {
             Vec::new()
         };
-        
+
         Self {
-            items: ctx.candidates.candies.iter().map(|c| c.str.clone()).collect(),
+            items: ctx
+                .candidates
+                .candies
+                .iter()
+                .map(|c| c.str.clone())
+                .collect(),
             comments,
             selkeys: vec!['1' as u16, '2' as u16, '3' as u16, '4' as u16, '5' as u16],
             total_pages: ctx.candidates.total_pages,
@@ -195,8 +240,9 @@ impl RenderedView {
             )
             .map_err(|e| format!("CreateWindowExW failed: {:?}", e))?;
 
-            let dwrite_factory: IDWriteFactory1 = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)
-                .map_err(|e| format!("DWriteCreateFactory failed: {:?}", e))?;
+            let dwrite_factory: IDWriteFactory1 =
+                DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)
+                    .map_err(|e| format!("DWriteCreateFactory failed: {:?}", e))?;
 
             let mut device = None;
             D3D11CreateDevice(
@@ -227,7 +273,10 @@ impl RenderedView {
                 Width: 10,
                 Height: 10,
                 Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                SampleDesc: DXGI_SAMPLE_DESC {
+                    Count: 1,
+                    Quality: 0,
+                },
                 BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
                 BufferCount: 2,
                 SwapEffect: DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
@@ -239,8 +288,9 @@ impl RenderedView {
                 .CreateSwapChainForComposition(&device, &swapchain_desc, None)
                 .map_err(|e| format!("CreateSwapChainForComposition failed: {:?}", e))?;
 
-            let d2d_factory: ID2D1Factory1 = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)
-                .map_err(|e| format!("D2D1CreateFactory failed: {:?}", e))?;
+            let d2d_factory: ID2D1Factory1 =
+                D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)
+                    .map_err(|e| format!("D2D1CreateFactory failed: {:?}", e))?;
             let d2d_device = d2d_factory
                 .CreateDevice(&dxgi_device)
                 .map_err(|e| format!("CreateDevice failed: {:?}", e))?;
@@ -279,9 +329,13 @@ impl RenderedView {
         }
     }
 
-    unsafe fn create_swapchain_bitmap(swapchain: &IDXGISwapChain1, target: &ID2D1DeviceContext) -> Result<(), String> {
-        let surface: windows::Win32::Graphics::Dxgi::IDXGISurface =
-            swapchain.GetBuffer(0).map_err(|e| format!("GetBuffer failed: {:?}", e))?;
+    unsafe fn create_swapchain_bitmap(
+        swapchain: &IDXGISwapChain1,
+        target: &ID2D1DeviceContext,
+    ) -> Result<(), String> {
+        let surface: windows::Win32::Graphics::Dxgi::IDXGISurface = swapchain
+            .GetBuffer(0)
+            .map_err(|e| format!("GetBuffer failed: {:?}", e))?;
 
         let bitmap_props = D2D1_BITMAP_PROPERTIES1 {
             pixelFormat: D2D1_PIXEL_FORMAT {
@@ -333,18 +387,24 @@ impl RenderedView {
                     debug!("ctx.candidates: {} items", ctx.candidates.candies.len());
                     let model = CandidateModel::from(&*ctx);
                     info!("  model.items: {:?}", model.items);
-                    
+
                     let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                     if !this_ptr.is_null() {
                         (*this_ptr).model.replace(model.clone());
-                        
+
                         let view = (*this_ptr).view.borrow();
                         if let Some(view) = view.as_ref() {
                             let dpi = RenderedView::get_dpi_for_window(hwnd);
                             info!("  DPI: {}", dpi);
                             if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
-                                info!("  metrics.width: {}, metrics.height: {}", metrics.width, metrics.height);
-                                info!("  metrics.hw_width: {}, metrics.hw_height: {}", metrics.hw_width, metrics.hw_height);
+                                info!(
+                                    "  metrics.width: {}, metrics.height: {}",
+                                    metrics.width, metrics.height
+                                );
+                                info!(
+                                    "  metrics.hw_width: {}, metrics.hw_height: {}",
+                                    metrics.hw_width, metrics.hw_height
+                                );
                                 info!("  metrics.item_widths: {:?}", metrics.item_widths);
                                 let _ = SetWindowPos(
                                     hwnd,
@@ -368,7 +428,15 @@ impl RenderedView {
             WM_SET_POSITION => {
                 let x = wparam.0 as i32;
                 let y = lparam.0 as i32;
-                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y + 24, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                let _ = SetWindowPos(
+                    hwnd,
+                    Some(HWND_TOPMOST),
+                    x,
+                    y + 24,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOACTIVATE,
+                );
                 LRESULT(0)
             }
             WM_SHOW_ROOT => {
@@ -377,11 +445,11 @@ impl RenderedView {
                 if !root_ptr.is_null() {
                     let root = unsafe { Box::from_raw(root_ptr) };
                     debug!("showing root for '{}': {}", root.letter, root.root);
-                    
+
                     let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                     if !this_ptr.is_null() {
                         unsafe { (*this_ptr).root_model.replace(Some(*root.clone())) };
-                        
+
                         let view = unsafe { (*this_ptr).view.borrow() };
                         if let Some(view) = view.as_ref() {
                             let dpi = RenderedView::get_dpi_for_window(hwnd);
@@ -408,7 +476,7 @@ impl RenderedView {
                 let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                 if !this_ptr.is_null() {
                     (*this_ptr).root_model.replace(None);
-                    
+
                     let model = (*this_ptr).model.borrow();
                     let view = (*this_ptr).view.borrow();
                     if let Some(view) = view.as_ref() {
@@ -455,7 +523,7 @@ impl RenderedView {
                 let pos = lparam.0 as *mut WINDOWPOS;
                 if let Some(pos) = pos.as_mut() {
                     let dpi = RenderedView::get_dpi_for_point(POINT { x: pos.x, y: pos.y });
-                    
+
                     let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
                     if !this_ptr.is_null() {
                         let model = (*this_ptr).model.borrow();
@@ -464,16 +532,16 @@ impl RenderedView {
                             if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
                                 pos.cx = metrics.hw_width as i32;
                                 pos.cy = metrics.hw_height as i32;
-                                (pos.x, pos.y) = RenderedView::clamp_point_to_monitor(pos.x, pos.y, pos.cx, pos.cy);
+                                (pos.x, pos.y) = RenderedView::clamp_point_to_monitor(
+                                    pos.x, pos.y, pos.cx, pos.cy,
+                                );
                             }
                         }
                     }
                 }
                 LRESULT(0)
             }
-            WM_DESTROY => {
-                LRESULT(0)
-            }
+            WM_DESTROY => LRESULT(0),
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
@@ -508,18 +576,26 @@ impl RenderedView {
 
             if GetMonitorInfoW(monitor, &mut mi).as_bool() {
                 let rc = mi.rcWork;
-                (x.clamp(rc.left, rc.right - w), y.clamp(rc.top, rc.bottom - h))
+                (
+                    x.clamp(rc.left, rc.right - w),
+                    y.clamp(rc.top, rc.bottom - h),
+                )
             } else {
                 (x, y)
             }
         }
     }
 
-    fn calculate_client_rect(&self, model: &CandidateModel, dpi: f32) -> Result<RenderedMetrics, String> {
+    fn calculate_client_rect(
+        &self,
+        model: &CandidateModel,
+        dpi: f32,
+    ) -> Result<RenderedMetrics, String> {
         unsafe {
             let scale = dpi / 96.0;
 
-            let text_format = self.dwrite_factory
+            let text_format = self
+                .dwrite_factory
                 .CreateTextFormat(
                     &model.font_family,
                     None,
@@ -571,14 +647,20 @@ impl RenderedView {
                 let padding_y = 4.0;
                 let selkey_width = selkey_metrics.widthIncludingTrailingWhitespace;
                 let text_width = item_metrics.widthIncludingTrailingWhitespace;
-                let comment_width = if comment.is_empty() { 0.0 } else { comment_metrics.widthIncludingTrailingWhitespace + 4.0 };
+                let comment_width = if comment.is_empty() {
+                    0.0
+                } else {
+                    comment_metrics.widthIncludingTrailingWhitespace + 4.0
+                };
                 selkey_widths.push(selkey_width);
                 text_widths.push(text_width);
                 comment_widths.push(comment_width);
 
                 let item_width = selkey_width + text_width + comment_width + 2.0 * padding_x;
                 item_widths.push(item_width);
-                item_height = item_height.max(item_metrics.height + 2.0 * padding_y).max(selkey_metrics.height + 2.0 * padding_y);
+                item_height = item_height
+                    .max(item_metrics.height + 2.0 * padding_y)
+                    .max(selkey_metrics.height + 2.0 * padding_y);
             }
 
             let items_len = model.items.len() as f32;
@@ -597,7 +679,7 @@ impl RenderedView {
             }
 
             let cand_per_row = model.cand_per_row as usize;
-            
+
             let mut max_row_width = MIN_WIDTH;
             for row_start in (0..model.items.len()).step_by(cand_per_row) {
                 let row_end = std::cmp::min(row_start + cand_per_row, model.items.len());
@@ -631,7 +713,8 @@ impl RenderedView {
         unsafe {
             let scale = dpi / 96.0;
 
-            let text_format = self.dwrite_factory
+            let text_format = self
+                .dwrite_factory
                 .CreateTextFormat(
                     &model.font_family,
                     None,
@@ -644,7 +727,7 @@ impl RenderedView {
                 .map_err(|e| format!("CreateTextFormat failed: {:?}", e))?;
 
             let letter_buf = [model.letter as u16];
-            
+
             let mut letter_metrics = DWRITE_TEXT_METRICS::default();
             self.dwrite_factory
                 .CreateTextLayout(&letter_buf, &text_format, f32::MAX, f32::MAX)
@@ -688,7 +771,12 @@ impl RenderedView {
         }
     }
 
-    fn on_paint_root(&self, model: &RootModel, dpi: f32, metrics: &RenderedMetrics) -> Result<(), String> {
+    fn on_paint_root(
+        &self,
+        model: &RootModel,
+        dpi: f32,
+        metrics: &RenderedMetrics,
+    ) -> Result<(), String> {
         unsafe {
             self.d2d_context.SetTarget(None);
             self.swapchain
@@ -704,7 +792,8 @@ impl RenderedView {
             self.d2d_context.SetDpi(dpi, dpi);
             Self::create_swapchain_bitmap(&self.swapchain, &self.d2d_context)?;
 
-            let text_format = self.dwrite_factory
+            let text_format = self
+                .dwrite_factory
                 .CreateTextFormat(
                     &model.font_family,
                     None,
@@ -716,7 +805,8 @@ impl RenderedView {
                 )
                 .map_err(|e| format!("CreateTextFormat failed: {:?}", e))?;
 
-            let text_format_centered = self.dwrite_factory
+            let text_format_centered = self
+                .dwrite_factory
                 .CreateTextFormat(
                     &model.font_family,
                     None,
@@ -736,36 +826,70 @@ impl RenderedView {
             let corner_radius = 8.0;
             let key_bg_corner_radius = 4.0;
 
-            let bg_brush = self.d2d_context
-                .CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.98, g: 0.98, b: 0.98, a: 1.0 }, None)
+            let bg_brush = self
+                .d2d_context
+                .CreateSolidColorBrush(
+                    &D2D1_COLOR_F {
+                        r: 0.98,
+                        g: 0.98,
+                        b: 0.98,
+                        a: 1.0,
+                    },
+                    None,
+                )
                 .map_err(|e| format!("CreateSolidColorBrush bg failed: {:?}", e))?;
 
-            let border_brush = self.d2d_context
-                .CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.88, g: 0.88, b: 0.88, a: 1.0 }, None)
+            let border_brush = self
+                .d2d_context
+                .CreateSolidColorBrush(
+                    &D2D1_COLOR_F {
+                        r: 0.88,
+                        g: 0.88,
+                        b: 0.88,
+                        a: 1.0,
+                    },
+                    None,
+                )
                 .map_err(|e| format!("CreateSolidColorBrush border failed: {:?}", e))?;
 
-            let key_bg_brush = self.d2d_context
-                .CreateSolidColorBrush(&D2D1_COLOR_F { 
-                    r: model.primary_color.r, 
-                    g: model.primary_color.g, 
-                    b: model.primary_color.b, 
-                    a: 0.19 
-                }, None)
+            let key_bg_brush = self
+                .d2d_context
+                .CreateSolidColorBrush(
+                    &D2D1_COLOR_F {
+                        r: model.primary_color.r,
+                        g: model.primary_color.g,
+                        b: model.primary_color.b,
+                        a: 0.19,
+                    },
+                    None,
+                )
                 .map_err(|e| format!("CreateSolidColorBrush key_bg failed: {:?}", e))?;
 
-            let key_border_brush = self.d2d_context
+            let key_border_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.primary_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush key_border failed: {:?}", e))?;
 
-            let key_text_brush = self.d2d_context
+            let key_text_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.primary_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush key_text failed: {:?}", e))?;
 
-            let root_text_brush = self.d2d_context
-                .CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 }, None)
+            let root_text_brush = self
+                .d2d_context
+                .CreateSolidColorBrush(
+                    &D2D1_COLOR_F {
+                        r: 0.2,
+                        g: 0.2,
+                        b: 0.2,
+                        a: 1.0,
+                    },
+                    None,
+                )
                 .map_err(|e| format!("CreateSolidColorBrush root_text failed: {:?}", e))?;
 
-            let shadow_render_target: ID2D1BitmapRenderTarget = self.d2d_context
+            let shadow_render_target: ID2D1BitmapRenderTarget = self
+                .d2d_context
                 .CreateCompatibleRenderTarget(
                     Some(&D2D_SIZE_F {
                         width: metrics.width + blur_radius * 2.0,
@@ -803,14 +927,16 @@ impl RenderedView {
                 radiusY: corner_radius,
             };
             shadow_render_target.FillRoundedRectangle(&shadow_rect, &shadow_brush);
-            shadow_render_target.EndDraw(None, None)
+            shadow_render_target
+                .EndDraw(None, None)
                 .map_err(|e| format!("shadow EndDraw failed: {:?}", e))?;
 
             let shadow_bitmap = shadow_render_target
                 .GetBitmap()
                 .map_err(|e| format!("GetBitmap failed: {:?}", e))?;
 
-            let gaussian_blur_effect = self.d2d_context
+            let gaussian_blur_effect = self
+                .d2d_context
                 .CreateEffect(&CLSID_D2D1GaussianBlur)
                 .map_err(|e| format!("CreateEffect failed: {:?}", e))?;
             gaussian_blur_effect.SetInput(0, &shadow_bitmap, false);
@@ -836,8 +962,10 @@ impl RenderedView {
                 radiusX: corner_radius,
                 radiusY: corner_radius,
             };
-            self.d2d_context.FillRoundedRectangle(&bg_rounded_rect, &bg_brush);
-            self.d2d_context.DrawRoundedRectangle(&bg_rounded_rect, &border_brush, 2.0, None);
+            self.d2d_context
+                .FillRoundedRectangle(&bg_rounded_rect, &bg_brush);
+            self.d2d_context
+                .DrawRoundedRectangle(&bg_rounded_rect, &border_brush, 2.0, None);
 
             let letter_width = metrics.selkey_widths.get(0).copied().unwrap_or(20.0);
             let key_bg_width = letter_width + 16.0;
@@ -855,8 +983,10 @@ impl RenderedView {
                 radiusX: key_bg_corner_radius,
                 radiusY: key_bg_corner_radius,
             };
-            self.d2d_context.FillRoundedRectangle(&key_bg_rect, &key_bg_brush);
-            self.d2d_context.DrawRoundedRectangle(&key_bg_rect, &key_border_brush, 1.5, None);
+            self.d2d_context
+                .FillRoundedRectangle(&key_bg_rect, &key_bg_brush);
+            self.d2d_context
+                .DrawRoundedRectangle(&key_bg_rect, &key_border_brush, 1.5, None);
 
             let letter_rect = D2D_RECT_F {
                 left: x_start,
@@ -892,7 +1022,8 @@ impl RenderedView {
                 DWRITE_MEASURING_MODE_NATURAL,
             );
 
-            self.d2d_context.EndDraw(None, None)
+            self.d2d_context
+                .EndDraw(None, None)
                 .map_err(|e| format!("EndDraw failed: {:?}", e))?;
             let _ = self.swapchain.Present(1, DXGI_PRESENT(0)).ok();
 
@@ -906,9 +1037,17 @@ impl RenderedView {
         self.on_paint_with_metrics(model, dpi, &metrics)
     }
 
-    fn on_paint_with_metrics(&self, model: &CandidateModel, dpi: f32, metrics: &RenderedMetrics) -> Result<(), String> {
+    fn on_paint_with_metrics(
+        &self,
+        model: &CandidateModel,
+        dpi: f32,
+        metrics: &RenderedMetrics,
+    ) -> Result<(), String> {
         unsafe {
-            info!("on_paint: dpi={}, width={}, height={}, hw_width={}, hw_height={}", dpi, metrics.width, metrics.height, metrics.hw_width, metrics.hw_height);
+            info!(
+                "on_paint: dpi={}, width={}, height={}, hw_width={}, hw_height={}",
+                dpi, metrics.width, metrics.height, metrics.hw_width, metrics.hw_height
+            );
             info!("on_paint: item_widths={:?}", metrics.item_widths);
 
             self.d2d_context.SetTarget(None);
@@ -925,7 +1064,8 @@ impl RenderedView {
             self.d2d_context.SetDpi(dpi, dpi);
             Self::create_swapchain_bitmap(&self.swapchain, &self.d2d_context)?;
 
-            let text_format = self.dwrite_factory
+            let text_format = self
+                .dwrite_factory
                 .CreateTextFormat(
                     &model.font_family,
                     None,
@@ -942,31 +1082,38 @@ impl RenderedView {
             let blur_radius = BLUR_RADIUS;
             let corner_radius = 10.0;
 
-            let bg_brush = self.d2d_context
+            let bg_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.bg_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush bg failed: {:?}", e))?;
 
-            let border_brush = self.d2d_context
+            let border_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.border_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush border failed: {:?}", e))?;
 
-            let selkey_brush = self.d2d_context
+            let selkey_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.selkey_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush selkey failed: {:?}", e))?;
 
-            let text_brush = self.d2d_context
+            let text_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.fg_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush text failed: {:?}", e))?;
 
-            let highlight_brush = self.d2d_context
+            let highlight_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.highlight_bg_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush highlight failed: {:?}", e))?;
 
-            let selected_text_brush = self.d2d_context
+            let selected_text_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.highlight_fg_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush selected_text failed: {:?}", e))?;
 
-            let shadow_render_target: ID2D1BitmapRenderTarget = self.d2d_context
+            let shadow_render_target: ID2D1BitmapRenderTarget = self
+                .d2d_context
                 .CreateCompatibleRenderTarget(
                     Some(&D2D_SIZE_F {
                         width: metrics.width + blur_radius * 2.0,
@@ -1004,14 +1151,16 @@ impl RenderedView {
                 radiusY: corner_radius,
             };
             shadow_render_target.FillRoundedRectangle(&shadow_rect, &shadow_brush);
-            shadow_render_target.EndDraw(None, None)
+            shadow_render_target
+                .EndDraw(None, None)
                 .map_err(|e| format!("shadow EndDraw failed: {:?}", e))?;
 
             let shadow_bitmap = shadow_render_target
                 .GetBitmap()
                 .map_err(|e| format!("GetBitmap failed: {:?}", e))?;
 
-            let gaussian_blur_effect = self.d2d_context
+            let gaussian_blur_effect = self
+                .d2d_context
                 .CreateEffect(&CLSID_D2D1GaussianBlur)
                 .map_err(|e| format!("CreateEffect failed: {:?}", e))?;
             gaussian_blur_effect.SetInput(0, &shadow_bitmap, false);
@@ -1037,7 +1186,8 @@ impl RenderedView {
                 radiusX: corner_radius,
                 radiusY: corner_radius,
             };
-            self.d2d_context.FillRoundedRectangle(&bg_rounded_rect, &bg_brush);
+            self.d2d_context
+                .FillRoundedRectangle(&bg_rounded_rect, &bg_brush);
 
             let border_rounded_rect = D2D1_ROUNDED_RECT {
                 rect: D2D_RECT_F {
@@ -1049,9 +1199,11 @@ impl RenderedView {
                 radiusX: corner_radius,
                 radiusY: corner_radius,
             };
-            self.d2d_context.DrawRoundedRectangle(&border_rounded_rect, &border_brush, 0.5, None);
+            self.d2d_context
+                .DrawRoundedRectangle(&border_rounded_rect, &border_brush, 0.5, None);
 
-let comment_brush = self.d2d_context
+            let comment_brush = self
+                .d2d_context
                 .CreateSolidColorBrush(&model.comment_color, None)
                 .map_err(|e| format!("CreateSolidColorBrush comment failed: {:?}", e))?;
 
@@ -1071,9 +1223,16 @@ let comment_brush = self.d2d_context
                 let selkey_width = metrics.selkey_widths.get(i).copied().unwrap_or(20.0);
                 let text_width = metrics.text_widths.get(i).copied().unwrap_or(40.0);
                 let comment_width = metrics.comment_widths.get(i).copied().unwrap_or(0.0);
-                
-                info!("  item {}: x={}, item_width={}, text='{}'", i, x, item_width, item);
-                info!("  bg_rect: left={}, right={}", blur_radius, metrics.width + blur_radius);
+
+                info!(
+                    "  item {}: x={}, item_width={}, text='{}'",
+                    i, x, item_width, item
+                );
+                info!(
+                    "  bg_rect: left={}, right={}",
+                    blur_radius,
+                    metrics.width + blur_radius
+                );
                 info!("  item_right={}", x + item_width);
 
                 let selkey_rect = D2D_RECT_F {
@@ -1112,7 +1271,8 @@ let comment_brush = self.d2d_context
                         radiusX: 6.0,
                         radiusY: 6.0,
                     };
-                    self.d2d_context.FillRoundedRectangle(&highlight_rounded_rect, &highlight_brush);
+                    self.d2d_context
+                        .FillRoundedRectangle(&highlight_rounded_rect, &highlight_brush);
 
                     self.d2d_context.DrawText(
                         &selkey_buf[..2],
@@ -1183,7 +1343,8 @@ let comment_brush = self.d2d_context
                 }
             }
 
-            self.d2d_context.EndDraw(None, None)
+            self.d2d_context
+                .EndDraw(None, None)
                 .map_err(|e| format!("EndDraw failed: {:?}", e))?;
 
             let _ = self.swapchain.Present(1, DXGI_PRESENT(0)).ok();
@@ -1209,10 +1370,10 @@ impl CandidateWindow {
             root_model: RefCell::new(None),
             view: RefCell::new(None),
         });
-        
+
         // Initialize UI immediately in the thread that will run message loop
         window.ensure_view_initialized();
-        
+
         window
     }
 
@@ -1234,9 +1395,22 @@ impl CandidateWindow {
     pub fn show(&self, x: i32, y: i32) {
         self.ensure_view_initialized();
         if let Some(view) = self.view.borrow().as_ref() {
-            info!("  show: hwnd={:?}, moving to ({}, {})", view.hwnd.0, x, y + 24);
+            info!(
+                "  show: hwnd={:?}, moving to ({}, {})",
+                view.hwnd.0,
+                x,
+                y + 24
+            );
             unsafe {
-                let _ = SetWindowPos(view.hwnd, Some(HWND_TOPMOST), x, y + 24, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                let _ = SetWindowPos(
+                    view.hwnd,
+                    Some(HWND_TOPMOST),
+                    x,
+                    y + 24,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOACTIVATE,
+                );
                 info!("  show: posting WM_SHOW_CANDIDATE");
                 let result = PostMessageW(Some(view.hwnd), WM_SHOW_CANDIDATE, WPARAM(0), LPARAM(0));
                 info!("  show: PostMessageW result: {:?}", result);
@@ -1256,7 +1430,10 @@ impl CandidateWindow {
 
     pub fn update(&self, ctx: &Context) {
         if let Some(view) = self.view.borrow().as_ref() {
-            info!("  update: hwnd={:?}, posting WM_UPDATE_CANDIDATE", view.hwnd.0);
+            info!(
+                "  update: hwnd={:?}, posting WM_UPDATE_CANDIDATE",
+                view.hwnd.0
+            );
             unsafe {
                 let ctx_ptr = Box::into_raw(Box::new(ctx.clone()));
                 let result = PostMessageW(
@@ -1275,13 +1452,13 @@ impl CandidateWindow {
             info!("  update: view is None!");
         }
     }
-    
+
     pub fn show_root(&self, letter: char, root: &str) -> Result<(), String> {
         self.ensure_view_initialized();
         if let Some(view) = self.view.borrow().as_ref() {
             let root_model = RootModel::from((letter, root.to_string()));
             *self.root_model.borrow_mut() = Some(root_model.clone());
-            
+
             unsafe {
                 let root_ptr = Box::into_raw(Box::new(root_model));
                 let _ = PostMessageW(
@@ -1296,7 +1473,7 @@ impl CandidateWindow {
             Err("view is None".to_string())
         }
     }
-    
+
     pub fn hide_root(&self) {
         if let Some(view) = self.view.borrow().as_ref() {
             *self.root_model.borrow_mut() = None;

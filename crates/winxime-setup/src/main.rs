@@ -49,17 +49,26 @@ fn main() {
     const MUTEX_NAME: &str = "XimeSetupSingleInstanceMutex";
     const WINDOW_CLASS: &str = "GPUI Window";
     const WINDOW_TITLE: &str = "Xime 设置";
-    
-    let mutex_name_wide: Vec<u16> = MUTEX_NAME.encode_utf16().chain(std::iter::once(0)).collect();
-    
+
+    let mutex_name_wide: Vec<u16> = MUTEX_NAME
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
     let already_running = unsafe {
         let handle = CreateMutexW(None, false, PCWSTR(mutex_name_wide.as_ptr()));
         if handle.is_ok() {
             let last_error = GetLastError();
             if last_error == ERROR_ALREADY_EXISTS {
-                let class_wide: Vec<u16> = WINDOW_CLASS.encode_utf16().chain(std::iter::once(0)).collect();
-                let title_wide: Vec<u16> = WINDOW_TITLE.encode_utf16().chain(std::iter::once(0)).collect();
-                
+                let class_wide: Vec<u16> = WINDOW_CLASS
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
+                let title_wide: Vec<u16> = WINDOW_TITLE
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
+
                 let hwnd = FindWindowW(PCWSTR(class_wide.as_ptr()), PCWSTR(title_wide.as_ptr()));
                 if hwnd.is_ok() {
                     let hwnd = hwnd.unwrap();
@@ -78,29 +87,30 @@ fn main() {
             false
         }
     };
-    
+
     if already_running {
         return;
     }
-    
-    application()
-        .with_assets(Assets)
-        .run(|cx: &mut App| {
-            let _ = cx.open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::centered(
-                        Size { width: px(800.0), height: px(640.0) },
-                        cx,
-                    )),
-                    titlebar: Some(TitlebarOptions {
-                        title: Some("Xime 设置".into()),
-                        appears_transparent: true,
-                        traffic_light_position: None,
-                    }),
-                    is_resizable: false,
-                    ..Default::default()
-                },
-                |_window: &mut Window, cx: &mut App| cx.new(|cx| SettingsApp::new(cx)),
-            );
-        });
+
+    application().with_assets(Assets).run(|cx: &mut App| {
+        let _ = cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::centered(
+                    Size {
+                        width: px(800.0),
+                        height: px(640.0),
+                    },
+                    cx,
+                )),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("Xime 设置".into()),
+                    appears_transparent: true,
+                    traffic_light_position: None,
+                }),
+                is_resizable: false,
+                ..Default::default()
+            },
+            |_window: &mut Window, cx: &mut App| cx.new(|cx| SettingsApp::new(cx)),
+        );
+    });
 }

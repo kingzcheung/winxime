@@ -1,6 +1,9 @@
-﻿use tracing::debug;
 use crate::text_input_processor::IpcClientHandle;
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+use tracing::debug;
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::TextServices::*;
 use windows::Win32::UI::WindowsAndMessaging::HICON;
@@ -33,7 +36,12 @@ pub struct LangBarItemButton {
 }
 
 impl LangBarItemButton {
-    pub fn new(guid: GUID, ipc: IpcClientHandle, ascii_mode: SharedAsciiMode, sink_ref: LangBarSinkRef) -> Self {
+    pub fn new(
+        guid: GUID,
+        ipc: IpcClientHandle,
+        ascii_mode: SharedAsciiMode,
+        sink_ref: LangBarSinkRef,
+    ) -> Self {
         Self {
             guid,
             ipc,
@@ -99,11 +107,11 @@ impl LangBarItemButton_Impl {
 impl ITfLangBarItemButton_Impl for LangBarItemButton_Impl {
     fn OnClick(&self, click: TfLBIClick, _pt: &POINT, _prcArea: *const RECT) -> Result<()> {
         debug!("LangBarItem: OnClick, click={}", click.0);
-        
+
         if click == TF_LBI_CLK_RIGHT {
-            return Ok(())
+            return Ok(());
         }
-        
+
         if self.ipc.is_connected() {
             debug!("LangBarItem: calling toggle_ascii_mode");
             let response = self.ipc.toggle_ascii_mode();
@@ -143,24 +151,29 @@ impl ITfLangBarItemButton_Impl for LangBarItemButton_Impl {
 impl ITfSource_Impl for LangBarItemButton_Impl {
     fn AdviseSink(&self, riid: *const GUID, punk: Ref<'_, IUnknown>) -> Result<u32> {
         let riid = unsafe { &*riid };
-        
+
         let expected = GUID::from_values(
-            0x1F45381, 0x0FEB, 0x4D89, [0xBF, 0x8D, 0x89, 0x9D, 0x73, 0x4E, 0x9B, 0x8E]
+            0x1F45381,
+            0x0FEB,
+            0x4D89,
+            [0xBF, 0x8D, 0x89, 0x9D, 0x73, 0x4E, 0x9B, 0x8E],
         );
-        
+
         if !guid_eq(riid, &expected) {
             return Err(Error::from(HRESULT(0x80040201u32 as i32)));
         }
-        
-        let punk_ref = punk.as_ref().ok_or_else(|| Error::from(HRESULT(0x80004005u32 as i32)))?;
+
+        let punk_ref = punk
+            .as_ref()
+            .ok_or_else(|| Error::from(HRESULT(0x80004005u32 as i32)))?;
         let sink: ITfLangBarItemSink = punk_ref.cast()?;
-        
+
         match self.sink_ref.try_lock() {
             Ok(mut guard) => *guard = Some(sink),
             Err(std::sync::TryLockError::Poisoned(e)) => *e.into_inner() = Some(sink),
             Err(std::sync::TryLockError::WouldBlock) => {}
         }
-        
+
         Ok(LANGBAR_ITEM_COOKIE)
     }
 

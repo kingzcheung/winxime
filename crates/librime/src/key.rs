@@ -104,7 +104,7 @@ pub fn vk_to_xk(vk: u16) -> i32 {
 #[cfg(target_os = "windows")]
 pub fn get_key_modifiers() -> i32 {
     use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
-    
+
     unsafe {
         let mut modifiers = 0i32;
         if GetAsyncKeyState(0x10) < 0 {
@@ -133,7 +133,10 @@ pub struct KeyEvent {
 
 impl KeyEvent {
     pub fn new(key_code: KeyCode, modifiers: Modifier) -> Self {
-        Self { key_code, modifiers }
+        Self {
+            key_code,
+            modifiers,
+        }
     }
 
     pub fn from_char(c: char) -> Self {
@@ -144,7 +147,10 @@ impl KeyEvent {
             ' ' => XK_SPACE,
             _ => c as KeyCode,
         };
-        Self { key_code, modifiers: 0 }
+        Self {
+            key_code,
+            modifiers: 0,
+        }
     }
 }
 
