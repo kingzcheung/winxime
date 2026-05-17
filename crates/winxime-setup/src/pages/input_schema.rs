@@ -7,7 +7,11 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
     let schemas_loaded = cx.read_entity(&settings, |state, _| state.schemas_loaded);
     
     if !schemas_loaded {
-        let deploy_result = crate::rime_config::deploy_all();
+        let init_result = crate::rime_config::init_rime_deployer();
+        let deploy_result = match init_result {
+            Ok(_) => crate::rime_config::deploy_all().map_err(|e| e.to_string()),
+            Err(e) => Err(e),
+        };
         cx.update_entity(&settings, |state: &mut SettingsState, cx| {
             match &deploy_result {
                 Ok(_) => {
@@ -18,6 +22,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                     eprintln!("Deploy failed: {}", e);
                 }
             }
+            state.deploy_message_time = Some(std::time::Instant::now());
             
             if let Ok(manager) = crate::rime_config::SchemaManager::new() {
                 let schemas = manager.get_schema_list();

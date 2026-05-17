@@ -6,7 +6,17 @@ pub struct TitleBar;
 
 impl TitleBar {
     pub fn render(settings: Entity<SettingsState>, colors: &ThemeColors, cx: &mut App) -> impl IntoElement {
-        let deploy_message = cx.read_entity(&settings, |state, _| state.deploy_message.clone());
+        let (deploy_message, deploy_message_time) = cx.read_entity(&settings, |state, _| {
+            (state.deploy_message.clone(), state.deploy_message_time)
+        });
+        
+        let should_clear = deploy_message_time.map(|t| t.elapsed() >= std::time::Duration::from_secs(5)).unwrap_or(false);
+        if should_clear {
+            cx.update_entity(&settings, |state: &mut SettingsState, cx| {
+                state.clear_deploy_message();
+                cx.notify();
+            });
+        }
         
         let drag_region = div()
             .id("drag-region")
@@ -37,12 +47,12 @@ impl TitleBar {
                 div()
                     .w(px(213.0))
                     .h(px(40.0))
-                    .bg(rgb(0x2d1f3d))
+                    .bg(colors.sidebar_bg)
                     .flex()
                     .items_center()
                     .pl(px(12.0))
                     .child(Self::logo())
-                    .child(Self::title_text())
+                    .child(Self::title_text(colors))
                     .window_control_area(WindowControlArea::Drag)
             )
             .child(drag_region_with_msg)
@@ -59,7 +69,7 @@ impl TitleBar {
             .mr_2()
     }
 
-    fn title_text() -> impl IntoElement {
+    fn title_text(colors: &ThemeColors) -> impl IntoElement {
         div()
             .flex()
             .items_center()
@@ -68,13 +78,13 @@ impl TitleBar {
                 div()
                     .text_size(px(14.0))
                     .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(rgb(0xe0e0e0))
+                    .text_color(colors.on_primary)
                     .child("Xime")
             )
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0x808080))
+                    .text_color(hsla(0.0, 0.0, 1.0, 0.7))
                     .child("曦码输入法")
             )
     }

@@ -98,25 +98,27 @@ impl SettingsItem {
     pub fn render(&self, colors: &ThemeColors) -> Div {
         let control_element: AnyElement = match &self.control {
             SettingsControl::Switch(s) => {
-                let themed = s.clone()
-                    .theme(colors.primary, colors.disabled);
+                let themed = s.clone().theme(colors.clone());
                 themed.into_any_element()
             },
-            SettingsControl::Dropdown(d) => d.clone().into_any_element(),
+            SettingsControl::Dropdown(d) => {
+                let themed = d.clone().theme(colors.clone());
+                themed.into_any_element()
+            },
             SettingsControl::NumberInput(n) => {
-                let themed = n.clone()
-                    .theme(colors.surface_variant, colors.border_variant, colors.foreground, colors.surface_variant, colors.foreground_muted);
+                let themed = n.clone().theme(colors.clone());
                 themed.into_any_element()
             },
-            SettingsControl::Button(b) => b.clone().into_any_element(),
+            SettingsControl::Button(b) => {
+                let themed = b.clone().theme(colors.clone());
+                themed.into_any_element()
+            },
             SettingsControl::Kbd(k) => {
-                let themed = k.clone()
-                    .theme(colors.surface_variant, colors.border_variant, colors.foreground);
+                let themed = k.clone().theme(colors.clone());
                 themed.into_any_element()
             },
             SettingsControl::Label(l) => {
-                let themed = l.clone()
-                    .theme(colors.foreground);
+                let themed = l.clone().theme(colors.clone());
                 themed.into_any_element()
             },
         };
@@ -149,18 +151,49 @@ impl SettingsItem {
             )
             .child(control_element)
     }
+
+    pub fn render_custom(colors: &ThemeColors, label: String, description: Option<String>, custom_element: Div) -> Div {
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.0))
+            .py(px(12.0))
+            .px(px(16.0))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.0))
+                    .child(
+                        div()
+                            .text_size(px(14.0))
+                            .text_color(colors.foreground)
+                            .child(label)
+                    )
+                    .when_some(description, |this: Div, desc| {
+                        this.child(
+                            div()
+                                .text_size(px(12.0))
+                                .text_color(colors.foreground_muted)
+                                .child(desc)
+                        )
+                    })
+            )
+            .child(custom_element)
+    }
 }
 
 pub struct SettingsGroup {
     title: String,
     description: Option<String>,
     items: Vec<SettingsItem>,
+    custom_items: Vec<Div>,
     colors: ThemeColors,
 }
 
 impl SettingsGroup {
     pub fn new(title: impl Into<String>, colors: ThemeColors) -> Self {
-        Self { title: title.into(), description: None, items: vec![], colors }
+        Self { title: title.into(), description: None, items: vec![], custom_items: vec![], colors }
     }
 
     pub fn description(mut self, desc: impl Into<String>) -> Self {
@@ -170,6 +203,11 @@ impl SettingsGroup {
 
     pub fn items(mut self, items: Vec<SettingsItem>) -> Self {
         self.items = items;
+        self
+    }
+
+    pub fn custom_item(mut self, custom_div: Div) -> Self {
+        self.custom_items.push(custom_div);
         self
     }
 }
@@ -210,6 +248,7 @@ impl IntoElement for SettingsGroup {
                     })
             )
             .children(self.items.iter().map(|item| item.render(&self.colors)))
+            .children(self.custom_items)
     }
 }
 

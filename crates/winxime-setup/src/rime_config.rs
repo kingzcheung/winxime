@@ -8,11 +8,12 @@ pub use librime::levers::deploy_all;
 use std::ffi::CString;
 use std::io::Write;
 use std::sync::Once;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 static RIME_INIT: Once = Once::new();
 
-fn init_rime_deployer() -> Result<(), String> {
+pub fn init_rime_deployer() -> Result<(), String> {
     RIME_INIT.call_once(|| {
         let (shared_data_dir, user_data_dir) = get_data_dirs();
         
@@ -619,5 +620,185 @@ fn get_yaml_value(content: &str, key: &str) -> Option<String> {
         serde_yaml::Value::Number(n) => Some(n.to_string()),
         serde_yaml::Value::Bool(b) => Some(b.to_string()),
         _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct XimeStyleConfig {
+    #[serde(default)]
+    pub color_scheme: String,
+    #[serde(default = "default_font_size")]
+    pub font_size: f32,
+    #[serde(default = "default_candidate_count")]
+    pub candidate_count: i32,
+    #[serde(default)]
+    pub show_code_hint: bool,
+    #[serde(default = "default_horizontal")]
+    pub horizontal: bool,
+}
+
+fn default_font_size() -> f32 { 14.0 }
+fn default_candidate_count() -> i32 { 5 }
+fn default_horizontal() -> bool { true }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ColorSchemeEntry {
+    pub name: String,
+    #[serde(
+        deserialize_with = "deserialize_hex_color",
+        serialize_with = "serialize_hex_color"
+    )]
+    pub primary_color: u32,
+}
+
+fn deserialize_hex_color<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where D: serde::Deserializer<'de> {
+    let value: serde_yaml::Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        serde_yaml::Value::Number(n) => {
+            if let Some(num) = n.as_u64() {
+                Ok(num as u32)
+            } else {
+                Ok(0x8F73E2)
+            }
+        }
+        serde_yaml::Value::String(s) => {
+            let s = s.trim();
+            if s.starts_with("0x") || s.starts_with("0X") {
+                u32::from_str_radix(&s[2..], 16).map_err(|_| serde::de::Error::custom("Invalid hex color"))
+            } else if s.starts_with('#') {
+                u32::from_str_radix(&s[1..], 16).map_err(|_| serde::de::Error::custom("Invalid hex color"))
+            } else {
+                s.parse::<u32>().map_err(|_| serde::de::Error::custom("Invalid color number"))
+            }
+        }
+        _ => Ok(0x8F73E2),
+    }
+}
+
+fn serialize_hex_color<S>(value: &u32, serializer: S) -> Result<S::Ok, S::Error>
+where S: serde::Serializer {
+    serializer.serialize_str(&format!("0x{:06X}", value))
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct XimeConfigFile {
+    #[serde(default)]
+    pub style: XimeStyleConfig,
+    #[serde(default)]
+    pub color_schemes: HashMap<String, ColorSchemeEntry>,
+}
+
+pub struct XimeStyleManager {
+    base_config_path: std::path::PathBuf,
+    custom_config_path: std::path::PathBuf,
+    config: XimeConfigFile,
+}
+
+impl XimeStyleManager {
+    pub fn load() -> Result<Self, String> {
+        let (_, user_dir) = get_data_dirs();
+        let base_config_path = user_dir.join("xime.yaml");
+        let custom_config_path = user_dir.join("xime.custom.yaml");
+        
+        let mut config = XimeConfigFile::default();
+        
+        if base_config_path.exists() {
+            let content = std::fs::read_to_string(&base_config_path)
+                .map_err(|e| format!("Failed to read xime.yaml: {}", e))?;
+            config = serde_yaml::from_str(&content)
+                .map_err(|e| format!("Failed to parse xime.yaml: {}", e))?;
+        }
+        
+        if custom_config_path.exists() {
+            let content = std::fs::read_to_string(&custom_config_path)
+                .map_err(|e| format!("Failed to read xime.custom.yaml: {}", e))?;
+            let custom_config: XimeConfigFile = serde_yaml::from_str(&content)
+                .map_err(|e| format!("Failed to parse xime.custom.yaml: {}", e))?;
+            
+            if !custom_config.style.color_scheme.is_empty() {
+                config.style.color_scheme = custom_config.style.color_scheme;
+            }
+            if custom_config.style.font_size != 0.0 {
+                config.style.font_size = custom_config.style.font_size;
+            }
+            if custom_config.style.candidate_count != 0 {
+                config.style.candidate_count = custom_config.style.candidate_count;
+            }
+            config.style.show_code_hint = custom_config.style.show_code_hint;
+            config.style.horizontal = custom_config.style.horizontal;
+        }
+        
+        let system_config = Self::load_system_color_schemes().unwrap_or_default();
+        config.color_schemes.extend(system_config.color_schemes);
+        
+        Ok(Self { base_config_path, custom_config_path, config })
+    }
+    
+    fn load_system_color_schemes() -> Option<XimeConfigFile> {
+        let config_source_dir = get_config_source_dir();
+        let system_path = config_source_dir.join("xime.yaml");
+        
+        if !system_path.exists() {
+            return None;
+        }
+        
+        let content = std::fs::read_to_string(&system_path).ok()?;
+        let config: XimeConfigFile = serde_yaml::from_str(&content).ok()?;
+        
+        Some(XimeConfigFile {
+            color_schemes: config.color_schemes,
+            ..Default::default()
+        })
+    }
+    
+    pub fn get_style(&self) -> XimeStyleConfig {
+        self.config.style.clone()
+    }
+    
+    pub fn get_color_schemes(&self) -> Vec<(String, String, u32)> {
+        self.config.color_schemes.iter()
+            .map(|(id, entry)| (id.clone(), entry.name.clone(), entry.primary_color))
+            .collect()
+    }
+    
+    pub fn set_color_scheme(&mut self, scheme_id: &str) -> Result<(), String> {
+        self.config.style.color_scheme = scheme_id.to_string();
+        self.save()
+    }
+    
+    pub fn set_font_size(&mut self, size: f32) -> Result<(), String> {
+        self.config.style.font_size = size;
+        self.save()
+    }
+    
+    pub fn set_candidate_count(&mut self, count: i32) -> Result<(), String> {
+        self.config.style.candidate_count = count;
+        self.save()
+    }
+    
+    pub fn set_show_code_hint(&mut self, show: bool) -> Result<(), String> {
+        self.config.style.show_code_hint = show;
+        self.save()
+    }
+    
+    pub fn set_horizontal(&mut self, horizontal: bool) -> Result<(), String> {
+        self.config.style.horizontal = horizontal;
+        self.save()
+    }
+    
+    fn save(&self) -> Result<(), String> {
+        let custom_config = XimeConfigFile {
+            style: self.config.style.clone(),
+            color_schemes: HashMap::new(),
+        };
+        
+        let content = serde_yaml::to_string(&custom_config)
+            .map_err(|e| format!("Failed to serialize xime.custom.yaml: {}", e))?;
+        
+        std::fs::write(&self.custom_config_path, content)
+            .map_err(|e| format!("Failed to write xime.custom.yaml: {}", e))?;
+        
+        Ok(())
     }
 }

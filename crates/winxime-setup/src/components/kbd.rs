@@ -1,22 +1,19 @@
 use gpui::*;
+use crate::theme::ThemeColors;
 
 #[derive(Clone)]
 pub struct Kbd {
     key: String,
-    bg: Option<Hsla>,
-    border: Option<Hsla>,
-    text: Option<Hsla>,
+    colors: Option<ThemeColors>,
 }
 
 impl Kbd {
     pub fn new(key: impl Into<String>) -> Self {
-        Self { key: key.into(), bg: None, border: None, text: None }
+        Self { key: key.into(), colors: None }
     }
     
-    pub fn theme(mut self, bg: Hsla, border: Hsla, text: Hsla) -> Self {
-        self.bg = Some(bg);
-        self.border = Some(border);
-        self.text = Some(text);
+    pub fn theme(mut self, colors: ThemeColors) -> Self {
+        self.colors = Some(colors);
         self
     }
 }
@@ -25,15 +22,17 @@ impl IntoElement for Kbd {
     type Element = Div;
 
     fn into_element(self) -> Self::Element {
+        let colors = self.colors.unwrap_or_else(|| ThemeColors::from_theme(&crate::theme::SystemTheme::Light, 0x8F73E2));
+        
         div()
             .py(px(2.0))
             .px(px(6.0))
             .rounded(px(4.0))
-            .bg(self.bg.unwrap_or(rgb(0x2d2d2d).into()))
+            .bg(colors.surface_variant)
             .border_1()
-            .border_color(self.border.unwrap_or(rgb(0x4a4a4a).into()))
+            .border_color(colors.border_variant)
             .text_size(px(12.0))
-            .text_color(self.text.unwrap_or(rgb(0xe0e0e0).into()))
+            .text_color(colors.foreground)
             .font_weight(FontWeight::MEDIUM)
             .child(self.key)
     }

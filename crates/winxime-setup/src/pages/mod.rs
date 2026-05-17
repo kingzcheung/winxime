@@ -42,8 +42,8 @@ fn get_page_icon(index: usize) -> &'static str {
 impl Render for SettingsApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_background_appearance(WindowBackgroundAppearance::Blurred);
-        
-        let pages = ["输入方案", "外观", "剪切板", "快捷键", "智能联想", "词库管理", "关于"];
+        // "剪切板", "快捷键", "智能联想", "词库管理",
+        let pages = ["输入方案", "外观", "关于"];
         let current = self.current_page;
         let settings = self.settings.clone();
         let settings_for_title = settings.clone();
@@ -52,7 +52,7 @@ impl Render for SettingsApp {
         let sidebar = div()
             .w(px(213.0))
             .h_full()
-            .bg(rgb(0x2d1f3d))
+            .bg(colors.sidebar_bg)
             .flex()
             .flex_col()
             .gap(px(2.0))
@@ -73,13 +73,13 @@ impl Render for SettingsApp {
                             .flex()
                             .items_center()
                             .gap(px(12.0))
-                            .when(is_current, |this: Stateful<Div>| this.bg(rgb(0x8F73E2)))
+                            .when(is_current, |this: Stateful<Div>| this.bg(colors.primary))
                             .when(!is_current, |this: Stateful<Div>| {
                                 this.cursor_pointer()
-                                    .hover(|style: StyleRefinement| style.bg(hsla(0.0, 0.0, 1.0, 0.05)))
+                                    .hover(|style: StyleRefinement| style.bg(hsla(0.0, 0.0, 1.0, 0.15)))
                             })
                             .text_size(px(15.0))
-                            .text_color(if is_current { rgb(0xffffff) } else { rgb(0xb0b0b0) })
+                            .text_color(if is_current { colors.on_primary } else { colors.on_primary })
                             .on_click(move |_, _window: &mut Window, cx: &mut App| {
                                 cx.update_entity(&view, |app: &mut SettingsApp, cx: &mut Context<SettingsApp>| {
                                     app.current_page = i;
@@ -94,7 +94,7 @@ impl Render for SettingsApp {
                             .child(
                                 div()
                                     .text_size(px(15.0))
-                                    .text_color(if is_current { rgb(0xffffff) } else { rgb(0xb0b0b0) })
+                                    .text_color(if is_current { colors.on_primary } else { colors.on_primary })
                                     .child(name.to_string())
                             )
                     })
@@ -103,11 +103,7 @@ impl Render for SettingsApp {
         let content = match self.current_page {
             0 => input_schema::render(settings, cx),
             1 => appearance::render(settings, cx),
-            2 => clipboard::render(settings, cx),
-            3 => hotkeys::render(settings, cx),
-            4 => smart_suggestion::render(settings, cx),
-            5 => dictionary::render(settings, cx),
-            6 => about::render(settings, cx),
+            2 => about::render(settings, cx),
             _ => input_schema::render(settings, cx),
         };
 

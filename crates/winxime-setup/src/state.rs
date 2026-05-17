@@ -1,6 +1,6 @@
 use gpui::*;
 use crate::theme::{SystemTheme, ThemeColors};
-use crate::rime_config::{RimeConfigManager, SchemaManager, SchemaConfig, SchemaConfigManager, deploy_all};
+use crate::rime_config::{RimeConfigManager, SchemaManager, SchemaConfig, SchemaConfigManager, deploy_all, XimeStyleManager};
 use winxime_ipc::IpcClient;
 
 pub struct SettingsState {
@@ -10,20 +10,24 @@ pub struct SettingsState {
     pub smart_suggestion: SmartSuggestionState,
     pub system_theme: SystemTheme,
     pub deploy_message: Option<String>,
+    pub deploy_message_time: Option<std::time::Instant>,
     pub schemas_loaded: bool,
 }
 
 impl SettingsState {
-    pub fn new(_cx: &mut Context<Self>) -> Self {
-        Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let mut state = Self {
             appearance: AppearanceState::default(),
             input_schema: InputSchemaState::default(),
             clipboard: ClipboardState::default(),
             smart_suggestion: SmartSuggestionState::default(),
             system_theme: SystemTheme::detect(),
             deploy_message: None,
+            deploy_message_time: None,
             schemas_loaded: false,
-        }
+        };
+        state.load_color_schemes(cx);
+        state
     }
 
     pub fn load_schemas(&mut self, cx: &mut Context<Self>) {
@@ -67,7 +71,10 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
                 font_size: manager.get_double("style/font_size").unwrap_or(14.0),
                 candidate_count: manager.get_int("style/candidate_count").unwrap_or(5),
                 show_code_hint: manager.get_bool("style/show_code_hint").unwrap_or(false),
-                corner_radius: manager.get_double("style/corner_radius").unwrap_or(8.0),
+                horizontal: manager.get_bool("style/horizontal").unwrap_or(true),
+                color_scheme: String::new(),
+                available_color_schemes: Vec::new(),
+                color_schemes_loaded: false,
             }
         } else {
             AppearanceState::default()
@@ -94,19 +101,55 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
     }
 
     pub fn colors(&self) -> ThemeColors {
-        ThemeColors::from_theme(&self.system_theme)
+        let primary_color = self.get_primary_color();
+        ThemeColors::from_theme(&self.system_theme, primary_color)
+    }
+    
+    fn get_primary_color(&self) -> u32 {
+        self.appearance.available_color_schemes
+            .iter()
+            .find(|(id, _, _)| id == &self.appearance.color_scheme)
+            .map(|(_, _, color)| *color)
+            .unwrap_or(0x8F73E2)
+    }
+    
+    pub fn load_color_schemes(&mut self, cx: &mut Context<Self>) {
+        if self.appearance.color_schemes_loaded {
+            return;
+        }
+        if let Ok(manager) = XimeStyleManager::load() {
+            let style = manager.get_style();
+            self.appearance.color_scheme = style.color_scheme;
+            self.appearance.available_color_schemes = manager.get_color_schemes();
+            self.appearance.font_size = style.font_size as f64;
+            self.appearance.candidate_count = style.candidate_count;
+            self.appearance.show_code_hint = style.show_code_hint;
+            self.appearance.horizontal = style.horizontal;
+            self.appearance.color_schemes_loaded = true;
+            cx.notify();
+        }
+    }
+    
+    pub fn save_color_scheme(&self) -> Result<(), String> {
+        let mut manager = XimeStyleManager::load()?;
+        manager.set_color_scheme(&self.appearance.color_scheme)?;
+        if !IpcClient::reload_config() {
+            eprintln!("Server not running, color scheme will apply on next start");
+        }
+        Ok(())
     }
 
     pub fn save_appearance(&self) -> Result<(), String> {
-        let manager = RimeConfigManager::new()?;
+        let mut manager = XimeStyleManager::load()?;
         
-        manager.set_double("style/font_size", self.appearance.font_size)?;
-        manager.set_int("style/candidate_count", self.appearance.candidate_count)?;
-        manager.set_bool("style/show_code_hint", self.appearance.show_code_hint)?;
-        manager.set_double("style/corner_radius", self.appearance.corner_radius)?;
+        manager.set_font_size(self.appearance.font_size as f32)?;
+        manager.set_candidate_count(self.appearance.candidate_count)?;
+        manager.set_show_code_hint(self.appearance.show_code_hint)?;
+        manager.set_horizontal(self.appearance.horizontal)?;
         
-        manager.save()?;
-        
+        if !IpcClient::reload_config() {
+            eprintln!("Server not running, appearance will apply on next start");
+        }
         Ok(())
     }
 
@@ -232,7 +275,13 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
                 self.deploy_message = Some(format!("部署失败: {}", e));
             }
         }
+        self.deploy_message_time = Some(std::time::Instant::now());
         result
+    }
+
+    pub fn clear_deploy_message(&mut self) {
+        self.deploy_message = None;
+        self.deploy_message_time = None;
     }
 }
 
@@ -241,7 +290,10 @@ pub struct AppearanceState {
     pub font_size: f64,
     pub candidate_count: i32,
     pub show_code_hint: bool,
-    pub corner_radius: f64,
+    pub horizontal: bool,
+    pub color_scheme: String,
+    pub available_color_schemes: Vec<(String, String, u32)>,
+    pub color_schemes_loaded: bool,
 }
 
 #[derive(Clone, Default)]
