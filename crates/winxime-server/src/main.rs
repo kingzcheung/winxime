@@ -7,6 +7,7 @@ mod tray;
 mod ui;
 
 use crate::context::SharedInputContext;
+use crate::config::UiConfig;
 use std::sync::{Arc, atomic::AtomicBool};
 use tracing::info;
 use winxime_config::init_logging_with_console;
@@ -64,10 +65,11 @@ fn main() {
     ensure_user_config_files(&user_data_dir);
 
     info!("Initializing Rime engine...");
+    let ui_config = UiConfig::load();
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
         Ok(mut e) => {
-            e.set_option("_horizontal", true);
-            info!("Rime initialized successfully");
+            e.set_option("_horizontal", ui_config.horizontal);
+            info!("Rime initialized successfully with horizontal={}", ui_config.horizontal);
             Arc::new(std::sync::Mutex::new(e))
         }
         Err(e) => {

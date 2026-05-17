@@ -1,10 +1,10 @@
 use librime::{
-    create_session, finalize, get_api, initialize, setup,
+    create_session, finalize, get_api, initialize, setup, is_maintenance_mode,
     Traits, Session, 
     start_maintenance, join_maintenance_thread, full_deploy_and_wait,
     DeployResult,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::io::Write;
 use std::ptr;
@@ -24,6 +24,9 @@ static INIT_LOCK: Mutex<()> = Mutex::new(());
 pub struct RimeEngine {
     session: Session,
     initialized: bool,
+    shared_data_dir: PathBuf,
+    user_data_dir: PathBuf,
+    distribution_name: String,
 }
 
 unsafe impl Send for RimeEngine {}
@@ -72,6 +75,9 @@ impl RimeEngine {
         Ok(Self {
             session,
             initialized: true,
+            shared_data_dir: shared_data_dir.to_path_buf(),
+            user_data_dir: user_data_dir.to_path_buf(),
+            distribution_name: distribution_name.to_string(),
         })
     }
 
@@ -258,6 +264,62 @@ impl RimeEngine {
 
     pub fn get_current_schema(&self) -> Option<String> {
         self.session.status().ok().map(|s| s.schema_id().to_string())
+    }
+
+    pub fn redeploy(&mut self) -> bool {
+        log_to_file("Redeploying Rime...");
+        
+        log_to_file("Finalizing old session...");
+        self.initialized = false;
+        finalize();
+        
+        log_to_file("Creating new traits...");
+        let mut traits = Traits::new();
+        traits
+            .set_shared_data_dir(self.shared_data_dir.to_str().unwrap_or(""))
+            .set_user_data_dir(self.user_data_dir.to_str().unwrap_or(""))
+            .set_distribution_name(&self.distribution_name)
+            .set_distribution_code_name(&self.distribution_name)
+            .set_distribution_version("1.0")
+            .set_app_name("rime.xime")
+            .set_min_log_level(1);
+
+        log_to_file("Calling setup...");
+        setup(&mut traits);
+
+        log_to_file("Calling initialize...");
+        if initialize(&mut traits).is_err() {
+            log_to_file("Initialize failed!");
+            return false;
+        }
+
+        log_to_file("Running full_deploy_and_wait...");
+        let result = full_deploy_and_wait();
+        log_to_file(&format!("Deploy result: {:?}", result));
+        
+        if is_maintenance_mode() {
+            log_to_file("Joining maintenance thread...");
+            join_maintenance_thread();
+        }
+
+        log_to_file("Creating new session...");
+        match create_session() {
+            Ok(session) => {
+                self.session = session;
+                self.initialized = true;
+                log_to_file("New session created successfully");
+                
+                if let Ok(status) = self.session.status() {
+                    log_to_file(&format!("Current schema: {}", status.schema_id()));
+                }
+                
+                true
+            }
+            Err(e) => {
+                log_to_file(&format!("Failed to create session: {}", e));
+                false
+            }
+        }
     }
 
     pub fn deploy(&self) -> bool {

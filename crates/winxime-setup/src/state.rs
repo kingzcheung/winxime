@@ -133,9 +133,6 @@ pub fn load_schema_config(&mut self, cx: &mut Context<Self>) {
     pub fn save_color_scheme(&self) -> Result<(), String> {
         let mut manager = XimeStyleManager::load()?;
         manager.set_color_scheme(&self.appearance.color_scheme)?;
-        if !IpcClient::reload_config() {
-            eprintln!("Server not running, color scheme will apply on next start");
-        }
         Ok(())
     }
 

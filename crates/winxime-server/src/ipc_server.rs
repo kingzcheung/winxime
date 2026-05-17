@@ -400,8 +400,8 @@ fn process_request(
 
         IpcCommand::ReloadConfig => {
             tracing::info!("ReloadConfig requested");
-            let deploy_result = eng.deploy();
-            tracing::info!("  deploy result: {}", deploy_result);
+            let deploy_result = eng.redeploy();
+            tracing::info!("  redeploy result: {}", deploy_result);
             IpcResponse {
                 success: deploy_result,
                 session_id: request.session_id,

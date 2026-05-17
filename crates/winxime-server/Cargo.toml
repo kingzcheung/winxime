@@ -15,7 +15,9 @@ winxime-rime = { path = "../winxime-rime" }
 winxime-config = { path = "../winxime-config" }
 librime.workspace = true
 librime-sys2 = { path = "../librime-sys" }
+serde.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 tracing = "0.1"
 interprocess = "2.4"
 widestring = "1.0"

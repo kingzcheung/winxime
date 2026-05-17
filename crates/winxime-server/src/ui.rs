@@ -71,6 +71,7 @@ pub struct CandidateModel {
     pub font_family: HSTRING,
     pub font_size: f32,
     pub cand_per_row: u32,
+    pub horizontal: bool,
     pub use_cursor: bool,
     pub current_sel: usize,
     pub selkey_color: D2D1_COLOR_F,
@@ -87,16 +88,29 @@ impl From<&Context> for CandidateModel {
         let config = UiConfig::load();
         let (bg_color, border_color, fg_color, selkey_color, comment_color, highlight_bg_color, highlight_fg_color) = config.get_colors();
         
+        let cand_per_row = if config.horizontal {
+            config.candidate_count
+        } else {
+            1
+        };
+        
+        let comments: Vec<String> = if config.show_code_hint {
+            ctx.candidates.comments.iter().map(|c| c.str.clone()).collect()
+        } else {
+            Vec::new()
+        };
+        
         Self {
             items: ctx.candidates.candies.iter().map(|c| c.str.clone()).collect(),
-            comments: ctx.candidates.comments.iter().map(|c| c.str.clone()).collect(),
+            comments,
             selkeys: vec!['1' as u16, '2' as u16, '3' as u16, '4' as u16, '5' as u16],
             total_pages: ctx.candidates.total_pages,
             current_page: ctx.candidates.current_page + 1,
             current_sel: ctx.candidates.highlighted as usize,
             font_family: config.font_family,
             font_size: config.font_size,
-            cand_per_row: config.candidate_count,
+            cand_per_row,
+            horizontal: config.horizontal,
             use_cursor: true,
             selkey_color,
             fg_color,

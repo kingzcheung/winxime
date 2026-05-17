@@ -352,8 +352,8 @@ pub fn deploy_all() -> Result<()> {
         
         if let Some(deploy_config) = (*api).deploy_config_file {
             let xime_yaml = CString::new("xime.yaml").unwrap_or_default();
-            let version_key = CString::new("config_version").unwrap_or_default();
-            deploy_config(xime_yaml.as_ptr(), version_key.as_ptr());
+            let distribution_version = CString::new("customization/distribution_version").unwrap_or_default();
+            deploy_config(xime_yaml.as_ptr(), distribution_version.as_ptr());
         }
     }
     
