@@ -120,7 +120,9 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         )
         .unwrap();
         writeln!(file, "build.bat deps").unwrap();
-        writeln!(file, "build.bat librime").unwrap();
+        writeln!(file, "if errorlevel 1 exit /b 1").unwrap();
+        writeln!(file, "build.bat librime shared").unwrap();
+        writeln!(file, "if errorlevel 1 exit /b 1").unwrap();
     }
 
     println!("cargo:warning=Starting librime compilation...");
