@@ -5,6 +5,7 @@ use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::{Duration, Instant};
+use crate::config::XimeConfig;
 use tracing::{info, error, debug};
 use widestring::u16cstr;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
@@ -466,6 +467,71 @@ fn process_request(
                         schema_list: None,
                     }
                 }
+            }
+        }
+
+        IpcCommand::ShowRoot => {
+            tracing::info!("ShowRoot requested");
+            let letter = match &request.data {
+                winxime_ipc::IpcRequestData::ShowRoot(c) => Some(*c),
+                _ => None,
+            };
+            
+            match letter {
+                Some(c) => {
+                    let config = XimeConfig::load();
+                    if let Some(root) = config.get_root_for_key(c) {
+                        tracing::info!("  -> showing root for '{}': {}", c, root);
+                        let result = window.show_root(c, &root);
+                        IpcResponse {
+                            success: result.is_ok(),
+                            session_id: request.session_id,
+                            context: None,
+                            status: Some(get_ipc_status(&eng)),
+                            schema_list: None,
+                        }
+                    } else {
+                        tracing::info!("  -> no root for key '{}'", c);
+                        IpcResponse {
+                            success: false,
+                            session_id: request.session_id,
+                            context: None,
+                            status: Some(get_ipc_status(&eng)),
+                            schema_list: None,
+                        }
+                    }
+                }
+                None => {
+                    IpcResponse {
+                        success: false,
+                        session_id: request.session_id,
+                        context: None,
+                        status: Some(get_ipc_status(&eng)),
+                        schema_list: None,
+                    }
+                }
+            }
+        }
+
+        IpcCommand::HideRoot => {
+            tracing::info!("HideRoot requested");
+            window.hide_root();
+            
+            let ipc_ctx = get_ipc_context(&eng, &None);
+            if let Some(ctx) = &ipc_ctx {
+                if !ctx.candidates.candies.is_empty() {
+                    let pos = context.read(|c| (c.caret_x, c.caret_y));
+                    window.show(pos.0, pos.1);
+                    window.update(ctx);
+                }
+            }
+            
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: Some(get_ipc_status(&eng)),
+                schema_list: None,
             }
         }
 

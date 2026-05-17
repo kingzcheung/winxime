@@ -8,9 +8,92 @@ use windows_core::HSTRING;
 #[derive(Debug, Deserialize, Default)]
 pub struct XimeConfig {
     #[serde(default)]
+    pub wubi_radicals: WubiRadicalsConfig,
+    #[serde(default)]
     pub style: StyleConfig,
     #[serde(default)]
     pub color_schemes: HashMap<String, ColorScheme>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct WubiRadicalsConfig {
+    #[serde(default)]
+    pub hotkeys: HotkeyConfig,
+    #[serde(default)]
+    pub key_radicals: WubiRootConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HotkeyConfig {
+    #[serde(default = "default_show_last_key")]
+    pub show_last_key: String,
+    #[serde(default)]
+    pub show_all_key: String,
+}
+
+impl Default for HotkeyConfig {
+    fn default() -> Self {
+        Self {
+            show_last_key: default_show_last_key(),
+            show_all_key: String::new(),
+        }
+    }
+}
+
+fn default_show_last_key() -> String { "Ctrl".to_string() }
+
+#[derive(Debug, Deserialize, Default)]
+pub struct WubiRootConfig {
+    #[serde(default)]
+    pub g: String,
+    #[serde(default)]
+    pub f: String,
+    #[serde(default)]
+    pub d: String,
+    #[serde(default)]
+    pub s: String,
+    #[serde(default)]
+    pub a: String,
+    #[serde(default)]
+    pub h: String,
+    #[serde(default)]
+    pub j: String,
+    #[serde(default)]
+    pub k: String,
+    #[serde(default)]
+    pub l: String,
+    #[serde(default)]
+    pub m: String,
+    #[serde(default)]
+    pub t: String,
+    #[serde(default)]
+    pub r: String,
+    #[serde(default)]
+    pub e: String,
+    #[serde(default)]
+    pub w: String,
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub y: String,
+    #[serde(default)]
+    pub u: String,
+    #[serde(default)]
+    pub i: String,
+    #[serde(default)]
+    pub o: String,
+    #[serde(default)]
+    pub p: String,
+    #[serde(default)]
+    pub n: String,
+    #[serde(default)]
+    pub b: String,
+    #[serde(default)]
+    pub v: String,
+    #[serde(default)]
+    pub c: String,
+    #[serde(default)]
+    pub x: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -196,6 +279,14 @@ impl XimeConfig {
     fn merge_configs(system: Self, user: Option<Self>) -> Self {
         match user {
             Some(user) => Self {
+                wubi_radicals: WubiRadicalsConfig {
+                    hotkeys: user.wubi_radicals.hotkeys,
+                    key_radicals: if user.wubi_radicals.key_radicals.g.is_empty() {
+                        system.wubi_radicals.key_radicals
+                    } else {
+                        user.wubi_radicals.key_radicals
+                    },
+                },
                 style: StyleConfig {
                     font_family: if user.style.font_family.is_empty() { system.style.font_family } else { user.style.font_family },
                     font_size: if user.style.font_size == 0.0 { system.style.font_size } else { user.style.font_size },
@@ -217,9 +308,49 @@ impl XimeConfig {
             0x8F73E2
         }
     }
+    
+    pub fn get_last_key_root_binding(&self) -> String {
+        self.wubi_radicals.hotkeys.show_last_key.clone()
+    }
+    
+    pub fn get_root_for_key(&self, key: char) -> Option<String> {
+        let root = match key.to_lowercase().next()? {
+            'g' => &self.wubi_radicals.key_radicals.g,
+            'f' => &self.wubi_radicals.key_radicals.f,
+            'd' => &self.wubi_radicals.key_radicals.d,
+            's' => &self.wubi_radicals.key_radicals.s,
+            'a' => &self.wubi_radicals.key_radicals.a,
+            'h' => &self.wubi_radicals.key_radicals.h,
+            'j' => &self.wubi_radicals.key_radicals.j,
+            'k' => &self.wubi_radicals.key_radicals.k,
+            'l' => &self.wubi_radicals.key_radicals.l,
+            'm' => &self.wubi_radicals.key_radicals.m,
+            't' => &self.wubi_radicals.key_radicals.t,
+            'r' => &self.wubi_radicals.key_radicals.r,
+            'e' => &self.wubi_radicals.key_radicals.e,
+            'w' => &self.wubi_radicals.key_radicals.w,
+            'q' => &self.wubi_radicals.key_radicals.q,
+            'y' => &self.wubi_radicals.key_radicals.y,
+            'u' => &self.wubi_radicals.key_radicals.u,
+            'i' => &self.wubi_radicals.key_radicals.i,
+            'o' => &self.wubi_radicals.key_radicals.o,
+            'p' => &self.wubi_radicals.key_radicals.p,
+            'n' => &self.wubi_radicals.key_radicals.n,
+            'b' => &self.wubi_radicals.key_radicals.b,
+            'v' => &self.wubi_radicals.key_radicals.v,
+            'c' => &self.wubi_radicals.key_radicals.c,
+            'x' => &self.wubi_radicals.key_radicals.x,
+            _ => return None,
+        };
+        if root.is_empty() {
+            None
+        } else {
+            Some(root.clone())
+        }
+    }
 }
 
-fn hex_to_rgb(hex: u32) -> (f32, f32, f32) {
+pub fn hex_to_rgb(hex: u32) -> (f32, f32, f32) {
     let r = ((hex >> 16) & 0xFF) as f32 / 255.0;
     let g = ((hex >> 8) & 0xFF) as f32 / 255.0;
     let b = (hex & 0xFF) as f32 / 255.0;

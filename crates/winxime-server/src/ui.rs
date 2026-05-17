@@ -40,6 +40,8 @@ pub const WM_SHOW_CANDIDATE: u32 = WM_USER + 1;
 pub const WM_HIDE_CANDIDATE: u32 = WM_USER + 2;
 pub const WM_UPDATE_CANDIDATE: u32 = WM_USER + 3;
 pub const WM_SET_POSITION: u32 = WM_USER + 4;
+pub const WM_SHOW_ROOT: u32 = WM_USER + 5;
+pub const WM_HIDE_ROOT: u32 = WM_USER + 6;
 
 const WINDOW_CLASS: &str = "WinximeCandidateWindow";
 const ROW_SPACING: f32 = 4.0;
@@ -81,6 +83,34 @@ pub struct CandidateModel {
     pub highlight_fg_color: D2D1_COLOR_F,
     pub highlight_bg_color: D2D1_COLOR_F,
     pub border_color: D2D1_COLOR_F,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RootModel {
+    pub letter: char,
+    pub root: String,
+    pub font_family: HSTRING,
+    pub font_size: f32,
+    pub primary_color: D2D1_COLOR_F,
+    pub bg_color: D2D1_COLOR_F,
+    pub fg_color: D2D1_COLOR_F,
+}
+
+impl From<(char, String)> for RootModel {
+    fn from((letter, root): (char, String)) -> Self {
+        let config = crate::config::XimeConfig::load();
+        let primary = crate::config::hex_to_rgb(config.get_primary_color());
+        
+        Self {
+            letter,
+            root,
+            font_family: windows_core::HSTRING::from("Microsoft YaHei UI"),
+            font_size: 24.0,
+            primary_color: D2D1_COLOR_F { r: primary.0, g: primary.1, b: primary.2, a: 0.9 },
+            bg_color: D2D1_COLOR_F { r: 0.95, g: 0.95, b: 0.95, a: 0.85 },
+            fg_color: D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 },
+        }
+    }
 }
 
 impl From<&Context> for CandidateModel {
@@ -340,6 +370,66 @@ impl RenderedView {
                 let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y + 24, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
                 LRESULT(0)
             }
+            WM_SHOW_ROOT => {
+                debug!("WM_SHOW_ROOT received");
+                let root_ptr = wparam.0 as *mut RootModel;
+                if !root_ptr.is_null() {
+                    let root = unsafe { Box::from_raw(root_ptr) };
+                    debug!("showing root for '{}': {}", root.letter, root.root);
+                    
+                    let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
+                    if !this_ptr.is_null() {
+                        unsafe { (*this_ptr).root_model.replace(Some(*root.clone())) };
+                        
+                        let view = unsafe { (*this_ptr).view.borrow() };
+                        if let Some(view) = view.as_ref() {
+                            let dpi = RenderedView::get_dpi_for_window(hwnd);
+                            if let Ok(metrics) = view.calculate_root_rect(&root, dpi) {
+                                let _ = SetWindowPos(
+                                    hwnd,
+                                    Some(HWND_TOPMOST),
+                                    0,
+                                    0,
+                                    metrics.hw_width as i32,
+                                    metrics.hw_height as i32,
+                                    SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS,
+                                );
+                                let _ = view.on_paint_root(&root, dpi, &metrics);
+                            }
+                        }
+                    }
+                }
+                let _ = ShowWindow(hwnd, SW_SHOWNA);
+                LRESULT(0)
+            }
+            WM_HIDE_ROOT => {
+                debug!("WM_HIDE_ROOT received");
+                let this_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateWindow;
+                if !this_ptr.is_null() {
+                    (*this_ptr).root_model.replace(None);
+                    
+                    let model = (*this_ptr).model.borrow();
+                    let view = (*this_ptr).view.borrow();
+                    if let Some(view) = view.as_ref() {
+                        let dpi = RenderedView::get_dpi_for_window(hwnd);
+                        if let Ok(metrics) = view.calculate_client_rect(&model, dpi) {
+                            let _ = SetWindowPos(
+                                hwnd,
+                                Some(HWND_TOPMOST),
+                                0,
+                                0,
+                                metrics.hw_width as i32,
+                                metrics.hw_height as i32,
+                                SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS,
+                            );
+                            if !model.items.is_empty() {
+                                let _ = view.on_paint_with_metrics(&model, dpi, &metrics);
+                            }
+                        }
+                    }
+                }
+                LRESULT(0)
+            }
             WM_PAINT => {
                 info!("WM_PAINT received");
                 let mut ps = PAINTSTRUCT::default();
@@ -533,6 +623,242 @@ impl RenderedView {
                 text_widths,
                 comment_widths,
             })
+        }
+    }
+
+    fn calculate_root_rect(&self, model: &RootModel, dpi: f32) -> Result<RenderedMetrics, String> {
+        unsafe {
+            let scale = dpi / 96.0;
+
+            let text_format = self.dwrite_factory
+                .CreateTextFormat(
+                    &model.font_family,
+                    None,
+                    DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL,
+                    model.font_size,
+                    w!("zh-CN"),
+                )
+                .map_err(|e| format!("CreateTextFormat failed: {:?}", e))?;
+
+            let letter_buf = [model.letter as u16];
+            let letter_hstring = HSTRING::from(model.letter.to_string());
+            
+            let mut letter_metrics = DWRITE_TEXT_METRICS::default();
+            self.dwrite_factory
+                .CreateTextLayout(&letter_buf, &text_format, f32::MAX, f32::MAX)
+                .map_err(|e| format!("CreateTextLayout for letter failed: {:?}", e))?
+                .GetMetrics(&mut letter_metrics)
+                .map_err(|e| format!("GetMetrics for letter failed: {:?}", e))?;
+
+            let root_hstring = HSTRING::from(&model.root);
+            let mut root_metrics = DWRITE_TEXT_METRICS::default();
+            self.dwrite_factory
+                .CreateTextLayout(&root_hstring, &text_format, f32::MAX, f32::MAX)
+                .map_err(|e| format!("CreateTextLayout for root failed: {:?}", e))?
+                .GetMetrics(&mut root_metrics)
+                .map_err(|e| format!("GetMetrics for root failed: {:?}", e))?;
+
+            let padding = 12.0;
+            let letter_width = letter_metrics.widthIncludingTrailingWhitespace;
+            let root_width = root_metrics.widthIncludingTrailingWhitespace;
+            let letter_height = letter_metrics.height;
+            let root_height = root_metrics.height;
+
+            let width = (letter_width + 8.0 + root_width + 2.0 * padding).max(80.0);
+            let height = (letter_height + root_height + 8.0 + 2.0 * padding).max(60.0);
+
+            let hw_width = ((width + BLUR_RADIUS * 2.0) * scale).ceil();
+            let hw_height = ((height + BLUR_RADIUS * 2.0) * scale).ceil();
+
+            Ok(RenderedMetrics {
+                width,
+                height,
+                hw_width,
+                hw_height,
+                item_height: root_height,
+                item_widths: vec![root_width],
+                selkey_widths: vec![letter_width],
+                text_widths: vec![root_width],
+                comment_widths: vec![],
+            })
+        }
+    }
+
+    fn on_paint_root(&self, model: &RootModel, dpi: f32, metrics: &RenderedMetrics) -> Result<(), String> {
+        unsafe {
+            self.d2d_context.SetTarget(None);
+            self.swapchain
+                .ResizeBuffers(
+                    0,
+                    metrics.hw_width as u32,
+                    metrics.hw_height as u32,
+                    DXGI_FORMAT_B8G8R8A8_UNORM,
+                    DXGI_SWAP_CHAIN_FLAG(0),
+                )
+                .map_err(|e| format!("ResizeBuffers failed: {:?}", e))?;
+
+            self.d2d_context.SetDpi(dpi, dpi);
+            Self::create_swapchain_bitmap(&self.swapchain, &self.d2d_context)?;
+
+            let text_format = self.dwrite_factory
+                .CreateTextFormat(
+                    &model.font_family,
+                    None,
+                    DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL,
+                    model.font_size,
+                    w!("zh-CN"),
+                )
+                .map_err(|e| format!("CreateTextFormat failed: {:?}", e))?;
+
+            self.d2d_context.BeginDraw();
+
+            let blur_radius = BLUR_RADIUS;
+            let corner_radius = 12.0;
+
+            let bg_brush = self.d2d_context
+                .CreateSolidColorBrush(&model.bg_color, None)
+                .map_err(|e| format!("CreateSolidColorBrush bg failed: {:?}", e))?;
+
+            let border_brush = self.d2d_context
+                .CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.1 }, None)
+                .map_err(|e| format!("CreateSolidColorBrush border failed: {:?}", e))?;
+
+            let primary_brush = self.d2d_context
+                .CreateSolidColorBrush(&model.primary_color, None)
+                .map_err(|e| format!("CreateSolidColorBrush primary failed: {:?}", e))?;
+
+            let text_brush = self.d2d_context
+                .CreateSolidColorBrush(&model.fg_color, None)
+                .map_err(|e| format!("CreateSolidColorBrush text failed: {:?}", e))?;
+
+            let shadow_render_target: ID2D1BitmapRenderTarget = self.d2d_context
+                .CreateCompatibleRenderTarget(
+                    Some(&D2D_SIZE_F {
+                        width: metrics.width + blur_radius * 2.0,
+                        height: metrics.height + blur_radius * 2.0,
+                    }),
+                    None,
+                    None,
+                    D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE,
+                )
+                .map_err(|e| format!("CreateCompatibleRenderTarget failed: {:?}", e))?;
+
+            shadow_render_target.BeginDraw();
+            shadow_render_target.Clear(None);
+
+            let shadow_brush = shadow_render_target
+                .CreateSolidColorBrush(
+                    &D2D1_COLOR_F {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.15,
+                    },
+                    None,
+                )
+                .map_err(|e| format!("CreateSolidColorBrush shadow failed: {:?}", e))?;
+
+            let shadow_rect = D2D1_ROUNDED_RECT {
+                rect: D2D_RECT_F {
+                    left: blur_radius,
+                    top: blur_radius,
+                    right: metrics.width + blur_radius,
+                    bottom: metrics.height + blur_radius,
+                },
+                radiusX: corner_radius,
+                radiusY: corner_radius,
+            };
+            shadow_render_target.FillRoundedRectangle(&shadow_rect, &shadow_brush);
+            shadow_render_target.EndDraw(None, None)
+                .map_err(|e| format!("shadow EndDraw failed: {:?}", e))?;
+
+            let shadow_bitmap = shadow_render_target
+                .GetBitmap()
+                .map_err(|e| format!("GetBitmap failed: {:?}", e))?;
+
+            let gaussian_blur_effect = self.d2d_context
+                .CreateEffect(&CLSID_D2D1GaussianBlur)
+                .map_err(|e| format!("CreateEffect failed: {:?}", e))?;
+            gaussian_blur_effect.SetInput(0, &shadow_bitmap, false);
+            let blur_output = gaussian_blur_effect
+                .GetOutput()
+                .map_err(|e| format!("GetOutput failed: {:?}", e))?;
+
+            self.d2d_context.DrawImage(
+                &blur_output,
+                Some(&Vector2 { X: 0.0, Y: 0.0 }),
+                None,
+                D2D1_INTERPOLATION_MODE_LINEAR,
+                D2D1_COMPOSITE_MODE_SOURCE_OVER,
+            );
+
+            let bg_rounded_rect = D2D1_ROUNDED_RECT {
+                rect: D2D_RECT_F {
+                    left: blur_radius,
+                    top: blur_radius,
+                    right: metrics.width + blur_radius,
+                    bottom: metrics.height + blur_radius,
+                },
+                radiusX: corner_radius,
+                radiusY: corner_radius,
+            };
+            self.d2d_context.FillRoundedRectangle(&bg_rounded_rect, &bg_brush);
+
+            let border_rounded_rect = D2D1_ROUNDED_RECT {
+                rect: D2D_RECT_F {
+                    left: blur_radius + 0.5,
+                    top: blur_radius + 0.5,
+                    right: metrics.width + blur_radius - 0.5,
+                    bottom: metrics.height + blur_radius - 0.5,
+                },
+                radiusX: corner_radius,
+                radiusY: corner_radius,
+            };
+            self.d2d_context.DrawRoundedRectangle(&border_rounded_rect, &border_brush, 0.5, None);
+
+            let letter_rect = D2D_RECT_F {
+                left: blur_radius + 16.0,
+                top: blur_radius + 12.0,
+                right: blur_radius + 16.0 + metrics.selkey_widths.get(0).copied().unwrap_or(20.0),
+                bottom: blur_radius + 12.0 + metrics.item_height + 8.0,
+            };
+
+            let letter_buf = [model.letter as u16];
+            let letter_hstring = HSTRING::from(model.letter.to_string());
+            self.d2d_context.DrawText(
+                &letter_buf,
+                &text_format,
+                &letter_rect,
+                &primary_brush,
+                D2D1_DRAW_TEXT_OPTIONS_NONE,
+                DWRITE_MEASURING_MODE_NATURAL,
+            );
+
+            let root_hstring = HSTRING::from(&model.root);
+            let root_rect = D2D_RECT_F {
+                left: blur_radius + 16.0 + metrics.selkey_widths.get(0).copied().unwrap_or(20.0) + 8.0,
+                top: blur_radius + 12.0,
+                right: metrics.width + blur_radius - 16.0,
+                bottom: metrics.height + blur_radius - 12.0,
+            };
+            self.d2d_context.DrawText(
+                &root_hstring,
+                &text_format,
+                &root_rect,
+                &text_brush,
+                D2D1_DRAW_TEXT_OPTIONS_NONE,
+                DWRITE_MEASURING_MODE_NATURAL,
+            );
+
+            self.d2d_context.EndDraw(None, None)
+                .map_err(|e| format!("EndDraw failed: {:?}", e))?;
+            let _ = self.swapchain.Present(1, DXGI_PRESENT(0)).ok();
+
+            Ok(())
         }
     }
 
@@ -831,6 +1157,7 @@ let comment_brush = self.d2d_context
 
 pub struct CandidateWindow {
     model: RefCell<CandidateModel>,
+    root_model: RefCell<Option<RootModel>>,
     view: RefCell<Option<RenderedView>>,
 }
 
@@ -841,6 +1168,7 @@ impl CandidateWindow {
     pub fn new() -> Arc<Self> {
         let window = Arc::new(Self {
             model: RefCell::new(CandidateModel::default()),
+            root_model: RefCell::new(None),
             view: RefCell::new(None),
         });
         
@@ -907,6 +1235,36 @@ impl CandidateWindow {
             }
         } else {
             info!("  update: view is None!");
+        }
+    }
+    
+    pub fn show_root(&self, letter: char, root: &str) -> Result<(), String> {
+        self.ensure_view_initialized();
+        if let Some(view) = self.view.borrow().as_ref() {
+            let root_model = RootModel::from((letter, root.to_string()));
+            *self.root_model.borrow_mut() = Some(root_model.clone());
+            
+            unsafe {
+                let root_ptr = Box::into_raw(Box::new(root_model));
+                let _ = PostMessageW(
+                    Some(view.hwnd),
+                    WM_SHOW_ROOT,
+                    WPARAM(root_ptr as usize),
+                    LPARAM(0),
+                );
+            }
+            Ok(())
+        } else {
+            Err("view is None".to_string())
+        }
+    }
+    
+    pub fn hide_root(&self) {
+        if let Some(view) = self.view.borrow().as_ref() {
+            *self.root_model.borrow_mut() = None;
+            unsafe {
+                let _ = PostMessageW(Some(view.hwnd), WM_HIDE_ROOT, WPARAM(0), LPARAM(0));
+            }
         }
     }
 }

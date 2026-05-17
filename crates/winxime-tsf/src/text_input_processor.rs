@@ -9,7 +9,7 @@ use winxime_ipc::{
 };
 use librime::{
     vk_to_xk, get_key_modifiers, VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN,
-    VK_RETURN, VK_BACK, VK_TAB, VK_ESCAPE, VK_SPACE, K_SHIFT_MASK,
+    VK_RETURN, VK_BACK, VK_TAB, VK_ESCAPE, VK_SPACE, K_SHIFT_MASK, K_CONTROL_MASK, K_ALT_MASK,
 };
 
 const TF_INVALID_COOKIE: u32 = 0xFFFFFFFF;
@@ -358,6 +358,54 @@ impl IpcClientHandle {
                 debug!("  -> HideCandidates sent successfully");
             } else {
                 debug!("  -> HideCandidates send FAILED");
+            }
+        } else {
+            debug!("  -> no client");
+        }
+    }
+
+    pub fn show_root(&self, letter: char) {
+        debug!("IPC::show_root() called, letter={}", letter);
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::ShowRoot,
+                session_id,
+                data: IpcRequestData::ShowRoot(letter),
+            };
+            debug!("  -> sending ShowRoot request");
+            if client.send_oneway(&request).is_ok() {
+                debug!("  -> ShowRoot sent successfully");
+            } else {
+                debug!("  -> ShowRoot send FAILED");
+            }
+        } else {
+            debug!("  -> no client");
+        }
+    }
+
+    pub fn hide_root(&self) {
+        debug!("IPC::hide_root() called");
+        let mut guard = match self.state.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        let session_id = guard.session_id;
+        if let Some(ref mut client) = guard.client {
+            let request = IpcRequest {
+                command: IpcCommand::HideRoot,
+                session_id,
+                data: IpcRequestData::None,
+            };
+            debug!("  -> sending HideRoot request");
+            if client.send_oneway(&request).is_ok() {
+                debug!("  -> HideRoot sent successfully");
+            } else {
+                debug!("  -> HideRoot send FAILED");
             }
         } else {
             debug!("  -> no client");
@@ -714,6 +762,9 @@ impl XimeTextService_Impl {
         if code == VK_LEFT || code == VK_RIGHT || code == VK_UP || code == VK_DOWN {
             return true;
         }
+        if self.is_composing() && code == VK_CONTROL.0 {
+            return true;
+        }
         false
     }
 
@@ -1007,6 +1058,12 @@ impl XimeTextService_Impl {
             self.update_caret_position_sync(ctx);
         }
 
+        if (VK_X_A..=VK_X_Z).contains(&code) && mods == 0 {
+            let letter = char::from_u32(code as u32 - VK_X_A as u32 + 'a' as u32).unwrap_or('a');
+            self.last_input_key.set(Some(letter));
+            debug!("  -> recorded last_input_key: {}", letter);
+        }
+
         let xk = vk_to_xk(code);
         let mods = get_key_modifiers();
         debug!("  -> calling process_key({}, {})", xk, mods);
@@ -1074,6 +1131,27 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
     fn OnKeyDown(&self, pic: Ref<'_, ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = VIRTUAL_KEY(wparam.0 as u16);
         debug!("OnKeyDown: vk={}", vk.0);
+        
+        if vk.0 == VK_CONTROL.0 {
+            if self.is_composing() && !self.ctrl_root_visible.get() {
+                let last_key = self.last_input_key.get();
+                debug!("  -> Ctrl pressed while composing, last_key={:?}", last_key);
+                if let Some(letter) = last_key {
+                    let mods = get_key_modifiers();
+                    debug!("  -> mods={}", mods);
+                    let ctrl_only = (mods & K_CONTROL_MASK as i32) != 0 
+                        && (mods & K_SHIFT_MASK as i32) == 0 
+                        && (mods & K_ALT_MASK as i32) == 0;
+                    if ctrl_only {
+                        debug!("  -> sending ShowRoot for '{}'", letter);
+                        self.ipc.show_root(letter);
+                        self.ctrl_root_visible.set(true);
+                    }
+                }
+            }
+            return Ok(BOOL(0));
+        }
+        
         if !self.should_handle_key(vk) {
             debug!("  -> not handling");
             return Ok(BOOL(0));
@@ -1095,12 +1173,24 @@ impl ITfKeyEventSink_Impl for XimeTextService_Impl {
         if vk.0 == VK_SHIFT.0 {
             return Ok(BOOL(1));
         }
+        if vk.0 == VK_CONTROL.0 && self.ctrl_root_visible.get() {
+            return Ok(BOOL(1));
+        }
         Ok(BOOL(0))
     }
 
     fn OnKeyUp(&self, pic: Ref<'_, ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = VIRTUAL_KEY(wparam.0 as u16);
         debug!("OnKeyUp: vk={}", vk.0);
+        
+        if vk.0 == VK_CONTROL.0 {
+            if self.ctrl_root_visible.get() {
+                debug!("  -> Ctrl released, sending HideRoot");
+                self.ipc.hide_root();
+                self.ctrl_root_visible.set(false);
+            }
+            return Ok(BOOL(0));
+        }
         
         if vk.0 != VK_SHIFT.0 {
             return Ok(BOOL(0));
@@ -1175,6 +1265,8 @@ pub struct XimeTextService {
     thread_focus_sink_cookie: std::cell::Cell<u32>,
     thread_focus_source: std::cell::RefCell<Option<ITfSource>>,
     thread_mgr_event_sink_cookie: std::cell::Cell<u32>,
+    last_input_key: std::cell::Cell<Option<char>>,
+    ctrl_root_visible: std::cell::Cell<bool>,
 }
 
 pub const GUID_LANG_BAR_ITEM: GUID = GUID_LBI_INPUTMODE;
@@ -1201,6 +1293,8 @@ impl XimeTextService {
             thread_focus_sink_cookie: std::cell::Cell::new(TF_INVALID_COOKIE),
             thread_focus_source: std::cell::RefCell::new(None),
             thread_mgr_event_sink_cookie: std::cell::Cell::new(TF_INVALID_COOKIE),
+            last_input_key: std::cell::Cell::new(None),
+            ctrl_root_visible: std::cell::Cell::new(false),
         }
     }
 

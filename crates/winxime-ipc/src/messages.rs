@@ -100,6 +100,8 @@ pub enum IpcCommand {
     ReloadConfig,
     GetSchemaList,
     SelectSchema,
+    ShowRoot,
+    HideRoot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +120,7 @@ pub enum IpcRequestData {
     SelectIndex(usize),
     ChangePage(bool),
     SelectSchema(String),
+    ShowRoot(char),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
