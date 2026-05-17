@@ -329,9 +329,8 @@ impl XimeConfig {
             let exe_path = std::env::current_exe().unwrap_or_else(|_| PathBuf::new());
             let install_dir = exe_path
                 .parent()
-                .unwrap_or_else(|| PathBuf::new().as_path())
-                .parent()
-                .unwrap_or_else(|| PathBuf::new().as_path());
+                .and_then(|p| p.parent())
+                .unwrap_or(Path::new(""));
             let appdata = std::env::var("APPDATA").unwrap_or_else(|_| String::new());
             (
                 install_dir.join("data").join("xime.yaml"),
