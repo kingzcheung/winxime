@@ -112,7 +112,7 @@ pub struct IpcRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type", content = "value")]
 pub enum IpcRequestData {
     None,
     KeyEvent(KeyEventData),

@@ -13,6 +13,7 @@ use windows::Win32::{
         DirectWrite::{
             DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_MEASURING_MODE_NATURAL, DWRITE_TEXT_METRICS,
+            DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
             DWriteCreateFactory, IDWriteFactory1,
         },
         Dxgi::Common::{DXGI_ALPHA_MODE_PREMULTIPLIED, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
@@ -98,16 +99,16 @@ pub struct RootModel {
 
 impl From<(char, String)> for RootModel {
     fn from((letter, root): (char, String)) -> Self {
-        let config = crate::config::XimeConfig::load();
-        let primary = crate::config::hex_to_rgb(config.get_primary_color());
+        let config = UiConfig::load();
+        let (_, _, _, selkey_color, _, _, _) = config.get_colors();
         
         Self {
             letter,
             root,
-            font_family: windows_core::HSTRING::from("Microsoft YaHei UI"),
-            font_size: 24.0,
-            primary_color: D2D1_COLOR_F { r: primary.0, g: primary.1, b: primary.2, a: 0.9 },
-            bg_color: D2D1_COLOR_F { r: 0.95, g: 0.95, b: 0.95, a: 0.85 },
+            font_family: config.font_family,
+            font_size: config.font_size,
+            primary_color: selkey_color,
+            bg_color: D2D1_COLOR_F { r: 0.98, g: 0.98, b: 0.98, a: 1.0 },
             fg_color: D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 },
         }
     }
@@ -643,7 +644,6 @@ impl RenderedView {
                 .map_err(|e| format!("CreateTextFormat failed: {:?}", e))?;
 
             let letter_buf = [model.letter as u16];
-            let letter_hstring = HSTRING::from(model.letter.to_string());
             
             let mut letter_metrics = DWRITE_TEXT_METRICS::default();
             self.dwrite_factory
@@ -660,14 +660,16 @@ impl RenderedView {
                 .GetMetrics(&mut root_metrics)
                 .map_err(|e| format!("GetMetrics for root failed: {:?}", e))?;
 
-            let padding = 12.0;
             let letter_width = letter_metrics.widthIncludingTrailingWhitespace;
             let root_width = root_metrics.widthIncludingTrailingWhitespace;
-            let letter_height = letter_metrics.height;
-            let root_height = root_metrics.height;
+            let text_height = model.font_size;
 
-            let width = (letter_width + 8.0 + root_width + 2.0 * padding).max(80.0);
-            let height = (letter_height + root_height + 8.0 + 2.0 * padding).max(60.0);
+            let key_bg_width = letter_width + 16.0;
+            let key_bg_height = 24.0;
+            let padding = 12.0;
+
+            let width = (padding + key_bg_width + 8.0 + root_width + padding).max(80.0);
+            let height = (key_bg_height + padding).max(36.0);
 
             let hw_width = ((width + BLUR_RADIUS * 2.0) * scale).ceil();
             let hw_height = ((height + BLUR_RADIUS * 2.0) * scale).ceil();
@@ -677,7 +679,7 @@ impl RenderedView {
                 height,
                 hw_width,
                 hw_height,
-                item_height: root_height,
+                item_height: text_height,
                 item_widths: vec![root_width],
                 selkey_widths: vec![letter_width],
                 text_widths: vec![root_width],
@@ -714,26 +716,54 @@ impl RenderedView {
                 )
                 .map_err(|e| format!("CreateTextFormat failed: {:?}", e))?;
 
+            let text_format_centered = self.dwrite_factory
+                .CreateTextFormat(
+                    &model.font_family,
+                    None,
+                    DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL,
+                    model.font_size,
+                    w!("zh-CN"),
+                )
+                .map_err(|e| format!("CreateTextFormat centered failed: {:?}", e))?;
+            let _ = text_format_centered.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            let _ = text_format_centered.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
             self.d2d_context.BeginDraw();
 
             let blur_radius = BLUR_RADIUS;
-            let corner_radius = 12.0;
+            let corner_radius = 8.0;
+            let key_bg_corner_radius = 4.0;
 
             let bg_brush = self.d2d_context
-                .CreateSolidColorBrush(&model.bg_color, None)
+                .CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.98, g: 0.98, b: 0.98, a: 1.0 }, None)
                 .map_err(|e| format!("CreateSolidColorBrush bg failed: {:?}", e))?;
 
             let border_brush = self.d2d_context
-                .CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.1 }, None)
+                .CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.88, g: 0.88, b: 0.88, a: 1.0 }, None)
                 .map_err(|e| format!("CreateSolidColorBrush border failed: {:?}", e))?;
 
-            let primary_brush = self.d2d_context
-                .CreateSolidColorBrush(&model.primary_color, None)
-                .map_err(|e| format!("CreateSolidColorBrush primary failed: {:?}", e))?;
+            let key_bg_brush = self.d2d_context
+                .CreateSolidColorBrush(&D2D1_COLOR_F { 
+                    r: model.primary_color.r, 
+                    g: model.primary_color.g, 
+                    b: model.primary_color.b, 
+                    a: 0.19 
+                }, None)
+                .map_err(|e| format!("CreateSolidColorBrush key_bg failed: {:?}", e))?;
 
-            let text_brush = self.d2d_context
-                .CreateSolidColorBrush(&model.fg_color, None)
-                .map_err(|e| format!("CreateSolidColorBrush text failed: {:?}", e))?;
+            let key_border_brush = self.d2d_context
+                .CreateSolidColorBrush(&model.primary_color, None)
+                .map_err(|e| format!("CreateSolidColorBrush key_border failed: {:?}", e))?;
+
+            let key_text_brush = self.d2d_context
+                .CreateSolidColorBrush(&model.primary_color, None)
+                .map_err(|e| format!("CreateSolidColorBrush key_text failed: {:?}", e))?;
+
+            let root_text_brush = self.d2d_context
+                .CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 }, None)
+                .map_err(|e| format!("CreateSolidColorBrush root_text failed: {:?}", e))?;
 
             let shadow_render_target: ID2D1BitmapRenderTarget = self.d2d_context
                 .CreateCompatibleRenderTarget(
@@ -807,49 +837,57 @@ impl RenderedView {
                 radiusY: corner_radius,
             };
             self.d2d_context.FillRoundedRectangle(&bg_rounded_rect, &bg_brush);
+            self.d2d_context.DrawRoundedRectangle(&bg_rounded_rect, &border_brush, 2.0, None);
 
-            let border_rounded_rect = D2D1_ROUNDED_RECT {
+            let letter_width = metrics.selkey_widths.get(0).copied().unwrap_or(20.0);
+            let key_bg_width = letter_width + 16.0;
+            let key_bg_height = 24.0;
+            let x_start = blur_radius + 12.0;
+            let y_center = blur_radius + (metrics.height - key_bg_height) / 2.0;
+
+            let key_bg_rect = D2D1_ROUNDED_RECT {
                 rect: D2D_RECT_F {
-                    left: blur_radius + 0.5,
-                    top: blur_radius + 0.5,
-                    right: metrics.width + blur_radius - 0.5,
-                    bottom: metrics.height + blur_radius - 0.5,
+                    left: x_start,
+                    top: y_center,
+                    right: x_start + key_bg_width,
+                    bottom: y_center + key_bg_height,
                 },
-                radiusX: corner_radius,
-                radiusY: corner_radius,
+                radiusX: key_bg_corner_radius,
+                radiusY: key_bg_corner_radius,
             };
-            self.d2d_context.DrawRoundedRectangle(&border_rounded_rect, &border_brush, 0.5, None);
+            self.d2d_context.FillRoundedRectangle(&key_bg_rect, &key_bg_brush);
+            self.d2d_context.DrawRoundedRectangle(&key_bg_rect, &key_border_brush, 1.5, None);
 
             let letter_rect = D2D_RECT_F {
-                left: blur_radius + 16.0,
-                top: blur_radius + 12.0,
-                right: blur_radius + 16.0 + metrics.selkey_widths.get(0).copied().unwrap_or(20.0),
-                bottom: blur_radius + 12.0 + metrics.item_height + 8.0,
+                left: x_start,
+                top: y_center,
+                right: x_start + key_bg_width,
+                bottom: y_center + key_bg_height,
             };
 
             let letter_buf = [model.letter as u16];
-            let letter_hstring = HSTRING::from(model.letter.to_string());
             self.d2d_context.DrawText(
                 &letter_buf,
-                &text_format,
+                &text_format_centered,
                 &letter_rect,
-                &primary_brush,
+                &key_text_brush,
                 D2D1_DRAW_TEXT_OPTIONS_NONE,
                 DWRITE_MEASURING_MODE_NATURAL,
             );
 
             let root_hstring = HSTRING::from(&model.root);
+            let root_x_start = x_start + key_bg_width + 8.0;
             let root_rect = D2D_RECT_F {
-                left: blur_radius + 16.0 + metrics.selkey_widths.get(0).copied().unwrap_or(20.0) + 8.0,
-                top: blur_radius + 12.0,
-                right: metrics.width + blur_radius - 16.0,
-                bottom: metrics.height + blur_radius - 12.0,
+                left: root_x_start,
+                top: blur_radius + (metrics.height - key_bg_height) / 2.0,
+                right: metrics.width + blur_radius - 12.0,
+                bottom: blur_radius + (metrics.height + key_bg_height) / 2.0,
             };
             self.d2d_context.DrawText(
                 &root_hstring,
                 &text_format,
                 &root_rect,
-                &text_brush,
+                &root_text_brush,
                 D2D1_DRAW_TEXT_OPTIONS_NONE,
                 DWRITE_MEASURING_MODE_NATURAL,
             );

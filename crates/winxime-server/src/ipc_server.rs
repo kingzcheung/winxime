@@ -472,17 +472,24 @@ fn process_request(
 
         IpcCommand::ShowRoot => {
             tracing::info!("ShowRoot requested");
+            tracing::info!("  -> request.data type: {:?}", request.data);
             let letter = match &request.data {
                 winxime_ipc::IpcRequestData::ShowRoot(c) => Some(*c),
                 _ => None,
             };
             
+            tracing::info!("  -> letter: {:?}", letter);
+            
             match letter {
                 Some(c) => {
                     let config = XimeConfig::load();
-                    if let Some(root) = config.get_root_for_key(c) {
+                    tracing::info!("  -> config loaded, checking root for '{}'", c);
+                    let root = config.get_root_for_key(c);
+                    tracing::info!("  -> root result: {:?}", root);
+                    if let Some(root) = root {
                         tracing::info!("  -> showing root for '{}': {}", c, root);
                         let result = window.show_root(c, &root);
+                        tracing::info!("  -> show_root result: {:?}", result);
                         IpcResponse {
                             success: result.is_ok(),
                             session_id: request.session_id,
@@ -502,6 +509,7 @@ fn process_request(
                     }
                 }
                 None => {
+                    tracing::info!("  -> no letter provided");
                     IpcResponse {
                         success: false,
                         session_id: request.session_id,
