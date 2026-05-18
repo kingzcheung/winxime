@@ -10,15 +10,18 @@ use crate::config::UiConfig;
 use crate::context::SharedInputContext;
 use std::sync::{atomic::AtomicBool, Arc};
 use tracing::info;
-use windows::Win32::{
-    System::Recovery::{RegisterApplicationRestart, REGISTER_APPLICATION_RESTART_FLAGS},
-    UI::HiDpi::{SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2},
-};
+use windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext;
 use winxime_config::init_logging_with_console;
 use winxime_ipc::{check_server_running, IpcClient};
 use winxime_rime::RimeEngine;
 
 fn main() {
+    unsafe {
+        let _ = SetProcessDpiAwarenessContext(
+            windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+        );
+    }
+
     init_logging_with_console("server");
     info!("Server starting");
     let args: Vec<String> = std::env::args().collect();
@@ -47,11 +50,6 @@ fn main() {
         info!("Existing server stopped");
     }
 
-    unsafe {
-        let _ = RegisterApplicationRestart(None, REGISTER_APPLICATION_RESTART_FLAGS(0));
-        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
-
     let (shared_data_dir, user_data_dir) = get_data_dirs();
     info!(
         "Data dirs: shared={}, user={}",
@@ -63,12 +61,10 @@ fn main() {
         info!("Shared data not found at {:?}", shared_data_dir);
         std::process::exit(1);
     }
-    info!("Shared data dir exists");
 
     let _ = std::fs::create_dir_all(&user_data_dir);
     ensure_user_config_files(&user_data_dir);
 
-    info!("Initializing Rime engine...");
     let ui_config = UiConfig::load();
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
         Ok(mut e) => {
@@ -177,10 +173,11 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
         let engine = engine.clone();
         Arc::new(move |action: tray::TrayAction| match action {
             tray::TrayAction::ToggleAsciiMode => {
-                let mut eng = engine.lock().unwrap();
-                let current = eng.is_ascii_mode();
-                eng.set_option("ascii_mode", !current);
-                tray::update_tray_icon(!current);
+                if let Ok(mut eng) = engine.try_lock() {
+                    let current = eng.is_ascii_mode();
+                    eng.set_option("ascii_mode", !current);
+                    tray::update_tray_icon(!current);
+                }
             }
             tray::TrayAction::OpenSettings => {
                 let exe_path = std::env::current_exe().ok().unwrap_or_else(|| {

@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use windows::Win32::{
     Foundation::*,

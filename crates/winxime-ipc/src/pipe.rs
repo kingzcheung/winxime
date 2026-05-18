@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
 const MAX_RESPONSE_SIZE: usize = 1024 * 1024;
-const READ_TIMEOUT_MS: u64 = 5000;
+const READ_TIMEOUT_MS: u64 = 100;
 
 #[derive(Debug)]
 pub enum IpcError {
@@ -144,7 +144,7 @@ impl IpcClient {
                     }
                     response_buf.push(byte[0]);
                 }
-                Err(_) => break,
+                Err(e) => return Err(IpcError::ReadFailed(format!("{:?}", e))),
             }
         }
         Ok(())

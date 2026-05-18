@@ -60,7 +60,9 @@ impl RimeEngine {
         initialize(&mut traits).map_err(|e| RimeError::InitFailed(e.to_string()))?;
 
         log_to_file("Starting maintenance...");
-        if start_maintenance(true).is_ok() {
+        let need_maintenance = start_maintenance(false);
+        log_to_file(&format!("start_maintenance result: {:?}", need_maintenance));
+        if need_maintenance.is_ok() {
             log_to_file("Joining maintenance thread...");
             join_maintenance_thread();
             log_to_file("Maintenance complete");

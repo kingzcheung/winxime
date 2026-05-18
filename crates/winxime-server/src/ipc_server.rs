@@ -9,13 +9,13 @@ use std::sync::{
     Arc,
 };
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use widestring::u16cstr;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
 use winxime_rime::RimeEngine;
 
 const MAX_BUFFER_SIZE: usize = 1024 * 1024;
-const READ_TIMEOUT_MS: u64 = 10000;
+const READ_TIMEOUT_MS: u64 = 1000;
 
 pub fn run_ipc_server(
     engine: Arc<std::sync::Mutex<RimeEngine>>,
