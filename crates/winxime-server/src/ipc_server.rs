@@ -1,4 +1,4 @@
-use crate::config::XimeConfig;
+use winxime_config::XimeConfig;
 use crate::context::SharedInputContext;
 use crate::ui::CandidateWindow;
 use interprocess::os::windows::named_pipe::{pipe_mode::Bytes, PipeListenerOptions};
@@ -496,8 +496,11 @@ fn process_request(
             match letter {
                 Some(c) => {
                     let config = XimeConfig::load();
-                    tracing::info!("  -> config loaded, checking root for '{}'", c);
-                    let root = config.get_root_for_key(c);
+                    let schema_id = eng.get_status()
+                        .map(|s| s.schema_id)
+                        .unwrap_or_default();
+                    tracing::info!("  -> config loaded, schema_id={}, checking root for '{}'", schema_id, c);
+                    let root = config.get_root_for_key(&schema_id, c);
                     tracing::info!("  -> root result: {:?}", root);
                     if let Some(root) = root {
                         tracing::info!("  -> showing root for '{}': {}", c, root);
@@ -511,7 +514,7 @@ fn process_request(
                             schema_list: None,
                         }
                     } else {
-                        tracing::info!("  -> no root for key '{}'", c);
+                        tracing::info!("  -> no root for key '{}' in schema '{}'", c, schema_id);
                         IpcResponse {
                             success: false,
                             session_id: request.session_id,

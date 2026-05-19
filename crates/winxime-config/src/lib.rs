@@ -107,7 +107,7 @@ pub struct WubiRadicalsConfig {
     #[serde(default)]
     pub hotkeys: HotkeyConfig,
     #[serde(default)]
-    pub key_radicals: WubiRootConfig,
+    pub schema_radicals: SchemaRadicalsConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -199,23 +199,29 @@ where
 
 #[derive(Debug, Deserialize)]
 pub struct HotkeyConfig {
-    #[serde(default = "default_show_last_key")]
-    pub show_last_key: String,
+    #[serde(default = "default_show_key")]
+    pub show_key: String,
     #[serde(default)]
-    pub show_all_key: String,
+    pub show_all_keys: String,
 }
 
 impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
-            show_last_key: default_show_last_key(),
-            show_all_key: String::new(),
+            show_key: default_show_key(),
+            show_all_keys: String::new(),
         }
     }
 }
 
-fn default_show_last_key() -> String {
+fn default_show_key() -> String {
     "Ctrl".to_string()
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct SchemaRadicalsConfig {
+    #[serde(default, flatten)]
+    pub schemas: HashMap<String, WubiRootConfig>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -315,10 +321,12 @@ impl XimeConfig {
             Some(user) => Self {
                 wubi_radicals: WubiRadicalsConfig {
                     hotkeys: user.wubi_radicals.hotkeys,
-                    key_radicals: if user.wubi_radicals.key_radicals.g.is_empty() {
-                        system.wubi_radicals.key_radicals
-                    } else {
-                        user.wubi_radicals.key_radicals
+                    schema_radicals: SchemaRadicalsConfig {
+                        schemas: if user.wubi_radicals.schema_radicals.schemas.is_empty() {
+                            system.wubi_radicals.schema_radicals.schemas
+                        } else {
+                            user.wubi_radicals.schema_radicals.schemas
+                        },
                     },
                 },
                 style: user.style,
@@ -343,7 +351,7 @@ impl XimeConfig {
     }
 
     pub fn get_last_key_root_binding(&self) -> String {
-        self.wubi_radicals.hotkeys.show_last_key.clone()
+        self.wubi_radicals.hotkeys.show_key.clone()
     }
 
     pub fn get_primary_color(&self) -> (u8, u8, u8) {
@@ -359,33 +367,43 @@ impl XimeConfig {
         }
     }
 
-    pub fn get_root_for_key(&self, key: char) -> Option<String> {
+    pub fn get_primary_color_u32(&self) -> u32 {
+        let scheme_name = &self.style.color_scheme;
+        if let Some(scheme) = self.color_schemes.get(scheme_name) {
+            scheme.primary_color
+        } else {
+            0x8F73E2
+        }
+    }
+
+    pub fn get_root_for_key(&self, schema_id: &str, key: char) -> Option<String> {
+        let radicals = self.wubi_radicals.schema_radicals.schemas.get(schema_id)?;
         let root = match key.to_lowercase().next()? {
-            'g' => &self.wubi_radicals.key_radicals.g,
-            'f' => &self.wubi_radicals.key_radicals.f,
-            'd' => &self.wubi_radicals.key_radicals.d,
-            's' => &self.wubi_radicals.key_radicals.s,
-            'a' => &self.wubi_radicals.key_radicals.a,
-            'h' => &self.wubi_radicals.key_radicals.h,
-            'j' => &self.wubi_radicals.key_radicals.j,
-            'k' => &self.wubi_radicals.key_radicals.k,
-            'l' => &self.wubi_radicals.key_radicals.l,
-            'm' => &self.wubi_radicals.key_radicals.m,
-            't' => &self.wubi_radicals.key_radicals.t,
-            'r' => &self.wubi_radicals.key_radicals.r,
-            'e' => &self.wubi_radicals.key_radicals.e,
-            'w' => &self.wubi_radicals.key_radicals.w,
-            'q' => &self.wubi_radicals.key_radicals.q,
-            'y' => &self.wubi_radicals.key_radicals.y,
-            'u' => &self.wubi_radicals.key_radicals.u,
-            'i' => &self.wubi_radicals.key_radicals.i,
-            'o' => &self.wubi_radicals.key_radicals.o,
-            'p' => &self.wubi_radicals.key_radicals.p,
-            'n' => &self.wubi_radicals.key_radicals.n,
-            'b' => &self.wubi_radicals.key_radicals.b,
-            'v' => &self.wubi_radicals.key_radicals.v,
-            'c' => &self.wubi_radicals.key_radicals.c,
-            'x' => &self.wubi_radicals.key_radicals.x,
+            'g' => &radicals.g,
+            'f' => &radicals.f,
+            'd' => &radicals.d,
+            's' => &radicals.s,
+            'a' => &radicals.a,
+            'h' => &radicals.h,
+            'j' => &radicals.j,
+            'k' => &radicals.k,
+            'l' => &radicals.l,
+            'm' => &radicals.m,
+            't' => &radicals.t,
+            'r' => &radicals.r,
+            'e' => &radicals.e,
+            'w' => &radicals.w,
+            'q' => &radicals.q,
+            'y' => &radicals.y,
+            'u' => &radicals.u,
+            'i' => &radicals.i,
+            'o' => &radicals.o,
+            'p' => &radicals.p,
+            'n' => &radicals.n,
+            'b' => &radicals.b,
+            'v' => &radicals.v,
+            'c' => &radicals.c,
+            'x' => &radicals.x,
             _ => return None,
         };
         if root.is_empty() {
