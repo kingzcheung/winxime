@@ -64,7 +64,7 @@ jobs:
           if exist target\release\config (
             echo config already exists
           ) else (
-            xcopy /E /I /Y config target\release\config
+            xcopy /E /I /Y rime-wubi target\release\config
           )
 
       - uses: actions/upload-artifact@v4
