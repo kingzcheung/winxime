@@ -1,4 +1,3 @@
-use winxime_config::XimeConfig;
 use crate::context::SharedInputContext;
 use crate::ui::CandidateWindow;
 use interprocess::os::windows::named_pipe::{pipe_mode::Bytes, PipeListenerOptions};
@@ -11,6 +10,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tracing::{debug, info};
 use widestring::u16cstr;
+use winxime_config::XimeConfig;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
 use winxime_rime::RimeEngine;
 
@@ -496,10 +496,12 @@ fn process_request(
             match letter {
                 Some(c) => {
                     let config = XimeConfig::load();
-                    let schema_id = eng.get_status()
-                        .map(|s| s.schema_id)
-                        .unwrap_or_default();
-                    tracing::info!("  -> config loaded, schema_id={}, checking root for '{}'", schema_id, c);
+                    let schema_id = eng.get_status().map(|s| s.schema_id).unwrap_or_default();
+                    tracing::info!(
+                        "  -> config loaded, schema_id={}, checking root for '{}'",
+                        schema_id,
+                        c
+                    );
                     let root = config.get_root_for_key(&schema_id, c);
                     tracing::info!("  -> root result: {:?}", root);
                     if let Some(root) = root {

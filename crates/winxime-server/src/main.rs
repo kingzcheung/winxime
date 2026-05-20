@@ -6,12 +6,12 @@ mod ipc_server;
 mod tray;
 mod ui;
 
-use crate::config::UiConfig;
+use crate::config::get_colors;
 use crate::context::SharedInputContext;
 use std::sync::{atomic::AtomicBool, Arc};
 use tracing::info;
 use windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext;
-use winxime_config::init_logging_with_console;
+use winxime_config::{init_logging_with_console, XimeConfig};
 use winxime_ipc::{check_server_running, IpcClient};
 use winxime_rime::RimeEngine;
 
@@ -65,13 +65,13 @@ fn main() {
     let _ = std::fs::create_dir_all(&user_data_dir);
     ensure_user_config_files(&user_data_dir);
 
-    let ui_config = UiConfig::load();
+    let config = XimeConfig::load();
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
         Ok(mut e) => {
-            e.set_option("_horizontal", ui_config.horizontal);
+            e.set_option("_horizontal", config.style.horizontal);
             info!(
                 "Rime initialized successfully with horizontal={}",
-                ui_config.horizontal
+                config.style.horizontal
             );
             Arc::new(std::sync::Mutex::new(e))
         }

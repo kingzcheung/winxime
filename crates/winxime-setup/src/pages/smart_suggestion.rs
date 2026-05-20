@@ -2,6 +2,9 @@ use crate::components::{SettingsControl, SettingsGroup, SettingsItem, SettingsPa
 use crate::pages::SettingsApp;
 use crate::state::SettingsState;
 use gpui::*;
+use std::io::Read;
+use winxime_config::XimeConfig;
+use winxime_predict::check_model_exists;
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
     let (
@@ -11,6 +14,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
         record_user_frequency,
         auto_adjust_frequency,
         learning_threshold,
+        model_downloaded,
+        downloading,
+        model_name,
         colors,
     ) = cx.read_entity(&settings, |state, _| {
         (
@@ -20,6 +26,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
             state.smart_suggestion.record_user_frequency,
             state.smart_suggestion.auto_adjust_frequency,
             state.smart_suggestion.learning_threshold,
+            check_model_exists(Some(&state.smart_suggestion.model_name)),
+            state.smart_suggestion.downloading,
+            state.smart_suggestion.model_name.clone(),
             state.colors(),
         )
     });
@@ -30,8 +39,48 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
     let s4 = settings.clone();
     let s5 = settings.clone();
     let s6 = settings.clone();
+    let s7 = settings.downgrade();
+
+    let model_status = if downloading {
+        "下载中..."
+    } else if model_downloaded {
+        "已下载"
+    } else {
+        "下载模型"
+    };
 
     SettingsPage::new("智能联想", colors.clone())
+        .group(SettingsGroup::new("模型管理", colors.clone()).items(vec![
+                SettingsItem::new(
+                    "下载模型",
+                    SettingsControl::button_with(model_status, move |_window, cx| {
+                        if downloading {
+                            return;
+                        }
+                        let entity = s7.clone();
+                        
+                        entity.update(cx, |s: &mut SettingsState, cx| {
+                            s.smart_suggestion.downloading = true;
+                            cx.notify();
+                        });
+                        
+                        cx.spawn(async move |cx| {
+                            let result = download_model_async();
+                            
+                            let _ = cx.update(|cx| {
+                                entity.update(cx, |s: &mut SettingsState, cx| {
+                                    s.smart_suggestion.downloading = false;
+                                    if result.is_ok() {
+                                        s.smart_suggestion.model_downloaded = true;
+                                    }
+                                    cx.notify();
+                                });
+                            });
+                        }).detach();
+                    }),
+                )
+                .description("智能联想模型（vocab.json + model.onnx）"),
+            ]))
         .group(SettingsGroup::new("联想功能", colors.clone()).items(vec![
                     SettingsItem::new("启用智能联想", 
                         SettingsControl::switch_with(enabled,
@@ -115,4 +164,39 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                     ).description("输入次数达到阈值后开始调整词序"),
                 ]))
         .into_any_element()
+}
+
+fn download_model_async() -> Result<(), String> {
+    let config = XimeConfig::load();
+    let model_name = config.smart_suggestion.model.name.clone();
+    let model_dir = winxime_predict::get_model_dir(Some(&model_name));
+    
+    if !model_dir.exists() {
+        std::fs::create_dir_all(&model_dir).map_err(|e| format!("创建模型目录失败: {}", e))?;
+    }
+
+    let files: Vec<_> = config.smart_suggestion.model.files.iter()
+        .filter(|f| !f.url.is_empty() && !f.filename.is_empty())
+        .collect();
+
+    for file in files {
+        println!("正在下载 {} from {}...", file.filename, file.url);
+        
+        let response = ureq::get(&file.url)
+            .call()
+            .map_err(|e| format!("下载 {} 失败: {}", file.filename, e))?;
+
+        let mut content = Vec::new();
+        response
+            .into_reader()
+            .read_to_end(&mut content)
+            .map_err(|e| format!("读取 {} 失败: {}", file.filename, e))?;
+
+        let path = model_dir.join(&file.filename);
+        std::fs::write(&path, &content).map_err(|e| format!("保存 {} 失败: {}", file.filename, e))?;
+
+        println!("{} 下载完成", file.filename);
+    }
+
+    Ok(())
 }

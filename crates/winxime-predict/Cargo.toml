@@ -1,0 +1,21 @@
+[package]
+name = "winxime-predict"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license = "GPL-3.0"
+repository.workspace = true
+
+[dependencies]
+ort = { version = "2.0.0-rc.12", default-features = false, features = ["download-binaries", "tls-rustls", "tracing", "std"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+ureq = "2.9"
+
+[lib]
+name = "winxime_predict"
+path = "src/lib.rs"

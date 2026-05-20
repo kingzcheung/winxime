@@ -1,9 +1,15 @@
-use serde::Deserialize;
+mod smart_suggestion;
+
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+pub use smart_suggestion::{
+    SmartSuggestionConfig, SmartSuggestionModelConfig, SmartSuggestionModelFile,
+};
 
 static LOG_GUARD: Mutex<Option<tracing_appender::non_blocking::WorkerGuard>> = Mutex::new(None);
 
@@ -92,7 +98,7 @@ pub fn log_dir() -> PathBuf {
     get_log_dir()
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct XimeConfig {
     #[serde(default)]
     pub wubi_radicals: WubiRadicalsConfig,
@@ -100,9 +106,11 @@ pub struct XimeConfig {
     pub style: StyleConfig,
     #[serde(default)]
     pub color_schemes: HashMap<String, ColorScheme>,
+    #[serde(default)]
+    pub smart_suggestion: SmartSuggestionConfig,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct WubiRadicalsConfig {
     #[serde(default)]
     pub hotkeys: HotkeyConfig,
@@ -110,7 +118,7 @@ pub struct WubiRadicalsConfig {
     pub schema_radicals: SchemaRadicalsConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[allow(dead_code)]
 pub struct StyleConfig {
     #[serde(default)]
@@ -159,16 +167,26 @@ fn default_color_scheme() -> String {
     "lavender_purple".to_string()
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[allow(dead_code)]
 pub struct ColorScheme {
     #[serde(default)]
     pub name: String,
     #[serde(
         deserialize_with = "deserialize_hex_color",
+        serialize_with = "serialize_hex_color",
         default = "default_primary_color"
     )]
     pub primary_color: u32,
+}
+
+impl Default for ColorScheme {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            primary_color: default_primary_color(),
+        }
+    }
 }
 
 fn default_primary_color() -> u32 {
@@ -179,25 +197,50 @@ fn deserialize_hex_color<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let value: serde_yaml::Value = serde::Deserialize::deserialize(deserializer)?;
-    match value {
-        serde_yaml::Value::Number(n) => n.as_u64().map(|num| num as u32).or_else(|| Some(0x8F73E2)),
-        serde_yaml::Value::String(s) => {
+    use serde::de::{self, Visitor};
+
+    struct ColorVisitor;
+
+    impl<'de> Visitor<'de> for ColorVisitor {
+        type Value = u32;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a color value (hex string or number)")
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(v as u32)
+        }
+
+        fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
             let s = s.trim();
             if s.starts_with("0x") || s.starts_with("0X") {
-                u32::from_str_radix(&s[2..], 16).ok()
+                u32::from_str_radix(&s[2..], 16).map_err(de::Error::custom)
             } else if s.starts_with('#') {
-                u32::from_str_radix(&s[1..], 16).ok()
+                u32::from_str_radix(&s[1..], 16).map_err(de::Error::custom)
             } else {
-                s.parse::<u32>().ok()
+                s.parse::<u32>().map_err(de::Error::custom)
             }
         }
-        _ => Some(0x8F73E2),
     }
-    .ok_or_else(|| serde::de::Error::custom("Invalid color"))
+
+    deserializer.deserialize_any(ColorVisitor)
 }
 
-#[derive(Debug, Deserialize)]
+fn serialize_hex_color<S>(value: &u32, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_u32(*value)
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct HotkeyConfig {
     #[serde(default = "default_show_key")]
     pub show_key: String,
@@ -218,13 +261,13 @@ fn default_show_key() -> String {
     "Ctrl".to_string()
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct SchemaRadicalsConfig {
     #[serde(default, flatten)]
     pub schemas: HashMap<String, WubiRootConfig>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct WubiRootConfig {
     #[serde(default)]
     pub g: String,
@@ -285,6 +328,44 @@ impl XimeConfig {
         Self::merge_configs(system_config, user_config)
     }
 
+    pub fn save(&self) -> Result<(), String> {
+        let config_path = Self::user_config_path();
+
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create config dir: {}", e))?;
+        }
+
+        let content = serde_saphyr::to_string(self)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+        fs::write(&config_path, content).map_err(|e| format!("Failed to write config: {}", e))?;
+
+        Ok(())
+    }
+
+    pub fn save_smart_suggestion(&self) -> Result<(), String> {
+        let config_path = Self::user_config_path();
+
+        let existing: XimeConfig = if config_path.exists() {
+            fs::read_to_string(&config_path)
+                .ok()
+                .and_then(|c| serde_saphyr::from_str(&c).ok())
+                .unwrap_or_default()
+        } else {
+            XimeConfig::default()
+        };
+
+        let merged = XimeConfig {
+            wubi_radicals: existing.wubi_radicals,
+            style: existing.style,
+            color_schemes: existing.color_schemes,
+            smart_suggestion: self.smart_suggestion.clone(),
+        };
+
+        merged.save()
+    }
+
     fn load_system_config() -> Self {
         let exe_path = std::env::current_exe().unwrap_or_default();
         let system_path = exe_path
@@ -293,7 +374,7 @@ impl XimeConfig {
             .unwrap_or_default();
         if system_path.exists() {
             if let Ok(content) = fs::read_to_string(&system_path) {
-                if let Ok(config) = serde_yaml::from_str::<XimeConfig>(&content) {
+                if let Ok(config) = serde_saphyr::from_str::<XimeConfig>(&content) {
                     return config;
                 }
             }
@@ -303,14 +384,14 @@ impl XimeConfig {
 
     fn builtin_default() -> Self {
         const DEFAULT_CONFIG: &[u8] = include_bytes!("../resources/xime.yaml");
-        serde_yaml::from_slice(DEFAULT_CONFIG).unwrap_or_default()
+        serde_saphyr::from_slice(DEFAULT_CONFIG).unwrap_or_default()
     }
 
     fn load_user_config() -> Option<Self> {
         let config_path = Self::user_config_path();
         if config_path.exists() {
             if let Ok(content) = fs::read_to_string(&config_path) {
-                return serde_yaml::from_str::<XimeConfig>(&content).ok();
+                return serde_saphyr::from_str::<XimeConfig>(&content).ok();
             }
         }
         None
@@ -334,6 +415,32 @@ impl XimeConfig {
                     system.color_schemes
                 } else {
                     user.color_schemes
+                },
+                smart_suggestion: SmartSuggestionConfig {
+                    enabled: user.smart_suggestion.enabled,
+                    suggestion_count: user.smart_suggestion.suggestion_count,
+                    prefer_common_words: user.smart_suggestion.prefer_common_words,
+                    record_user_frequency: user.smart_suggestion.record_user_frequency,
+                    auto_adjust_frequency: user.smart_suggestion.auto_adjust_frequency,
+                    learning_threshold: user.smart_suggestion.learning_threshold,
+                    model: SmartSuggestionModelConfig {
+                        provider: if user.smart_suggestion.model.provider.is_empty() {
+                            system.smart_suggestion.model.provider
+                        } else {
+                            user.smart_suggestion.model.provider
+                        },
+                        name: if user.smart_suggestion.model.name.is_empty() {
+                            system.smart_suggestion.model.name
+                        } else {
+                            user.smart_suggestion.model.name
+                        },
+                        auto_download: user.smart_suggestion.model.auto_download,
+                        files: if user.smart_suggestion.model.files.is_empty() {
+                            system.smart_suggestion.model.files
+                        } else {
+                            user.smart_suggestion.model.files
+                        },
+                    },
                 },
             },
             None => system,

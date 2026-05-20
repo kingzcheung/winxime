@@ -30,11 +30,8 @@ fn get_page_icon(index: usize) -> &'static str {
     match index {
         0 => "icons/keyboard.svg",
         1 => "icons/palette.svg",
-        2 => "icons/clipboard.svg",
-        3 => "icons/command.svg",
-        4 => "icons/thinking.svg",
-        5 => "icons/word.svg",
-        6 => "icons/about.svg",
+        2 => "icons/thinking.svg",
+        3 => "icons/about.svg",
         _ => "icons/keyboard.svg",
     }
 }
@@ -42,8 +39,7 @@ fn get_page_icon(index: usize) -> &'static str {
 impl Render for SettingsApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_background_appearance(WindowBackgroundAppearance::Blurred);
-        // "剪切板", "快捷键", "智能联想", "词库管理",
-        let pages = ["输入方案", "外观", "关于"];
+        let pages = ["输入方案", "外观", "智能联想", "关于"];
         let current = self.current_page;
         let settings = self.settings.clone();
         let settings_for_title = settings.clone();
@@ -51,6 +47,8 @@ impl Render for SettingsApp {
 
         let sidebar = div()
             .w(px(213.0))
+            .min_w(px(213.0))
+            .max_w(px(213.0))
             .h_full()
             .bg(colors.sidebar_bg)
             .flex()
@@ -105,7 +103,8 @@ impl Render for SettingsApp {
         let content = match self.current_page {
             0 => input_schema::render(settings, cx),
             1 => appearance::render(settings, cx),
-            2 => about::render(settings, cx),
+            2 => smart_suggestion::render(settings, cx),
+            3 => about::render(settings, cx),
             _ => input_schema::render(settings, cx),
         };
 
@@ -126,6 +125,7 @@ impl Render for SettingsApp {
                         div()
                             .id("content-scroll")
                             .flex_1()
+                            .min_w(px(400.0))
                             .overflow_y_scroll()
                             .bg(colors.background)
                             .child(content),

@@ -581,51 +581,61 @@ impl RimeConfigManager {
 
     fn set_value(&self, key: &str, value: String) -> Result<(), String> {
         let xime_custom = self.user_dir.join("xime.custom.yaml");
-
-        let existing_content = if xime_custom.exists() {
-            std::fs::read_to_string(&xime_custom).ok()
-        } else {
-            None
-        };
-
-        let mut lines: Vec<String> = existing_content
-            .map(|c| c.lines().map(|l| l.to_string()).collect())
-            .unwrap_or_else(|| {
-                vec![
-                    "customization:".to_string(),
-                    "  distribution_code_name: Xime".to_string(),
-                    "  distribution_version: 1.0".to_string(),
-                    "".to_string(),
-                    "patch:".to_string(),
-                ]
-            });
-
         let key_parts: Vec<&str> = key.split('/').collect();
-        let formatted_key = if key_parts.len() > 1 {
-            format!("{}{}", "  ".repeat(key_parts.len()), key_parts.join("_"))
+
+        let mut yaml: serde_json::Map<String, serde_json::Value> = if xime_custom.exists() {
+            let content = std::fs::read_to_string(&xime_custom)
+                .map_err(|e| format!("Failed to read xime.custom.yaml: {}", e))?;
+            let doc: serde_json::Value = serde_saphyr::from_str(&content)
+                .map_err(|e| format!("Failed to parse xime.custom.yaml: {}", e))?;
+            doc.as_object().map(|m| m.clone()).unwrap_or_default()
         } else {
-            format!("  {}", key)
+            let mut m = serde_json::Map::new();
+            m.insert(
+                "customization".to_string(),
+                serde_json::Value::Object(serde_json::Map::new()),
+            );
+            let mut customization = m
+                .get("customization")
+                .and_then(|v| v.as_object())
+                .cloned()
+                .unwrap_or_default();
+            customization.insert(
+                "distribution_code_name".to_string(),
+                serde_json::Value::String("Xime".to_string()),
+            );
+            customization.insert(
+                "distribution_version".to_string(),
+                serde_json::Value::String("1.0".to_string()),
+            );
+            m.insert(
+                "customization".to_string(),
+                serde_json::Value::Object(customization),
+            );
+            m
         };
 
-        let new_line = format!("{}: {}", formatted_key, value);
+        let patch_key = "patch".to_string();
+        let patch_mapping = yaml
+            .get(&patch_key)
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_else(|| serde_json::Map::new());
 
-        let patch_idx = lines.iter().position(|l| l.trim() == "patch:");
-        if let Some(idx) = patch_idx {
-            let key_prefix = format!("{}:", formatted_key);
-            let existing_idx = lines
-                .iter()
-                .skip(idx + 1)
-                .position(|l| l.starts_with(&key_prefix));
+        let mut final_patch = patch_mapping.clone();
+        set_nested_value(
+            &mut final_patch,
+            &key_parts,
+            serde_json::Value::String(value),
+        );
 
-            if let Some(e_idx) = existing_idx {
-                lines[idx + 1 + e_idx] = new_line;
-            } else {
-                lines.insert(idx + 1, new_line);
-            }
-        }
+        yaml.insert(patch_key, serde_json::Value::Object(final_patch));
 
-        std::fs::write(&xime_custom, lines.join("\n") + "\n")
-            .map_err(|e| format!("Failed to write: {}", e))?;
+        let doc = serde_json::Value::Object(yaml);
+        let content =
+            serde_saphyr::to_string(&doc).map_err(|e| format!("Failed to serialize: {}", e))?;
+
+        std::fs::write(&xime_custom, content).map_err(|e| format!("Failed to write: {}", e))?;
 
         Ok(())
     }
@@ -635,10 +645,35 @@ impl RimeConfigManager {
     }
 }
 
+fn set_nested_value(
+    mapping: &mut serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+    value: serde_json::Value,
+) {
+    if keys.is_empty() {
+        return;
+    }
+
+    let key = keys[0].to_string();
+
+    if keys.len() == 1 {
+        mapping.insert(key, value);
+    } else {
+        let mut nested = mapping
+            .get(&key)
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_else(|| serde_json::Map::new());
+
+        set_nested_value(&mut nested, &keys[1..], value);
+        mapping.insert(key, serde_json::Value::Object(nested));
+    }
+}
+
 fn get_yaml_value(content: &str, key: &str) -> Option<String> {
     let key_parts: Vec<&str> = key.split('/').collect();
 
-    let yaml: serde_yaml::Value = serde_yaml::from_str(content).ok()?;
+    let yaml: serde_json::Value = serde_saphyr::from_str(content).ok()?;
     let mut current = &yaml;
 
     for part in &key_parts {
@@ -646,9 +681,9 @@ fn get_yaml_value(content: &str, key: &str) -> Option<String> {
     }
 
     match current {
-        serde_yaml::Value::String(s) => Some(s.clone()),
-        serde_yaml::Value::Number(n) => Some(n.to_string()),
-        serde_yaml::Value::Bool(b) => Some(b.to_string()),
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
         _ => None,
     }
 }
@@ -691,30 +726,40 @@ fn deserialize_hex_color<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let value: serde_yaml::Value = Deserialize::deserialize(deserializer)?;
-    match value {
-        serde_yaml::Value::Number(n) => {
-            if let Some(num) = n.as_u64() {
-                Ok(num as u32)
-            } else {
-                Ok(0x8F73E2)
-            }
+    use serde::de::{self, Visitor};
+
+    struct ColorVisitor;
+
+    impl<'de> Visitor<'de> for ColorVisitor {
+        type Value = u32;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a color value (hex string or number)")
         }
-        serde_yaml::Value::String(s) => {
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(v as u32)
+        }
+
+        fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
             let s = s.trim();
             if s.starts_with("0x") || s.starts_with("0X") {
-                u32::from_str_radix(&s[2..], 16)
-                    .map_err(|_| serde::de::Error::custom("Invalid hex color"))
+                u32::from_str_radix(&s[2..], 16).map_err(de::Error::custom)
             } else if s.starts_with('#') {
-                u32::from_str_radix(&s[1..], 16)
-                    .map_err(|_| serde::de::Error::custom("Invalid hex color"))
+                u32::from_str_radix(&s[1..], 16).map_err(de::Error::custom)
             } else {
-                s.parse::<u32>()
-                    .map_err(|_| serde::de::Error::custom("Invalid color number"))
+                s.parse::<u32>().map_err(de::Error::custom)
             }
         }
-        _ => Ok(0x8F73E2),
     }
+
+    deserializer.deserialize_any(ColorVisitor)
 }
 
 fn serialize_hex_color<S>(value: &u32, serializer: S) -> Result<S::Ok, S::Error>
@@ -749,14 +794,14 @@ impl XimeStyleManager {
         if base_config_path.exists() {
             let content = std::fs::read_to_string(&base_config_path)
                 .map_err(|e| format!("Failed to read xime.yaml: {}", e))?;
-            config = serde_yaml::from_str(&content)
+            config = serde_saphyr::from_str(&content)
                 .map_err(|e| format!("Failed to parse xime.yaml: {}", e))?;
         }
 
         if custom_config_path.exists() {
             let content = std::fs::read_to_string(&custom_config_path)
                 .map_err(|e| format!("Failed to read xime.custom.yaml: {}", e))?;
-            let custom_config: XimeConfigFile = serde_yaml::from_str(&content)
+            let custom_config: XimeConfigFile = serde_saphyr::from_str(&content)
                 .map_err(|e| format!("Failed to parse xime.custom.yaml: {}", e))?;
 
             if !custom_config.style.color_scheme.is_empty() {
@@ -791,7 +836,7 @@ impl XimeStyleManager {
         }
 
         let content = std::fs::read_to_string(&system_path).ok()?;
-        let config: XimeConfigFile = serde_yaml::from_str(&content).ok()?;
+        let config: XimeConfigFile = serde_saphyr::from_str(&content).ok()?;
 
         Some(XimeConfigFile {
             color_schemes: config.color_schemes,
@@ -842,7 +887,7 @@ impl XimeStyleManager {
             color_schemes: HashMap::new(),
         };
 
-        let content = serde_yaml::to_string(&custom_config)
+        let content = serde_saphyr::to_string(&custom_config)
             .map_err(|e| format!("Failed to serialize xime.custom.yaml: {}", e))?;
 
         std::fs::write(&self.custom_config_path, content)

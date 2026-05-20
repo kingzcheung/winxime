@@ -4,7 +4,9 @@ use crate::rime_config::{
 };
 use crate::theme::{SystemTheme, ThemeColors};
 use gpui::*;
+use winxime_config::{SmartSuggestionConfig, XimeConfig};
 use winxime_ipc::IpcClient;
+use winxime_predict::check_model_exists;
 
 pub struct SettingsState {
     pub appearance: AppearanceState,
@@ -23,7 +25,7 @@ impl SettingsState {
             appearance: AppearanceState::default(),
             input_schema: InputSchemaState::default(),
             clipboard: ClipboardState::default(),
-            smart_suggestion: SmartSuggestionState::default(),
+            smart_suggestion: Self::load_smart_suggestion_config(),
             system_theme: SystemTheme::detect(),
             deploy_message: None,
             deploy_message_time: None,
@@ -31,6 +33,24 @@ impl SettingsState {
         };
         state.load_color_schemes(cx);
         state
+    }
+
+    fn load_smart_suggestion_config() -> SmartSuggestionState {
+        let config = XimeConfig::load();
+        let model_name = config.smart_suggestion.model.name.clone();
+
+        SmartSuggestionState {
+            enabled: config.smart_suggestion.enabled,
+            suggestion_count: config.smart_suggestion.suggestion_count,
+            prefer_common_words: config.smart_suggestion.prefer_common_words,
+            record_user_frequency: config.smart_suggestion.record_user_frequency,
+            auto_adjust_frequency: config.smart_suggestion.auto_adjust_frequency,
+            learning_threshold: config.smart_suggestion.learning_threshold,
+            auto_download: config.smart_suggestion.model.auto_download,
+            model_name: model_name.clone(),
+            model_downloaded: check_model_exists(Some(&model_name)),
+            downloading: false,
+        }
     }
 
     pub fn load_schemas(&mut self, cx: &mut Context<Self>) {
@@ -250,33 +270,29 @@ impl SettingsState {
     }
 
     pub fn save_smart_suggestion(&self) -> Result<(), String> {
-        let manager = RimeConfigManager::new()?;
+        let config = XimeConfig::load();
 
-        manager.set_bool("smart_suggestion/enabled", self.smart_suggestion.enabled)?;
-        manager.set_int(
-            "smart_suggestion/suggestion_count",
-            self.smart_suggestion.suggestion_count,
-        )?;
-        manager.set_bool(
-            "smart_suggestion/prefer_common_words",
-            self.smart_suggestion.prefer_common_words,
-        )?;
-        manager.set_bool(
-            "smart_suggestion/record_user_frequency",
-            self.smart_suggestion.record_user_frequency,
-        )?;
-        manager.set_bool(
-            "smart_suggestion/auto_adjust_frequency",
-            self.smart_suggestion.auto_adjust_frequency,
-        )?;
-        manager.set_int(
-            "smart_suggestion/learning_threshold",
-            self.smart_suggestion.learning_threshold,
-        )?;
+        let updated = XimeConfig {
+            wubi_radicals: config.wubi_radicals,
+            style: config.style,
+            color_schemes: config.color_schemes,
+            smart_suggestion: SmartSuggestionConfig {
+                enabled: self.smart_suggestion.enabled,
+                suggestion_count: self.smart_suggestion.suggestion_count,
+                prefer_common_words: self.smart_suggestion.prefer_common_words,
+                record_user_frequency: self.smart_suggestion.record_user_frequency,
+                auto_adjust_frequency: self.smart_suggestion.auto_adjust_frequency,
+                learning_threshold: self.smart_suggestion.learning_threshold,
+                model: winxime_config::SmartSuggestionModelConfig {
+                    provider: "modelscope".to_string(),
+                    name: self.smart_suggestion.model_name.clone(),
+                    auto_download: self.smart_suggestion.auto_download,
+                    files: vec![],
+                },
+            },
+        };
 
-        manager.save()?;
-
-        Ok(())
+        updated.save()
     }
 
     pub fn deploy(&mut self) -> Result<(), String> {
@@ -330,7 +346,7 @@ pub struct ClipboardState {
     pub retention_days: i32,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct SmartSuggestionState {
     pub enabled: bool,
     pub suggestion_count: i32,
@@ -338,4 +354,25 @@ pub struct SmartSuggestionState {
     pub record_user_frequency: bool,
     pub auto_adjust_frequency: bool,
     pub learning_threshold: i32,
+    pub auto_download: bool,
+    pub model_name: String,
+    pub model_downloaded: bool,
+    pub downloading: bool,
+}
+
+impl Default for SmartSuggestionState {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            suggestion_count: 5,
+            prefer_common_words: true,
+            record_user_frequency: true,
+            auto_adjust_frequency: true,
+            learning_threshold: 3,
+            auto_download: true,
+            model_name: "predictive-text-small".to_string(),
+            model_downloaded: false,
+            downloading: false,
+        }
+    }
 }

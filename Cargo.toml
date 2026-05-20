@@ -9,6 +9,7 @@ members = [
     "crates/winxime-config",
     "crates/winxime-setup",
     "crates/winxime-tsf-register",
+    "crates/winxime-predict",
 ]
 
 [workspace.package]
@@ -25,9 +26,12 @@ winxime-rime = { path = "crates/winxime-rime" }
 winxime-ipc = { path = "crates/winxime-ipc" }
 winxime-config = { path = "crates/winxime-config" }
 winxime-tsf-register = { path = "crates/winxime-tsf-register" }
+winxime-predict = { path = "crates/winxime-predict" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
+serde-saphyr = "0.0.26"
+thiserror = "2"
+tracing = "0.1"
 
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",

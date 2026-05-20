@@ -52,7 +52,8 @@ use windows::Win32::{
 use windows_core::{w, Interface, HSTRING, PCWSTR};
 use windows_numerics::Vector2;
 
-use crate::config::UiConfig;
+use crate::config::{get_colors, hex_to_rgb};
+use winxime_config::XimeConfig;
 use winxime_ipc::Context;
 
 pub const WM_SHOW_CANDIDATE: u32 = WM_USER + 1;
@@ -117,14 +118,19 @@ pub struct RootModel {
 
 impl From<(char, String)> for RootModel {
     fn from((letter, root): (char, String)) -> Self {
-        let config = UiConfig::load();
-        let (_, _, _, selkey_color, _, _, _) = config.get_colors();
+        let config = XimeConfig::load();
+        let font_family = if config.style.font_family.is_empty() {
+            HSTRING::from("Microsoft YaHei UI")
+        } else {
+            HSTRING::from(config.style.font_family.as_str())
+        };
+        let (_, _, _, selkey_color, _, _, _) = get_colors(config.get_primary_color_u32());
 
         Self {
             letter,
             root,
-            font_family: config.font_family,
-            font_size: config.font_size,
+            font_family,
+            font_size: config.style.font_size,
             primary_color: selkey_color,
             bg_color: D2D1_COLOR_F {
                 r: 0.98,
@@ -144,7 +150,12 @@ impl From<(char, String)> for RootModel {
 
 impl From<&Context> for CandidateModel {
     fn from(ctx: &Context) -> Self {
-        let config = UiConfig::load();
+        let config = XimeConfig::load();
+        let font_family = if config.style.font_family.is_empty() {
+            HSTRING::from("Microsoft YaHei UI")
+        } else {
+            HSTRING::from(config.style.font_family.as_str())
+        };
         let (
             bg_color,
             border_color,
@@ -153,15 +164,15 @@ impl From<&Context> for CandidateModel {
             comment_color,
             highlight_bg_color,
             highlight_fg_color,
-        ) = config.get_colors();
+        ) = get_colors(config.get_primary_color_u32());
 
-        let cand_per_row = if config.horizontal {
-            config.candidate_count
+        let cand_per_row = if config.style.horizontal {
+            config.style.candidate_count as u32
         } else {
             1
         };
 
-        let comments: Vec<String> = if config.show_code_hint {
+        let comments: Vec<String> = if config.style.show_code_hint {
             ctx.candidates
                 .comments
                 .iter()
@@ -183,10 +194,14 @@ impl From<&Context> for CandidateModel {
             total_pages: ctx.candidates.total_pages,
             current_page: ctx.candidates.current_page + 1,
             current_sel: ctx.candidates.highlighted as usize,
-            font_family: config.font_family,
-            font_size: config.font_size,
+            font_family: if config.style.font_family.is_empty() {
+                HSTRING::from("Microsoft YaHei UI")
+            } else {
+                HSTRING::from(config.style.font_family.as_str())
+            },
+            font_size: config.style.font_size,
             cand_per_row,
-            horizontal: config.horizontal,
+            horizontal: config.style.horizontal,
             use_cursor: true,
             selkey_color,
             fg_color,
