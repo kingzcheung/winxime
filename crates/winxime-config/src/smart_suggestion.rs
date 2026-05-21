@@ -80,7 +80,7 @@ pub struct SmartSuggestionModelFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{StyleConfig, ColorScheme, HotkeyConfig};
+    use crate::{ColorScheme, HotkeyConfig, StyleConfig};
 
     #[test]
     fn test_smart_suggestion_defaults() {
@@ -117,7 +117,7 @@ model:
         assert_eq!(config.model.files[0].filename, "file1.bin");
         assert_eq!(config.model.files[1].filename, "file2.bin");
     }
-    
+
     #[test]
     fn test_builtin_config() {
         const DEFAULT_CONFIG: &[u8] = include_bytes!("../resources/xime.yaml");
@@ -128,7 +128,7 @@ model:
         assert_eq!(config.smart_suggestion.model.name, "predictive-text-small");
         assert_eq!(config.smart_suggestion.model.files.len(), 3);
     }
-    
+
     #[test]
     fn test_style_config_defaults() {
         let config = StyleConfig::default();
@@ -138,13 +138,13 @@ model:
         assert_eq!(config.corner_radius, 8.0);
         assert_eq!(config.color_scheme, "lavender_purple");
     }
-    
+
     #[test]
     fn test_color_scheme_defaults() {
         let scheme = ColorScheme::default();
         assert_eq!(scheme.primary_color, 0x8F73E2);
     }
-    
+
     #[test]
     fn test_hotkey_config_defaults() {
         let config = HotkeyConfig::default();

@@ -172,15 +172,12 @@ impl From<&Context> for CandidateModel {
             1
         };
 
-        let comments: Vec<String> = if config.style.show_code_hint {
-            ctx.candidates
-                .comments
-                .iter()
-                .map(|c| c.str.clone())
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let comments: Vec<String> = ctx
+            .candidates
+            .comments
+            .iter()
+            .map(|c| c.str.clone())
+            .collect();
 
         Self {
             items: ctx

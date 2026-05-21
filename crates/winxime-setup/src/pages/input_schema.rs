@@ -2,14 +2,15 @@ use crate::components::{Radio, SettingsControl, SettingsGroup, SettingsItem, Set
 use crate::pages::SettingsApp;
 use crate::state::SettingsState;
 use gpui::{prelude::FluentBuilder, IntoElement, ParentElement, *};
+use winxime_config::{deploy_all, init_rime_deployer, SchemaConfig, SchemaManager};
 
 pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) -> AnyElement {
     let schemas_loaded = cx.read_entity(&settings, |state, _| state.schemas_loaded);
 
     if !schemas_loaded {
-        let init_result = crate::rime_config::init_rime_deployer();
+        let init_result = init_rime_deployer();
         let deploy_result = match init_result {
-            Ok(_) => crate::rime_config::deploy_all().map_err(|e| e.to_string()),
+            Ok(_) => deploy_all().map_err(|e| e.to_string()),
             Err(e) => Err(e),
         };
         cx.update_entity(&settings, |state: &mut SettingsState, cx| {
@@ -24,7 +25,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
             }
             state.deploy_message_time = Some(std::time::Instant::now());
 
-            if let Ok(manager) = crate::rime_config::SchemaManager::new() {
+            if let Ok(manager) = SchemaManager::new() {
                 let schemas = manager.get_schema_list();
                 let selected_schema = manager
                     .get_selected_schema()
@@ -176,7 +177,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
 
 fn render_schema_config(
     settings: Entity<SettingsState>,
-    config: &crate::rime_config::SchemaConfig,
+    config: &SchemaConfig,
     colors: &crate::theme::ThemeColors,
     schema_name: &str,
     _cx: &mut Context<SettingsApp>,

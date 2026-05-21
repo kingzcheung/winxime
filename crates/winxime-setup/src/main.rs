@@ -2,7 +2,6 @@
 
 mod components;
 mod pages;
-mod rime_config;
 mod state;
 mod theme;
 

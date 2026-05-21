@@ -7,7 +7,6 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
     let (
         font_size,
         candidate_count,
-        show_code_hint,
         horizontal,
         color_scheme,
         color_schemes,
@@ -17,7 +16,6 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
         (
             state.appearance.font_size,
             state.appearance.candidate_count,
-            state.appearance.show_code_hint,
             state.appearance.horizontal,
             state.appearance.color_scheme.clone(),
             state.appearance.available_color_schemes.clone(),
@@ -36,14 +34,13 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
     let settings_clone2 = settings.clone();
     let settings_clone3 = settings.clone();
     let settings_clone4 = settings.clone();
-    let settings_clone5 = settings.clone();
 
     let color_scheme_items: Vec<AnyElement> = color_schemes
         .iter()
         .enumerate()
         .map(|(i, (id, name, color))| {
             let is_selected = id == &color_scheme;
-            let settings_for_color = settings_clone5.clone();
+            let settings_for_color = settings_clone4.clone();
             let id_clone = id.clone();
             let r = (*color >> 16) as u8;
             let g = (*color >> 8) as u8;
@@ -166,22 +163,9 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                 )
                 .description("候选栏显示的候选词数量"),
                 SettingsItem::new(
-                    "显示编码提示",
-                    SettingsControl::switch_with(show_code_hint, move |val, _window, cx| {
-                        settings_clone3.update(cx, |s: &mut SettingsState, cx| {
-                            s.appearance.show_code_hint = val;
-                            if let Err(e) = s.save_appearance() {
-                                eprintln!("Auto-save appearance failed: {}", e);
-                            }
-                            cx.notify();
-                        });
-                    }),
-                )
-                .description("在候选词旁显示编码"),
-                SettingsItem::new(
                     "水平布局",
                     SettingsControl::switch_with(horizontal, move |val, _window, cx| {
-                        settings_clone4.update(cx, |s: &mut SettingsState, cx| {
+                        settings_clone3.update(cx, |s: &mut SettingsState, cx| {
                             s.appearance.horizontal = val;
                             if let Err(e) = s.save_appearance() {
                                 eprintln!("Auto-save appearance failed: {}", e);

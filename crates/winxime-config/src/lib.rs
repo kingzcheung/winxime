@@ -1,3 +1,6 @@
+mod rime_deploy;
+mod schema_config;
+mod schema_manager;
 mod smart_suggestion;
 
 use serde::{Deserialize, Serialize};
@@ -7,6 +10,14 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
+pub use rime_deploy::{
+    deploy_all, deploy_all_schemas, get_data_dirs, init_rime_deployer, SchemaInfo,
+};
+pub use schema_config::{
+    ReverseLookupConfig, SchemaConfig, SchemaConfigManager, SpellerConfig, TraditionConfig,
+    TranslatorConfig,
+};
+pub use schema_manager::SchemaManager;
 pub use smart_suggestion::{
     SmartSuggestionConfig, SmartSuggestionModelConfig, SmartSuggestionModelFile,
 };
@@ -127,8 +138,6 @@ pub struct StyleConfig {
     pub font_size: f32,
     #[serde(default = "default_candidate_count")]
     pub candidate_count: i32,
-    #[serde(default)]
-    pub show_code_hint: bool,
     #[serde(default = "default_horizontal")]
     pub horizontal: bool,
     #[serde(default = "default_corner_radius")]
@@ -143,7 +152,6 @@ impl Default for StyleConfig {
             font_family: String::new(),
             font_size: default_font_size(),
             candidate_count: default_candidate_count(),
-            show_code_hint: false,
             horizontal: default_horizontal(),
             corner_radius: default_corner_radius(),
             color_scheme: default_color_scheme(),

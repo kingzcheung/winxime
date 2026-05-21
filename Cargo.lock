@@ -406,7 +406,7 @@ dependencies = [
  "libc",
  "pin-project",
  "redox_syscall 0.2.16",
- "xattr 0.2.3",
+ "xattr",
 ]
 
 [[package]]
@@ -5506,17 +5506,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tar"
-version = "0.4.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22692a6476a21fa75fdfc11d452fda482af402c008cdbaf3476414e122040973"
-dependencies = [
- "filetime",
- "libc",
- "xattr 1.6.1",
-]
-
-[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7225,8 +7214,10 @@ name = "winxime-config"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "librime",
  "serde",
  "serde-saphyr",
+ "serde_json",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -7285,16 +7276,11 @@ name = "winxime-setup"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "flate2",
  "gpui-platform-gpui-unofficial",
  "gpui-unofficial",
- "librime",
  "raw-window-handle",
  "rust-embed",
  "serde",
- "serde-saphyr",
- "serde_json",
- "tar",
  "ureq 2.12.1",
  "windows 0.61.3",
  "winres",
@@ -7482,16 +7468,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d1526bbe5aaeb5eb06885f4d987bcdfa5e23187055de9b83fe00156a821fabc"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "xattr"
-version = "1.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
-dependencies = [
- "libc",
- "rustix 1.1.4",
 ]
 
 [[package]]

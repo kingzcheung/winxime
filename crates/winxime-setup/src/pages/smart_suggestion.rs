@@ -58,15 +58,15 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             return;
                         }
                         let entity = s7.clone();
-                        
+
                         entity.update(cx, |s: &mut SettingsState, cx| {
                             s.smart_suggestion.downloading = true;
                             cx.notify();
                         });
-                        
+
                         cx.spawn(async move |cx| {
                             let result = download_model_async();
-                            
+
                             let _ = cx.update(|cx| {
                                 entity.update(cx, |s: &mut SettingsState, cx| {
                                     s.smart_suggestion.downloading = false;
@@ -170,18 +170,22 @@ fn download_model_async() -> Result<(), String> {
     let config = XimeConfig::load();
     let model_name = config.smart_suggestion.model.name.clone();
     let model_dir = winxime_predict::get_model_dir(Some(&model_name));
-    
+
     if !model_dir.exists() {
         std::fs::create_dir_all(&model_dir).map_err(|e| format!("创建模型目录失败: {}", e))?;
     }
 
-    let files: Vec<_> = config.smart_suggestion.model.files.iter()
+    let files: Vec<_> = config
+        .smart_suggestion
+        .model
+        .files
+        .iter()
         .filter(|f| !f.url.is_empty() && !f.filename.is_empty())
         .collect();
 
     for file in files {
         println!("正在下载 {} from {}...", file.filename, file.url);
-        
+
         let response = ureq::get(&file.url)
             .call()
             .map_err(|e| format!("下载 {} 失败: {}", file.filename, e))?;
@@ -193,7 +197,8 @@ fn download_model_async() -> Result<(), String> {
             .map_err(|e| format!("读取 {} 失败: {}", file.filename, e))?;
 
         let path = model_dir.join(&file.filename);
-        std::fs::write(&path, &content).map_err(|e| format!("保存 {} 失败: {}", file.filename, e))?;
+        std::fs::write(&path, &content)
+            .map_err(|e| format!("保存 {} 失败: {}", file.filename, e))?;
 
         println!("{} 下载完成", file.filename);
     }

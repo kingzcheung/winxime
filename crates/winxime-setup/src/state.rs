@@ -1,10 +1,9 @@
-use crate::rime_config::{
-    deploy_all, RimeConfigManager, SchemaConfig, SchemaConfigManager, SchemaManager,
-    XimeStyleManager,
-};
 use crate::theme::{SystemTheme, ThemeColors};
 use gpui::*;
-use winxime_config::{SmartSuggestionConfig, XimeConfig};
+use winxime_config::{
+    deploy_all, get_data_dirs, SchemaConfig, SchemaConfigManager, SchemaInfo, SchemaManager,
+    SmartSuggestionConfig, XimeConfig,
+};
 use winxime_ipc::IpcClient;
 use winxime_predict::check_model_exists;
 
@@ -90,18 +89,14 @@ impl SettingsState {
     }
 
     fn load_appearance_config() -> AppearanceState {
-        if let Ok(manager) = RimeConfigManager::new() {
-            AppearanceState {
-                font_size: manager.get_double("style/font_size").unwrap_or(14.0),
-                candidate_count: manager.get_int("style/candidate_count").unwrap_or(5),
-                show_code_hint: manager.get_bool("style/show_code_hint").unwrap_or(false),
-                horizontal: manager.get_bool("style/horizontal").unwrap_or(true),
-                color_scheme: String::new(),
-                available_color_schemes: Vec::new(),
-                color_schemes_loaded: false,
-            }
-        } else {
-            AppearanceState::default()
+        let config = XimeConfig::load();
+        AppearanceState {
+            font_size: config.style.font_size as f64,
+            candidate_count: config.style.candidate_count,
+            horizontal: config.style.horizontal,
+            color_scheme: config.style.color_scheme,
+            available_color_schemes: Vec::new(),
+            color_schemes_loaded: false,
         }
     }
 
@@ -141,32 +136,54 @@ impl SettingsState {
         if self.appearance.color_schemes_loaded {
             return;
         }
-        if let Ok(manager) = XimeStyleManager::load() {
-            let style = manager.get_style();
-            self.appearance.color_scheme = style.color_scheme;
-            self.appearance.available_color_schemes = manager.get_color_schemes();
-            self.appearance.font_size = style.font_size as f64;
-            self.appearance.candidate_count = style.candidate_count;
-            self.appearance.show_code_hint = style.show_code_hint;
-            self.appearance.horizontal = style.horizontal;
-            self.appearance.color_schemes_loaded = true;
-            cx.notify();
-        }
+        let config = XimeConfig::load();
+        self.appearance.color_scheme = config.style.color_scheme;
+        self.appearance.available_color_schemes = config
+            .color_schemes
+            .iter()
+            .map(|(id, scheme)| (id.clone(), scheme.name.clone(), scheme.primary_color))
+            .collect();
+        self.appearance.font_size = config.style.font_size as f64;
+        self.appearance.candidate_count = config.style.candidate_count;
+        self.appearance.horizontal = config.style.horizontal;
+        self.appearance.color_schemes_loaded = true;
+        cx.notify();
     }
 
     pub fn save_color_scheme(&self) -> Result<(), String> {
-        let mut manager = XimeStyleManager::load()?;
-        manager.set_color_scheme(&self.appearance.color_scheme)?;
-        Ok(())
+        let config = XimeConfig::load();
+        let updated = XimeConfig {
+            wubi_radicals: config.wubi_radicals,
+            style: winxime_config::StyleConfig {
+                font_family: config.style.font_family,
+                font_size: config.style.font_size,
+                candidate_count: config.style.candidate_count,
+                horizontal: config.style.horizontal,
+                corner_radius: config.style.corner_radius,
+                color_scheme: self.appearance.color_scheme.clone(),
+            },
+            color_schemes: config.color_schemes,
+            smart_suggestion: config.smart_suggestion,
+        };
+        updated.save()
     }
 
     pub fn save_appearance(&self) -> Result<(), String> {
-        let mut manager = XimeStyleManager::load()?;
-
-        manager.set_font_size(self.appearance.font_size as f32)?;
-        manager.set_candidate_count(self.appearance.candidate_count)?;
-        manager.set_show_code_hint(self.appearance.show_code_hint)?;
-        manager.set_horizontal(self.appearance.horizontal)?;
+        let config = XimeConfig::load();
+        let updated = XimeConfig {
+            wubi_radicals: config.wubi_radicals,
+            style: winxime_config::StyleConfig {
+                font_family: config.style.font_family,
+                font_size: self.appearance.font_size as f32,
+                candidate_count: self.appearance.candidate_count,
+                horizontal: self.appearance.horizontal,
+                corner_radius: config.style.corner_radius,
+                color_scheme: self.appearance.color_scheme.clone(),
+            },
+            color_schemes: config.color_schemes,
+            smart_suggestion: config.smart_suggestion,
+        };
+        updated.save()?;
 
         if !IpcClient::reload_config() {
             eprintln!("Server not running, appearance will apply on next start");
@@ -178,10 +195,6 @@ impl SettingsState {
         if self.input_schema.selected_schema < self.input_schema.available_schemas.len() {
             let selected_id =
                 &self.input_schema.available_schemas[self.input_schema.selected_schema].schema_id;
-
-            let manager = RimeConfigManager::new()?;
-            manager.set_string("default_schema", selected_id)?;
-            manager.save()?;
 
             let schema_manager = SchemaManager::new()?;
             schema_manager.set_schema_list(&[selected_id])?;
@@ -258,14 +271,6 @@ impl SettingsState {
     }
 
     pub fn save_clipboard(&self) -> Result<(), String> {
-        let manager = RimeConfigManager::new()?;
-
-        manager.set_bool("clipboard/enabled", self.clipboard.enabled)?;
-        manager.set_int("clipboard/history_count", self.clipboard.history_count)?;
-        manager.set_int("clipboard/retention_days", self.clipboard.retention_days)?;
-
-        manager.save()?;
-
         Ok(())
     }
 
@@ -324,7 +329,6 @@ impl SettingsState {
 pub struct AppearanceState {
     pub font_size: f64,
     pub candidate_count: i32,
-    pub show_code_hint: bool,
     pub horizontal: bool,
     pub color_scheme: String,
     pub available_color_schemes: Vec<(String, String, u32)>,
@@ -334,7 +338,7 @@ pub struct AppearanceState {
 #[derive(Clone, Default)]
 pub struct InputSchemaState {
     pub selected_schema: usize,
-    pub available_schemas: Vec<crate::rime_config::SchemaInfo>,
+    pub available_schemas: Vec<SchemaInfo>,
     pub schema_config: Option<SchemaConfig>,
     pub config_loaded: bool,
 }
