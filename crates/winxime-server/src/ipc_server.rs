@@ -554,6 +554,71 @@ fn process_request(
             }
         }
 
+        IpcCommand::SelectCandidate => {
+            tracing::info!("SelectCandidate requested");
+            let index = match &request.data {
+                winxime_ipc::IpcRequestData::SelectIndex(i) => *i,
+                _ => 0,
+            };
+
+            tracing::info!("  -> selecting candidate at index {}", index);
+            let selected = eng.select_candidate(index);
+            tracing::info!("  -> select result: {}", selected);
+
+            let commit = eng.get_commit();
+            tracing::info!("  -> commit: {:?}", commit);
+
+            let ipc_ctx = get_ipc_context(&eng, &commit);
+            update_context(&mut eng, context, &commit);
+
+            if commit.is_some() {
+                tracing::info!("  -> hide (commit after select)");
+                window.hide();
+            } else if !eng.is_composing() {
+                tracing::info!("  -> hide (not composing after select)");
+                window.hide();
+            } else if let Some(ctx) = &ipc_ctx {
+                let pos = context.read(|c| (c.caret_x, c.caret_y));
+                window.show(pos.0, pos.1);
+                window.update(ctx);
+            }
+
+            IpcResponse {
+                success: selected,
+                session_id: request.session_id,
+                context: ipc_ctx,
+                status: Some(get_ipc_status(&eng)),
+                schema_list: None,
+            }
+        }
+
+        IpcCommand::ChangePage => {
+            tracing::info!("ChangePage requested");
+            let backward = match &request.data {
+                winxime_ipc::IpcRequestData::ChangePage(b) => *b,
+                _ => false,
+            };
+
+            tracing::info!("  -> backward: {}", backward);
+            let changed = eng.change_page(backward);
+            tracing::info!("  -> change result: {}", changed);
+
+            let ipc_ctx = get_ipc_context(&eng, &None);
+            if let Some(ctx) = &ipc_ctx {
+                let pos = context.read(|c| (c.caret_x, c.caret_y));
+                window.show(pos.0, pos.1);
+                window.update(ctx);
+            }
+
+            IpcResponse {
+                success: changed,
+                session_id: request.session_id,
+                context: ipc_ctx,
+                status: Some(get_ipc_status(&eng)),
+                schema_list: None,
+            }
+        }
+
         _ => IpcResponse {
             success: false,
             session_id: request.session_id,
