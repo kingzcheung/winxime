@@ -59,7 +59,6 @@ color_schemes:
 smart_suggestion:
   enabled: true
   suggestion_count: 5
-  prefer_common_words: true
   record_user_frequency: true
   auto_adjust_frequency: true
   learning_threshold: 3

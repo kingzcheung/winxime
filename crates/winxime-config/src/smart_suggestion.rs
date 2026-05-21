@@ -7,8 +7,6 @@ pub struct SmartSuggestionConfig {
     #[serde(default = "default_suggestion_count")]
     pub suggestion_count: i32,
     #[serde(default)]
-    pub prefer_common_words: bool,
-    #[serde(default)]
     pub record_user_frequency: bool,
     #[serde(default)]
     pub auto_adjust_frequency: bool,
@@ -23,7 +21,6 @@ impl Default for SmartSuggestionConfig {
         Self {
             enabled: false,
             suggestion_count: default_suggestion_count(),
-            prefer_common_words: false,
             record_user_frequency: false,
             auto_adjust_frequency: false,
             learning_threshold: default_learning_threshold(),
@@ -97,7 +94,6 @@ mod tests {
         let yaml = "
 enabled: true
 suggestion_count: 10
-prefer_common_words: true
 model:
   provider: custom
   name: my-model
@@ -110,7 +106,6 @@ model:
         let config: SmartSuggestionConfig = serde_saphyr::from_str(yaml).ok().unwrap();
         assert!(config.enabled);
         assert_eq!(config.suggestion_count, 10);
-        assert!(config.prefer_common_words);
         assert_eq!(config.model.provider, "custom");
         assert_eq!(config.model.name, "my-model");
         assert_eq!(config.model.files.len(), 2);

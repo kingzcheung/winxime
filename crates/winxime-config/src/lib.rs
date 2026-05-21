@@ -427,7 +427,6 @@ impl XimeConfig {
                 smart_suggestion: SmartSuggestionConfig {
                     enabled: user.smart_suggestion.enabled,
                     suggestion_count: user.smart_suggestion.suggestion_count,
-                    prefer_common_words: user.smart_suggestion.prefer_common_words,
                     record_user_frequency: user.smart_suggestion.record_user_frequency,
                     auto_adjust_frequency: user.smart_suggestion.auto_adjust_frequency,
                     learning_threshold: user.smart_suggestion.learning_threshold,

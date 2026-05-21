@@ -41,7 +41,6 @@ impl SettingsState {
         SmartSuggestionState {
             enabled: config.smart_suggestion.enabled,
             suggestion_count: config.smart_suggestion.suggestion_count,
-            prefer_common_words: config.smart_suggestion.prefer_common_words,
             record_user_frequency: config.smart_suggestion.record_user_frequency,
             auto_adjust_frequency: config.smart_suggestion.auto_adjust_frequency,
             learning_threshold: config.smart_suggestion.learning_threshold,
@@ -284,7 +283,6 @@ impl SettingsState {
             smart_suggestion: SmartSuggestionConfig {
                 enabled: self.smart_suggestion.enabled,
                 suggestion_count: self.smart_suggestion.suggestion_count,
-                prefer_common_words: self.smart_suggestion.prefer_common_words,
                 record_user_frequency: self.smart_suggestion.record_user_frequency,
                 auto_adjust_frequency: self.smart_suggestion.auto_adjust_frequency,
                 learning_threshold: self.smart_suggestion.learning_threshold,
@@ -354,7 +352,6 @@ pub struct ClipboardState {
 pub struct SmartSuggestionState {
     pub enabled: bool,
     pub suggestion_count: i32,
-    pub prefer_common_words: bool,
     pub record_user_frequency: bool,
     pub auto_adjust_frequency: bool,
     pub learning_threshold: i32,
@@ -369,7 +366,6 @@ impl Default for SmartSuggestionState {
         Self {
             enabled: false,
             suggestion_count: 5,
-            prefer_common_words: true,
             record_user_frequency: true,
             auto_adjust_frequency: true,
             learning_threshold: 3,
