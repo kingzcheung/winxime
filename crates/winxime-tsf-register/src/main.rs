@@ -150,7 +150,7 @@ fn remove_registry_keys() -> Result<()> {
 
         let run_key = w!("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run");
         let xime_server = w!("XimeServer");
-        RegDeleteKeyValueW(hklm, run_key, xime_server);
+        let _ = RegDeleteKeyValueW(hklm, run_key, xime_server);
         println!("  Removed Run startup entry");
 
         let hkcu = HKEY_CURRENT_USER;
@@ -268,10 +268,10 @@ fn unregister() -> Result<()> {
 
         let hklm = HKEY_LOCAL_MACHINE;
         let clsid_key = w!("CLSID\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
-        RegDeleteKeyW(hklm, clsid_key).ok();
+        let _ = RegDeleteKeyW(hklm, clsid_key).ok();
 
         let tip_key = w!("SOFTWARE\\Microsoft\\CTF\\TIP\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
-        RegDeleteKeyW(hklm, tip_key).ok();
+        let _ = RegDeleteKeyW(hklm, tip_key).ok();
     }
 
     Ok(())

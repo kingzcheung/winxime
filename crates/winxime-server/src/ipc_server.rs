@@ -7,7 +7,6 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::time::{Duration, Instant};
 use tracing::{debug, info};
 use widestring::u16cstr;
 use winxime_config::XimeConfig;
@@ -15,7 +14,6 @@ use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResp
 use winxime_rime::RimeEngine;
 
 const MAX_BUFFER_SIZE: usize = 1024 * 1024;
-const READ_TIMEOUT_MS: u64 = 1000;
 
 pub fn run_ipc_server(
     engine: Arc<std::sync::Mutex<RimeEngine>>,
@@ -82,15 +80,10 @@ fn handle_connection(
 
     loop {
         let mut buffer = Vec::new();
-        let start_time = Instant::now();
 
         loop {
             if buffer.len() > MAX_BUFFER_SIZE {
                 tracing::info!("Buffer too large, disconnecting client");
-                return;
-            }
-            if start_time.elapsed() > Duration::from_millis(READ_TIMEOUT_MS) {
-                tracing::info!("Read timeout, disconnecting client");
                 return;
             }
 
