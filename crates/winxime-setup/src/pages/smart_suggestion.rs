@@ -56,7 +56,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                         }
                         let entity = s7.clone();
 
-                        entity.update(cx, |s: &mut SettingsState, cx| {
+                        let _ = entity.update(cx, |s: &mut SettingsState, cx| {
                             s.smart_suggestion.downloading = true;
                             cx.notify();
                         });
@@ -65,7 +65,7 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
                             let result = download_model_async();
 
                             let _ = cx.update(|cx| {
-                                entity.update(cx, |s: &mut SettingsState, cx| {
+                                let _ = entity.update(cx, |s: &mut SettingsState, cx| {
                                     s.smart_suggestion.downloading = false;
                                     if result.is_ok() {
                                         s.smart_suggestion.model_downloaded = true;

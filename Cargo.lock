@@ -7268,6 +7268,7 @@ dependencies = [
  "windows-numerics 0.3.1",
  "winxime-config",
  "winxime-ipc",
+ "winxime-predict",
  "winxime-rime",
 ]
 

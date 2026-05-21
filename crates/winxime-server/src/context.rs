@@ -15,6 +15,23 @@ pub struct CandidateInfo {
     pub comment: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct SuggestionState {
+    pub suggestions: Vec<String>,
+    pub highlighted: usize,
+    pub prefix_text: String,
+}
+
+impl Default for SuggestionState {
+    fn default() -> Self {
+        Self {
+            suggestions: Vec::new(),
+            highlighted: 0,
+            prefix_text: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct InputContext {
     pub composition: CompositionInfo,
@@ -25,6 +42,7 @@ pub struct InputContext {
     pub commit_text: String,
     pub caret_x: i32,
     pub caret_y: i32,
+    pub suggestion_state: Option<SuggestionState>,
 }
 
 pub struct SharedInputContext {
