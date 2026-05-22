@@ -2,8 +2,13 @@
 
 $iconPath = "$PSScriptRoot\resource\icon.ico"
 $registerExe = "$PSScriptRoot\target\debug\winxime-tsf-register.exe"
-$userDataDir = "$PSScriptRoot\target\debug\user-data"
-$sharedDataDir = "$PSScriptRoot\librime\data\minimal"
+$exeDir = "$PSScriptRoot\target\debug"
+$sharedDataDir = "$exeDir\data"
+$userDataDir = "$exeDir\user-data"
+$configSourceDir = "$exeDir\resources"
+$rimeMinimalDir = "$PSScriptRoot\librime\data\minimal"
+$rimeWubiDir = "$PSScriptRoot\rime-wubi"
+$resourcesDir = "$PSScriptRoot\resources"
 
 Write-Host "Step 0: Clearing old logs..." -ForegroundColor Yellow
 Remove-Item "$env:TEMP\winxime\*.log" -Force -ErrorAction SilentlyContinue
@@ -41,29 +46,41 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host "Step 4.5: Setting up user data directory..." -ForegroundColor Yellow
-if (Test-Path $userDataDir) {
-    Remove-Item $userDataDir -Recurse -Force
+Write-Host "Step 4.5: Setting up data directories..." -ForegroundColor Yellow
+
+# Shared data (RIME schemas) — fresh each build
+if (Test-Path $sharedDataDir) {
+    Remove-Item $sharedDataDir -Recurse -Force
 }
-New-Item -ItemType Directory -Path $userDataDir -Force | Out-Null
-
-Copy-Item $sharedDataDir $userDataDir -Recurse
-
+New-Item -ItemType Directory -Path $sharedDataDir -Force | Out-Null
+Copy-Item "$rimeMinimalDir\*" $sharedDataDir -Recurse
 $exclude = @('.git', '.github', 'imgs', 'README.md', '.gitignore', 'macOS-*', '*.command', 'LICENSE', 'squirrel.custom.yaml', 'trime.custom.yaml')
-Get-ChildItem -Path "$PSScriptRoot\rime-wubi" -Recurse -File | Where-Object {
-    $dir = $_.DirectoryName
-    $name = $_.Name
+Get-ChildItem -Path $rimeWubiDir -Recurse -File | Where-Object {
+    $dir = $_.DirectoryName; $name = $_.Name
     -not ($exclude | Where-Object { $dir -like "*$_*" -or $name -like $_ })
 } | ForEach-Object {
-    $relativePath = $_.FullName.Substring("$PSScriptRoot\rime-wubi".Length + 1)
-    $destPath = "$userDataDir\$relativePath"
+    $relativePath = $_.FullName.Substring("$rimeWubiDir".Length + 1)
+    $destPath = "$sharedDataDir\$relativePath"
     $destDir = Split-Path -Parent $destPath
-    if (-not (Test-Path $destDir)) {
-        New-Item $destDir -ItemType Directory -Force | Out-Null
-    }
+    if (-not (Test-Path $destDir)) { New-Item $destDir -ItemType Directory -Force | Out-Null }
     Copy-Item $_.FullName $destPath -Force
 }
-Write-Host "  User data directory ready: $userDataDir" -ForegroundColor Gray
+Write-Host "  Shared data: $sharedDataDir" -ForegroundColor Gray
+
+# Config source dir (default xime.yaml for deploy)
+New-Item -ItemType Directory -Path $configSourceDir -Force | Out-Null
+Copy-Item "$resourcesDir\xime.yaml" "$configSourceDir\xime.yaml" -Force
+Write-Host "  Config source: $configSourceDir" -ForegroundColor Gray
+
+# System config (xime.yaml shipped with app)
+Copy-Item "$resourcesDir\xime.yaml" "$sharedDataDir\xime.yaml" -Force
+Write-Host "  System config: $sharedDataDir\xime.yaml" -ForegroundColor Gray
+
+# User data (persistent — preserve across rebuilds)
+if (-not (Test-Path $userDataDir)) {
+    New-Item -ItemType Directory -Path $userDataDir -Force | Out-Null
+}
+Write-Host "  User data: $userDataDir" -ForegroundColor Gray
 
 Write-Host "Step 5: Registering COM DLL (no profile)..." -ForegroundColor Yellow
 Start-Process -Verb RunAs -Wait -FilePath "regsvr32.exe" -ArgumentList "/s", "$PSScriptRoot\target\debug\winxime_tsf.dll"

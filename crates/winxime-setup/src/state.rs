@@ -39,7 +39,7 @@ impl SettingsState {
         let model_name = config.smart_suggestion.model.name.clone();
 
         SmartSuggestionState {
-            enabled: config.smart_suggestion.enabled,
+            enabled: config.smart_suggestion.enabled.unwrap_or(false),
             suggestion_count: config.smart_suggestion.suggestion_count,
             record_user_frequency: config.smart_suggestion.record_user_frequency,
             auto_adjust_frequency: config.smart_suggestion.auto_adjust_frequency,
@@ -281,7 +281,7 @@ impl SettingsState {
             style: config.style,
             color_schemes: config.color_schemes,
             smart_suggestion: SmartSuggestionConfig {
-                enabled: self.smart_suggestion.enabled,
+                enabled: Some(self.smart_suggestion.enabled),
                 suggestion_count: self.smart_suggestion.suggestion_count,
                 record_user_frequency: self.smart_suggestion.record_user_frequency,
                 auto_adjust_frequency: self.smart_suggestion.auto_adjust_frequency,

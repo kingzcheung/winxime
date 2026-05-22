@@ -474,8 +474,8 @@ impl XimeConfig {
             } else {
                 over.color_schemes
             },
-            smart_suggestion: SmartSuggestionConfig {
-                enabled: over.smart_suggestion.enabled,
+                smart_suggestion: SmartSuggestionConfig {
+                    enabled: over.smart_suggestion.enabled.or(base.smart_suggestion.enabled),
                 suggestion_count: over.smart_suggestion.suggestion_count,
                 record_user_frequency: over.smart_suggestion.record_user_frequency,
                 auto_adjust_frequency: over.smart_suggestion.auto_adjust_frequency,

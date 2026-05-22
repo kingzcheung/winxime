@@ -27,7 +27,7 @@ pub fn run_ipc_server(
 
     let predictor: Option<Arc<Mutex<Predictor>>> = {
         let config = XimeConfig::load();
-        if config.smart_suggestion.enabled
+        if config.smart_suggestion.enabled.unwrap_or(false)
             && check_model_exists(Some(&config.smart_suggestion.model.name))
         {
             tracing::info!("Smart suggestion enabled, loading predictor...");
@@ -381,7 +381,7 @@ fn process_request(
 
                 if predictor.is_some() {
                     let config = XimeConfig::load();
-                    if config.smart_suggestion.enabled {
+                    if config.smart_suggestion.enabled.unwrap_or(false) {
                         tracing::info!("  -> smart suggestion enabled, predicting...");
                         let suggestions = get_smart_suggestions(
                             &predictor,

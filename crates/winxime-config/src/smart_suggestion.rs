@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SmartSuggestionConfig {
-    #[serde(default)]
-    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
     #[serde(default = "default_suggestion_count")]
     pub suggestion_count: i32,
     #[serde(default)]
@@ -19,7 +19,7 @@ pub struct SmartSuggestionConfig {
 impl Default for SmartSuggestionConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: None,
             suggestion_count: default_suggestion_count(),
             record_user_frequency: false,
             auto_adjust_frequency: false,
@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn test_smart_suggestion_defaults() {
         let config = SmartSuggestionConfig::default();
-        assert!(!config.enabled);
+        assert_eq!(config.enabled, None);
         assert_eq!(config.suggestion_count, 5);
         assert_eq!(config.learning_threshold, 3);
         assert_eq!(config.model.provider, "modelscope");
@@ -104,7 +104,7 @@ model:
       filename: file2.bin
 ";
         let config: SmartSuggestionConfig = serde_saphyr::from_str(yaml).ok().unwrap();
-        assert!(config.enabled);
+        assert_eq!(config.enabled, Some(true));
         assert_eq!(config.suggestion_count, 10);
         assert_eq!(config.model.provider, "custom");
         assert_eq!(config.model.name, "my-model");
@@ -120,7 +120,7 @@ model:
         // Parse via serde_json::Value to avoid serde_saphyr map scoping bugs
         let value: serde_json::Value = serde_saphyr::from_str(content).unwrap();
         let config: crate::XimeConfig = serde_json::from_value(value).unwrap();
-        assert!(config.smart_suggestion.enabled);
+        assert_eq!(config.smart_suggestion.enabled, Some(true));
         assert_eq!(config.smart_suggestion.suggestion_count, 5);
         assert_eq!(config.smart_suggestion.learning_threshold, 3);
         assert_eq!(config.smart_suggestion.model.name, "predictive-text-small");

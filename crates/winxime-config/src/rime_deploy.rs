@@ -116,54 +116,25 @@ patch:
 }
 
 pub fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
-    #[cfg(debug_assertions)]
-    {
-        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
-        (
-            workspace_dir.join("librime").join("data").join("minimal"),
-            workspace_dir.join("target").join("debug").join("user-data"),
-        )
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        let exe_path = std::env::current_exe()
-            .ok()
-            .unwrap_or_else(|| std::path::PathBuf::from("."));
-        let exe_dir = exe_path
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| std::path::PathBuf::from("."));
-
-        let user_data_dir = std::env::var("APPDATA")
-            .ok()
-            .map(|p| std::path::PathBuf::from(p).join("Xime").join("rime"))
-            .unwrap_or_else(|| exe_dir.join("user-data"));
-
-        (exe_dir.join("data"), user_data_dir)
-    }
+    let exe_path = std::env::current_exe()
+        .ok()
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let exe_dir = exe_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    (exe_dir.join("data"), exe_dir.join("user-data"))
 }
 
 fn get_config_source_dir() -> std::path::PathBuf {
-    #[cfg(debug_assertions)]
-    {
-        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
-        workspace_dir.join("resources")
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        let exe_path = std::env::current_exe()
-            .ok()
-            .unwrap_or_else(|| std::path::PathBuf::from("."));
-        exe_path
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("resources")
-    }
+    let exe_path = std::env::current_exe()
+        .ok()
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    exe_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("resources")
 }
 
 pub fn deploy_all_schemas() -> Result<(), String> {
