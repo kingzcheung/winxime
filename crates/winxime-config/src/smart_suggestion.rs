@@ -115,8 +115,11 @@ model:
 
     #[test]
     fn test_builtin_config() {
-        const DEFAULT_CONFIG: &[u8] = include_bytes!("../resources/xime.yaml");
-        let config: crate::XimeConfig = serde_saphyr::from_slice(DEFAULT_CONFIG).ok().unwrap();
+        const DEFAULT_CONFIG: &[u8] = include_bytes!("../../../resources/xime.yaml");
+        let content = core::str::from_utf8(DEFAULT_CONFIG).unwrap();
+        // Parse via serde_json::Value to avoid serde_saphyr map scoping bugs
+        let value: serde_json::Value = serde_saphyr::from_str(content).unwrap();
+        let config: crate::XimeConfig = serde_json::from_value(value).unwrap();
         assert!(config.smart_suggestion.enabled);
         assert_eq!(config.smart_suggestion.suggestion_count, 5);
         assert_eq!(config.smart_suggestion.learning_threshold, 3);

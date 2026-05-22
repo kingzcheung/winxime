@@ -816,6 +816,7 @@ impl RenderedView {
                     w!("zh-CN"),
                 )
                 .map_err(|e| format!("CreateTextFormat failed: {:?}", e))?;
+            let _ = text_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
             let text_format_centered = self
                 .dwrite_factory

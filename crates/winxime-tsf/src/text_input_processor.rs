@@ -555,7 +555,8 @@ impl ITfEditSession_Impl for XimeEditSession_Impl {
             );
             self.update_composition_text(&context, ec, &preedit_text);
         } else if !self.output.composing && has_comp {
-            debug!("DoEditSession: end composition");
+            debug!("DoEditSession: clear text and end composition");
+            self.update_composition_text(&context, ec, "");
             self.end_composition(ec);
         }
 

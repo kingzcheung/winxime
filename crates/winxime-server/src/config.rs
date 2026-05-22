@@ -1,5 +1,4 @@
 use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
-use winxime_config::XimeConfig;
 
 pub fn hex_to_rgb(hex: u32) -> (f32, f32, f32) {
     let r = ((hex >> 16) & 0xFF) as f32 / 255.0;

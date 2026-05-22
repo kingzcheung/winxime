@@ -275,6 +275,7 @@ pub struct SchemaRadicalsConfig {
     pub schemas: HashMap<String, WubiRootConfig>,
 }
 
+
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct WubiRootConfig {
     #[serde(default)]
@@ -330,14 +331,188 @@ pub struct WubiRootConfig {
 }
 
 impl XimeConfig {
+    /// Parse XimeConfig from YAML via serde_json::Value intermediate
+    /// to completely avoid serde_saphyr's broken nested map scoping.
+    fn parse_yaml(content: &str) -> Option<Self> {
+        let root: serde_json::Value = serde_saphyr::from_str(content).ok()?;
+        let obj = root.as_object()?;
+
+        let mut config = XimeConfig::default();
+
+        for (k, v) in obj {
+            match k.as_str() {
+                "wubi_radicals" => {
+                    config.wubi_radicals = Self::parse_wubi_radicals(v)?;
+                }
+                "style" => {
+                    config.style = serde_json::from_value(v.clone()).ok()?;
+                }
+                "color_schemes" => {
+                    config.color_schemes = serde_json::from_value(v.clone()).ok()?;
+                }
+                "smart_suggestion" => {
+                    config.smart_suggestion = serde_json::from_value(v.clone()).ok()?;
+                }
+                _ => {}
+            }
+        }
+
+        Some(config)
+    }
+
+    fn parse_wubi_radicals(value: &serde_json::Value) -> Option<WubiRadicalsConfig> {
+        let obj = value.as_object()?;
+
+        let mut hotkeys = HotkeyConfig::default();
+        let mut schemas: HashMap<String, WubiRootConfig> = HashMap::new();
+
+        for (k, v) in obj {
+            match k.as_str() {
+                "hotkeys" => {
+                    hotkeys = serde_json::from_value(v.clone()).ok()?;
+                }
+                "schema_radicals" => {
+                    let sr_obj = v.as_object()?;
+                    for (sk, sv) in sr_obj {
+                        let root: WubiRootConfig = serde_json::from_value(sv.clone()).ok()?;
+                        schemas.insert(sk.clone(), root);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Some(WubiRadicalsConfig {
+            hotkeys,
+            schema_radicals: SchemaRadicalsConfig { schemas },
+        })
+    }
+
     pub fn load() -> Self {
-        let system_config = Self::load_system_config();
-        let user_config = Self::load_user_config();
-        Self::merge_configs(system_config, user_config)
+        // 1. Lowest: compiled-in defaults
+        let mut config = Self::builtin_default();
+
+        // 2. System config from exe dir
+        let exe_path = std::env::current_exe().unwrap_or_default();
+        let system_path = exe_path
+            .parent()
+            .map(|p| p.join("data").join("xime.yaml"))
+            .unwrap_or_default();
+        if system_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&system_path) {
+                if let Some(system) = Self::parse_yaml(&content) {
+                    config = Self::merge_configs(config, system);
+                }
+            }
+        }
+
+        // 3. User xime.yaml (overrides system)
+        let user_data_dir = Self::rime_user_data_dir();
+        let user_yaml = user_data_dir.join("xime.yaml");
+        if user_yaml.exists() {
+            if let Ok(content) = std::fs::read_to_string(&user_yaml) {
+                if let Some(user) = Self::parse_yaml(&content) {
+                    config = Self::merge_configs(config, user);
+                }
+            }
+        }
+
+        // 4. Highest: xime.custom.yaml (Rime patch format)
+        config = Self::apply_custom_config(config, &user_data_dir);
+
+        config
+    }
+
+    fn builtin_default() -> Self {
+        const DEFAULT_CONFIG: &[u8] = include_bytes!("../../../resources/xime.yaml");
+        let content = std::str::from_utf8(DEFAULT_CONFIG).unwrap_or_default();
+        Self::parse_yaml(content).unwrap_or_default()
+    }
+
+    fn apply_custom_config(config: Self, user_data_dir: &std::path::Path) -> Self {
+        let custom_path = user_data_dir.join("xime.custom.yaml");
+        if !custom_path.exists() {
+            return config;
+        }
+        let content = match std::fs::read_to_string(&custom_path) {
+            Ok(c) => c,
+            Err(_) => return config,
+        };
+
+        // Try Rime patch format (patch: {...})
+        if let Ok(value) = serde_saphyr::from_str::<serde_json::Value>(&content) {
+            if let Some(patch_value) = value.get("patch") {
+                if let Ok(custom) = serde_json::from_value::<XimeConfig>(patch_value.clone()) {
+                    return Self::merge_configs(config, custom);
+                }
+            }
+        }
+
+        // Fallback: direct XimeConfig format
+        if let Some(custom) = Self::parse_yaml(&content) {
+            return Self::merge_configs(config, custom);
+        }
+
+        config
+    }
+
+    fn merge_configs(base: Self, over: Self) -> Self {
+        XimeConfig {
+            wubi_radicals: WubiRadicalsConfig {
+                hotkeys: over.wubi_radicals.hotkeys,
+                schema_radicals: SchemaRadicalsConfig {
+                    schemas: if over.wubi_radicals.schema_radicals.schemas.is_empty() {
+                        base.wubi_radicals.schema_radicals.schemas
+                    } else {
+                        over.wubi_radicals.schema_radicals.schemas
+                    },
+                },
+            },
+            style: over.style,
+            color_schemes: if over.color_schemes.is_empty() {
+                base.color_schemes
+            } else {
+                over.color_schemes
+            },
+            smart_suggestion: SmartSuggestionConfig {
+                enabled: over.smart_suggestion.enabled,
+                suggestion_count: over.smart_suggestion.suggestion_count,
+                record_user_frequency: over.smart_suggestion.record_user_frequency,
+                auto_adjust_frequency: over.smart_suggestion.auto_adjust_frequency,
+                learning_threshold: over.smart_suggestion.learning_threshold,
+                model: SmartSuggestionModelConfig {
+                    provider: if over.smart_suggestion.model.provider.is_empty() {
+                        base.smart_suggestion.model.provider
+                    } else {
+                        over.smart_suggestion.model.provider
+                    },
+                    name: if over.smart_suggestion.model.name.is_empty() {
+                        base.smart_suggestion.model.name
+                    } else {
+                        over.smart_suggestion.model.name
+                    },
+                    auto_download: over.smart_suggestion.model.auto_download,
+                    files: if over.smart_suggestion.model.files.is_empty() {
+                        base.smart_suggestion.model.files
+                    } else {
+                        over.smart_suggestion.model.files
+                    },
+                },
+            },
+        }
+    }
+
+    fn rime_user_data_dir() -> PathBuf {
+        let (_, user_data_dir) = crate::get_data_dirs();
+        user_data_dir
+    }
+
+    pub fn config_path() -> PathBuf {
+        Self::rime_user_data_dir().join("xime.yaml")
     }
 
     pub fn save(&self) -> Result<(), String> {
-        let config_path = Self::user_config_path();
+        let config_path = Self::config_path();
 
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)
@@ -353,12 +528,12 @@ impl XimeConfig {
     }
 
     pub fn save_smart_suggestion(&self) -> Result<(), String> {
-        let config_path = Self::user_config_path();
+        let config_path = Self::config_path();
 
         let existing: XimeConfig = if config_path.exists() {
             fs::read_to_string(&config_path)
                 .ok()
-                .and_then(|c| serde_saphyr::from_str(&c).ok())
+                .and_then(|c| Self::parse_yaml(&c))
                 .unwrap_or_default()
         } else {
             XimeConfig::default()
@@ -372,96 +547,6 @@ impl XimeConfig {
         };
 
         merged.save()
-    }
-
-    fn load_system_config() -> Self {
-        let exe_path = std::env::current_exe().unwrap_or_default();
-        let system_path = exe_path
-            .parent()
-            .map(|p| p.join("data").join("xime.yaml"))
-            .unwrap_or_default();
-        if system_path.exists() {
-            if let Ok(content) = fs::read_to_string(&system_path) {
-                if let Ok(config) = serde_saphyr::from_str::<XimeConfig>(&content) {
-                    return config;
-                }
-            }
-        }
-        Self::builtin_default()
-    }
-
-    fn builtin_default() -> Self {
-        const DEFAULT_CONFIG: &[u8] = include_bytes!("../resources/xime.yaml");
-        serde_saphyr::from_slice(DEFAULT_CONFIG).unwrap_or_default()
-    }
-
-    fn load_user_config() -> Option<Self> {
-        let config_path = Self::user_config_path();
-        if config_path.exists() {
-            if let Ok(content) = fs::read_to_string(&config_path) {
-                return serde_saphyr::from_str::<XimeConfig>(&content).ok();
-            }
-        }
-        None
-    }
-
-    fn merge_configs(system: Self, user: Option<Self>) -> Self {
-        match user {
-            Some(user) => Self {
-                wubi_radicals: WubiRadicalsConfig {
-                    hotkeys: user.wubi_radicals.hotkeys,
-                    schema_radicals: SchemaRadicalsConfig {
-                        schemas: if user.wubi_radicals.schema_radicals.schemas.is_empty() {
-                            system.wubi_radicals.schema_radicals.schemas
-                        } else {
-                            user.wubi_radicals.schema_radicals.schemas
-                        },
-                    },
-                },
-                style: user.style,
-                color_schemes: if user.color_schemes.is_empty() {
-                    system.color_schemes
-                } else {
-                    user.color_schemes
-                },
-                smart_suggestion: SmartSuggestionConfig {
-                    enabled: user.smart_suggestion.enabled,
-                    suggestion_count: user.smart_suggestion.suggestion_count,
-                    record_user_frequency: user.smart_suggestion.record_user_frequency,
-                    auto_adjust_frequency: user.smart_suggestion.auto_adjust_frequency,
-                    learning_threshold: user.smart_suggestion.learning_threshold,
-                    model: SmartSuggestionModelConfig {
-                        provider: if user.smart_suggestion.model.provider.is_empty() {
-                            system.smart_suggestion.model.provider
-                        } else {
-                            user.smart_suggestion.model.provider
-                        },
-                        name: if user.smart_suggestion.model.name.is_empty() {
-                            system.smart_suggestion.model.name
-                        } else {
-                            user.smart_suggestion.model.name
-                        },
-                        auto_download: user.smart_suggestion.model.auto_download,
-                        files: if user.smart_suggestion.model.files.is_empty() {
-                            system.smart_suggestion.model.files
-                        } else {
-                            user.smart_suggestion.model.files
-                        },
-                    },
-                },
-            },
-            None => system,
-        }
-    }
-
-    fn user_config_path() -> PathBuf {
-        std::env::var("APPDATA")
-            .map(|p| PathBuf::from(p).join("Xime").join("rime").join("xime.yaml"))
-            .unwrap_or_else(|_| PathBuf::from("xime.yaml"))
-    }
-
-    pub fn config_path() -> PathBuf {
-        Self::user_config_path()
     }
 
     pub fn get_last_key_root_binding(&self) -> String {
@@ -528,9 +613,7 @@ impl XimeConfig {
     }
 
     pub fn user_data_dir() -> PathBuf {
-        std::env::var("APPDATA")
-            .map(|p| PathBuf::from(p).join("Xime").join("rime"))
-            .unwrap_or_else(|_| PathBuf::from("."))
+        Self::rime_user_data_dir()
     }
 
     pub fn shared_data_dir() -> PathBuf {
@@ -539,5 +622,434 @@ impl XimeConfig {
             .parent()
             .map(|p| p.join("data"))
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_wubi_root_config() {
+        let yaml = r#"
+g: "王龶五一戋"
+f: "土士二干"
+d: "大犬三"
+"#;
+        let config: WubiRootConfig = serde_saphyr::from_str(yaml).unwrap();
+        assert_eq!(config.g, "王龶五一戋");
+        assert_eq!(config.f, "土士二干");
+        assert_eq!(config.d, "大犬三");
+        assert_eq!(config.s, ""); // default
+    }
+
+    #[test]
+    fn test_parse_schema_radicals_with_flatten() {
+        let yaml = r#"
+wubi86:
+  g: "王龶五一戋"
+  f: "土士二干"
+wubi98:
+  g: "王王"
+  f: "土士"
+"#;
+        let config: SchemaRadicalsConfig = serde_saphyr::from_str(yaml).unwrap();
+        assert_eq!(config.schemas.len(), 2);
+        assert_eq!(config.schemas.get("wubi86").unwrap().g, "王龶五一戋");
+        assert_eq!(config.schemas.get("wubi86").unwrap().f, "土士二干");
+        assert_eq!(config.schemas.get("wubi98").unwrap().g, "王王");
+    }
+
+    #[test]
+    fn test_parse_schema_radicals_with_yaml_anchors() {
+        let yaml = r#"
+wubi86: &wubi86_radicals
+  g: "王龶五一戋"
+  f: "土士二干"
+  d: "大犬三"
+wubi86_pinyin: *wubi86_radicals
+"#;
+        let config: SchemaRadicalsConfig = serde_saphyr::from_str(yaml).unwrap();
+        assert_eq!(config.schemas.len(), 2);
+        assert_eq!(config.schemas.get("wubi86").unwrap().g, "王龶五一戋");
+        assert_eq!(config.schemas.get("wubi86_pinyin").unwrap().g, "王龶五一戋");
+        assert_eq!(config.schemas.get("wubi86_pinyin").unwrap().d, "大犬三");
+    }
+
+    #[test]
+    fn test_parse_wubi_radicals_config() {
+        let yaml = r#"
+hotkeys:
+  show_key: Ctrl
+  show_all_keys: Shift+Ctrl
+schema_radicals:
+  wubi86:
+    g: "王"
+    f: "土"
+"#;
+        let config: WubiRadicalsConfig = serde_saphyr::from_str(yaml).unwrap();
+        assert_eq!(config.hotkeys.show_key, "Ctrl");
+        assert_eq!(config.hotkeys.show_all_keys, "Shift+Ctrl");
+        assert_eq!(config.schema_radicals.schemas.len(), 1);
+        assert_eq!(
+            config.schema_radicals.schemas.get("wubi86").unwrap().g,
+            "王"
+        );
+    }
+
+    #[test]
+    fn test_parse_wubi_root_config_25_fields() {
+        // Parse only the WubiRootConfig (25 fields, no flatten)
+        let yaml = r#"
+g: "王龶五一戋"
+f: "土士二干十寸雨"
+d: "大犬三古石厂"
+s: "木丁西"
+a: "工匚戈艹廿"
+h: "目丨卜上止"
+j: "日曰早虫"
+k: "口川"
+l: "田甲囗四"
+m: "山由贝"
+t: "禾竹丿彳"
+r: "白手扌斤"
+e: "月彡乃用"
+w: "人亻八"
+q: "金钅犭"
+y: "言讠文方"
+u: "立辛冫"
+i: "水氵小"
+o: "火灬米"
+p: "之辶宀"
+n: "已己巳心"
+b: "子耳了也"
+v: "女刀九臼"
+c: "又巴马"
+x: "弓匕纟"
+"#;
+        let config: WubiRootConfig = serde_saphyr::from_str(yaml).unwrap();
+        assert_eq!(config.g, "王龶五一戋");
+        assert_eq!(config.x, "弓匕纟");
+        assert_eq!(config.t, "禾竹丿彳");
+    }
+
+    #[test]
+    fn test_parse_xime_config_wubi_only() {
+        // Parse XimeConfig with wubi_radicals but no style/color_schemes
+        let yaml = r#"
+wubi_radicals:
+  hotkeys:
+    show_key: Ctrl
+  schema_radicals:
+    wubi86:
+      g: "王龶五一戋"
+      f: "土士二干十寸雨"
+"#;
+        let config: XimeConfig = serde_saphyr::from_str(yaml).unwrap();
+        assert_eq!(config.wubi_radicals.hotkeys.show_key, "Ctrl");
+        assert_eq!(config.wubi_radicals.schema_radicals.schemas.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_xime_config_wubi_and_style() {
+        // Parse with wubi_radicals + style (cross-field boundary test)
+        let yaml = r#"
+wubi_radicals:
+  hotkeys:
+    show_key: Ctrl
+  schema_radicals:
+    wubi86:
+      g: "王龶五一戋"
+      f: "土士二干十寸雨"
+
+style:
+  font_size: 16
+  horizontal: true
+"#;
+        let config: XimeConfig = serde_saphyr::from_str(yaml).unwrap();
+        assert_eq!(config.wubi_radicals.hotkeys.show_key, "Ctrl");
+        assert_eq!(config.wubi_radicals.schema_radicals.schemas.len(), 1);
+        assert_eq!(config.style.font_size, 16.0);
+        assert!(config.style.horizontal);
+    }
+
+    #[test]
+    fn test_parse_xime_config_full_fields() {
+        // Full 25 fields with style + color_schemes, no YAML anchors
+        let yaml = r#"
+wubi_radicals:
+  hotkeys:
+    show_key: Ctrl
+  schema_radicals:
+    wubi86:
+      g: "王龶五一戋"
+      f: "土士二干十寸雨"
+      d: "大犬三古石厂"
+      s: "木丁西"
+      a: "工匚戈艹廿"
+      h: "目丨卜上止"
+      j: "日曰早虫"
+      k: "口川"
+      l: "田甲囗四"
+      m: "山由贝"
+      t: "禾竹丿彳"
+      r: "白手扌斤"
+      e: "月彡乃用"
+      w: "人亻八"
+      q: "金钅犭"
+      y: "言讠文方"
+      u: "立辛冫"
+      i: "水氵小"
+      o: "火灬米"
+      p: "之辶宀"
+      n: "已己巳心"
+      b: "子耳了也"
+      v: "女刀九臼"
+      c: "又巴马"
+      x: "弓匕纟"
+
+style:
+  font_family: "Microsoft YaHei UI"
+  font_size: 16
+  horizontal: true
+
+color_schemes:
+  test_theme:
+    name: "测试主题"
+    primary_color: 0xFF0000
+"#;
+        let config = XimeConfig::parse_yaml(yaml).unwrap();
+
+        // Check wubi_radicals
+        assert_eq!(config.wubi_radicals.hotkeys.show_key, "Ctrl");
+        let schemas = &config.wubi_radicals.schema_radicals.schemas;
+        let keys: Vec<&String> = schemas.keys().collect();
+        assert_eq!(
+            schemas.len(), 1,
+            "expected 1 schema entry, got {}: {:?}",
+            schemas.len(), keys
+        );
+        let wubi86 = schemas.get("wubi86").unwrap();
+        assert_eq!(wubi86.g, "王龶五一戋");
+        assert_eq!(wubi86.f, "土士二干十寸雨");
+        assert_eq!(wubi86.a, "工匚戈艹廿");
+        assert_eq!(wubi86.x, "弓匕纟");
+
+        // Check style
+        assert_eq!(config.style.font_family, "Microsoft YaHei UI");
+        assert_eq!(config.style.font_size, 16.0);
+        assert!(config.style.horizontal);
+
+        // Check color_schemes
+        assert_eq!(config.color_schemes.len(), 1);
+        let theme = config.color_schemes.get("test_theme").unwrap();
+        assert_eq!(theme.name, "测试主题");
+        assert_eq!(theme.primary_color, 0xFF0000);
+    }
+
+    #[test]
+    fn test_parse_xime_config_with_yaml_anchors() {
+        // This mimics the user's actual xime.yaml structure
+        let yaml = r#"
+wubi_radicals:
+  hotkeys:
+    show_key: Ctrl
+    show_all_keys: ""
+  schema_radicals:
+    wubi86: &wubi86_radicals
+      g: "王龶五一戋"
+      f: "土士二干十寸雨"
+      d: "大犬三古石厂"
+    wubi86_pinyin: *wubi86_radicals
+
+style:
+  font_size: 14
+  font_family: "Microsoft YaHei UI"
+"#;
+        let config: XimeConfig = serde_saphyr::from_str(yaml).unwrap();
+
+        // This is the critical test: flatten with YAML anchors
+        assert!(
+            !config.wubi_radicals.schema_radicals.schemas.is_empty(),
+            "schema_radicals.schemas should NOT be empty! Got schemas={:?}",
+            config.wubi_radicals.schema_radicals.schemas
+        );
+
+        let schemas = &config.wubi_radicals.schema_radicals.schemas;
+        assert_eq!(schemas.len(), 2);
+        assert_eq!(schemas.get("wubi86").unwrap().g, "王龶五一戋");
+        assert_eq!(schemas.get("wubi86_pinyin").unwrap().g, "王龶五一戋");
+    }
+
+    #[test]
+    fn test_merge_configs_overrides_fields() {
+        let base = XimeConfig {
+            wubi_radicals: WubiRadicalsConfig {
+                hotkeys: HotkeyConfig {
+                    show_key: "Ctrl".into(),
+                    show_all_keys: String::new(),
+                },
+                schema_radicals: SchemaRadicalsConfig {
+                    schemas: {
+                        let mut m = HashMap::new();
+                        m.insert(
+                            "wubi86".into(),
+                            WubiRootConfig {
+                                g: "王".into(),
+                                ..Default::default()
+                            },
+                        );
+                        m
+                    },
+                },
+            },
+            style: StyleConfig {
+                font_size: 12.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let over = XimeConfig {
+            wubi_radicals: WubiRadicalsConfig {
+                hotkeys: HotkeyConfig {
+                    show_key: "Shift".into(),
+                    show_all_keys: String::new(),
+                },
+                schema_radicals: SchemaRadicalsConfig {
+                    schemas: {
+                        let mut m = HashMap::new();
+                        m.insert(
+                            "wubi86".into(),
+                            WubiRootConfig {
+                                g: "王王".into(),
+                                ..Default::default()
+                            },
+                        );
+                        m
+                    },
+                },
+            },
+            style: StyleConfig {
+                font_size: 16.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let merged = XimeConfig::merge_configs(base, over);
+        assert_eq!(merged.wubi_radicals.hotkeys.show_key, "Shift");
+        assert_eq!(
+            merged
+                .wubi_radicals
+                .schema_radicals
+                .schemas
+                .get("wubi86")
+                .unwrap()
+                .g,
+            "王王"
+        );
+        assert_eq!(merged.style.font_size, 16.0);
+    }
+
+    #[test]
+    fn test_merge_configs_preserves_base_when_over_empty() {
+        let base = XimeConfig {
+            wubi_radicals: WubiRadicalsConfig {
+                hotkeys: HotkeyConfig {
+                    show_key: "Ctrl".into(),
+                    show_all_keys: String::new(),
+                },
+                schema_radicals: SchemaRadicalsConfig {
+                    schemas: {
+                        let mut m = HashMap::new();
+                        m.insert(
+                            "wubi86".into(),
+                            WubiRootConfig {
+                                g: "王".into(),
+                                ..Default::default()
+                            },
+                        );
+                        m
+                    },
+                },
+            },
+            ..Default::default()
+        };
+
+        let over = XimeConfig::default(); // empty schemas
+
+        let merged = XimeConfig::merge_configs(base, over);
+        // Since over.schema_radicals.schemas is empty, base should be preserved
+        assert_eq!(merged.wubi_radicals.schema_radicals.schemas.len(), 1);
+        assert_eq!(
+            merged
+                .wubi_radicals
+                .schema_radicals
+                .schemas
+                .get("wubi86")
+                .unwrap()
+                .g,
+            "王"
+        );
+    }
+
+    #[test]
+    fn test_parse_user_xime_yaml_from_file() {
+        // Read the actual file from the user data directory
+        let user_data_dir = XimeConfig::rime_user_data_dir();
+        let user_yaml = user_data_dir.join("xime.yaml");
+        if !user_yaml.exists() {
+            eprintln!("Skipping: user xime.yaml not found at {:?}", user_yaml);
+            return;
+        }
+        let content = std::fs::read_to_string(&user_yaml).unwrap();
+        let config = XimeConfig::parse_yaml(&content).unwrap();
+        eprintln!("Parsed config: {:#?}", config);
+        assert!(
+            !config.wubi_radicals.schema_radicals.schemas.is_empty(),
+            "wubi_radicals.schema_radicals.schemas should NOT be empty after parsing {:?}",
+            user_yaml
+        );
+    }
+
+    #[test]
+    fn test_serialize_roundtrip() {
+        let config = XimeConfig {
+            wubi_radicals: WubiRadicalsConfig {
+                hotkeys: HotkeyConfig {
+                    show_key: "Ctrl".into(),
+                    show_all_keys: String::new(),
+                },
+                schema_radicals: SchemaRadicalsConfig {
+                    schemas: {
+                        let mut m = HashMap::new();
+                        m.insert(
+                            "wubi86".into(),
+                            WubiRootConfig {
+                                g: "王".into(),
+                                ..Default::default()
+                            },
+                        );
+                        m
+                    },
+                },
+            },
+            ..Default::default()
+        };
+
+        let yaml = serde_saphyr::to_string(&config).unwrap();
+        let deserialized: XimeConfig = serde_saphyr::from_str(&yaml).unwrap();
+        assert_eq!(deserialized.wubi_radicals.hotkeys.show_key, "Ctrl");
+        assert_eq!(
+            deserialized
+                .wubi_radicals
+                .schema_radicals
+                .schemas
+                .get("wubi86")
+                .unwrap()
+                .g,
+            "王"
+        );
     }
 }

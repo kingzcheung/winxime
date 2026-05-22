@@ -732,7 +732,7 @@ fn process_request(
                             schema_list: None,
                         }
                     } else {
-                        tracing::info!("  -> no root for key '{}' in schema '{}'", c, schema_id);
+                        tracing::warn!("  -> no root for key '{}' in schema '{}'", c, schema_id);
                         IpcResponse {
                             success: false,
                             session_id: request.session_id,
