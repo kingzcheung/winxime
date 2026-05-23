@@ -275,7 +275,6 @@ pub struct SchemaRadicalsConfig {
     pub schemas: HashMap<String, WubiRootConfig>,
 }
 
-
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct WubiRootConfig {
     #[serde(default)]
@@ -482,8 +481,11 @@ impl XimeConfig {
             } else {
                 over.color_schemes
             },
-                smart_suggestion: SmartSuggestionConfig {
-                    enabled: over.smart_suggestion.enabled.or(base.smart_suggestion.enabled),
+            smart_suggestion: SmartSuggestionConfig {
+                enabled: over
+                    .smart_suggestion
+                    .enabled
+                    .or(base.smart_suggestion.enabled),
                 suggestion_count: over.smart_suggestion.suggestion_count,
                 record_user_frequency: over.smart_suggestion.record_user_frequency,
                 auto_adjust_frequency: over.smart_suggestion.auto_adjust_frequency,
@@ -860,9 +862,11 @@ color_schemes:
         let schemas = &config.wubi_radicals.schema_radicals.schemas;
         let keys: Vec<&String> = schemas.keys().collect();
         assert_eq!(
-            schemas.len(), 1,
+            schemas.len(),
+            1,
             "expected 1 schema entry, got {}: {:?}",
-            schemas.len(), keys
+            schemas.len(),
+            keys
         );
         let wubi86 = schemas.get("wubi86").unwrap();
         assert_eq!(wubi86.g, "王龶五一戋");

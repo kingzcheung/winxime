@@ -21,7 +21,10 @@ fn replace_schema_list(content: &str, new_list: &str) -> String {
         if line.trim() == "schema_list:" {
             found = true;
             i += 1;
-            while i < lines.len() && lines[i].trim_start().starts_with('-') && lines[i].starts_with("    ") {
+            while i < lines.len()
+                && lines[i].trim_start().starts_with('-')
+                && lines[i].starts_with("    ")
+            {
                 i += 1;
             }
             result.push_str("  schema_list:\n");

@@ -16,7 +16,8 @@ winxime-config = { path = "../winxime-config" }
 winxime-predict = { path = "../winxime-predict" }
 librime.workspace = true
 librime-sys2 = { path = "../librime-sys" }
-ximed = {version = "0.1.0", git = "https://github.com/ximeiorg/ximed"}
+ximed = {version = "0.1.0", git = "https://github.com/ximeiorg/ximed", default-features = false, features = ["windows", "arboard"]}
+tokio = { version = "1", features = ["rt"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing = "0.1"

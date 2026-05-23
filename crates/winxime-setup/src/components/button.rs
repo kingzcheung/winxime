@@ -55,6 +55,9 @@ impl IntoElement for Button {
             .text_color(colors.on_primary)
             .text_size(px(14.0))
             .cursor_pointer()
+            .flex()
+            .items_center()
+            .justify_center()
             .hover(|style| style.bg(hover_color))
             .when_some(on_click, |this: Stateful<Div>, cb| {
                 this.on_click(move |_, window, cx| {

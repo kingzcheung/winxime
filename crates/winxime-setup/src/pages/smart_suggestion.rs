@@ -170,14 +170,13 @@ fn download_model_async() -> Result<(), String> {
     for file in files {
         println!("正在下载 {} from {}...", file.filename, file.url);
 
-        let response = ureq::get(&file.url)
+        let mut response = ureq::get(&file.url)
             .call()
             .map_err(|e| format!("下载 {} 失败: {}", file.filename, e))?;
 
-        let mut content = Vec::new();
-        response
-            .into_reader()
-            .read_to_end(&mut content)
+        let content = response
+            .body_mut()
+            .read_to_string()
             .map_err(|e| format!("读取 {} 失败: {}", file.filename, e))?;
 
         let path = model_dir.join(&file.filename);

@@ -12,6 +12,7 @@ pub struct SettingsState {
     pub input_schema: InputSchemaState,
     pub clipboard: ClipboardState,
     pub smart_suggestion: SmartSuggestionState,
+    pub pair: PairState,
     pub system_theme: SystemTheme,
     pub deploy_message: Option<String>,
     pub deploy_message_time: Option<std::time::Instant>,
@@ -25,6 +26,7 @@ impl SettingsState {
             input_schema: InputSchemaState::default(),
             clipboard: ClipboardState::default(),
             smart_suggestion: Self::load_smart_suggestion_config(),
+            pair: PairState::default(),
             system_theme: SystemTheme::detect(),
             deploy_message: None,
             deploy_message_time: None,
@@ -375,4 +377,122 @@ impl Default for SmartSuggestionState {
             downloading: false,
         }
     }
+}
+
+#[derive(Clone)]
+pub struct PairDeviceInfo {
+    pub device_id: String,
+    pub device_name: String,
+    pub paired_at: String,
+}
+
+#[derive(Clone)]
+pub struct PairState {
+    pub server_running: bool,
+    pub code: String,
+    pub editing: bool,
+    pub devices: Vec<PairDeviceInfo>,
+    pub status_message: String,
+    pub loading: bool,
+}
+
+impl Default for PairState {
+    fn default() -> Self {
+        Self {
+            server_running: false,
+            code: String::new(),
+            editing: false,
+            devices: Vec::new(),
+            status_message: String::new(),
+            loading: false,
+        }
+    }
+}
+
+const XIMED_PORT: u16 = 8370;
+
+impl PairState {
+    pub fn refresh(&mut self) {
+        self.server_running = Self::check_health();
+        if self.server_running {
+            self.devices = Self::fetch_devices().unwrap_or_default();
+        } else {
+            self.devices.clear();
+        }
+    }
+
+    fn check_health() -> bool {
+        let url = format!("http://127.0.0.1:{}/health", XIMED_PORT);
+        match ureq::get(&url).call() {
+            Ok(resp) => resp.status() == 200,
+            Err(_) => false,
+        }
+    }
+
+    fn fetch_devices() -> Result<Vec<PairDeviceInfo>, String> {
+        let url = format!("http://127.0.0.1:{}/pair/list", XIMED_PORT);
+        let resp = ureq::get(&url)
+            .call()
+            .map_err(|e| format!("请求失败: {}", e))?;
+        let text = resp
+            .into_body()
+            .read_to_string()
+            .map_err(|e| format!("读取响应失败: {}", e))?;
+        let body: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("解析失败: {}", e))?;
+        let devices = body["devices"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| {
+                        Some(PairDeviceInfo {
+                            device_id: v["device_id"].as_str()?.to_string(),
+                            device_name: v["device_name"].as_str()?.to_string(),
+                            paired_at: v["paired_at"].as_str()?.to_string(),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(devices)
+    }
+
+    pub fn confirm_code(code: &str) -> Result<String, String> {
+        let url = format!("http://127.0.0.1:{}/pair/confirm", XIMED_PORT);
+        let body = serde_json::json!({
+            "code": code,
+            "approve": true,
+        });
+        let body_str = serde_json::to_string(&body).map_err(|e| format!("序列化失败: {}", e))?;
+        let resp = ureq::post(&url)
+            .send(&body_str)
+            .map_err(|e| format!("确认失败: {}", e))?;
+        if resp.status() == 200 {
+            Ok("配对成功".to_string())
+        } else {
+            let status = resp.status();
+            Err(format!("配对失败 (HTTP {})", status))
+        }
+    }
+
+    pub fn remove_device(device_id: &str) -> Result<(), String> {
+        let url = format!(
+            "http://127.0.0.1:{}/pair/remove/{}",
+            XIMED_PORT,
+            urlencoding(device_id)
+        );
+        ureq::post(&url)
+            .send_empty()
+            .map_err(|e| format!("删除失败: {}", e))?;
+        Ok(())
+    }
+}
+
+fn urlencoding(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+            _ => format!("%{:02X}", c as u8),
+        })
+        .collect()
 }

@@ -4,6 +4,7 @@ pub mod clipboard;
 pub mod dictionary;
 pub mod hotkeys;
 pub mod input_schema;
+pub mod pair;
 pub mod smart_suggestion;
 
 use crate::components::TitleBar;
@@ -31,7 +32,8 @@ fn get_page_icon(index: usize) -> &'static str {
         0 => "icons/keyboard.svg",
         1 => "icons/palette.svg",
         2 => "icons/thinking.svg",
-        3 => "icons/about.svg",
+        3 => "icons/clipboard.svg",
+        4 => "icons/about.svg",
         _ => "icons/keyboard.svg",
     }
 }
@@ -39,7 +41,7 @@ fn get_page_icon(index: usize) -> &'static str {
 impl Render for SettingsApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_background_appearance(WindowBackgroundAppearance::Blurred);
-        let pages = ["输入方案", "外观", "智能联想", "关于"];
+        let pages = ["输入方案", "外观", "智能联想", "设备关联", "关于"];
         let current = self.current_page;
         let settings = self.settings.clone();
         let settings_for_title = settings.clone();
@@ -104,7 +106,8 @@ impl Render for SettingsApp {
             0 => input_schema::render(settings, cx),
             1 => appearance::render(settings, cx),
             2 => smart_suggestion::render(settings, cx),
-            3 => about::render(settings, cx),
+            3 => pair::render(settings, cx),
+            4 => about::render(settings, cx),
             _ => input_schema::render(settings, cx),
         };
 

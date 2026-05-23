@@ -5,6 +5,7 @@ mod context;
 mod ipc_server;
 mod tray;
 mod ui;
+mod ximed_server;
 
 use crate::config::get_colors;
 use crate::context::SharedInputContext;
@@ -224,6 +225,10 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
 
     tray::TrayIcon::new(on_action);
     info!("Tray icon created");
+
+    info!("Starting clipboard sharing server...");
+    ximed_server::start();
+    info!("Clipboard sharing server started");
 
     info!("Server ready, entering message loop");
 
