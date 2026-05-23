@@ -80,6 +80,8 @@ Write-Host "  System config: $sharedDataDir\xime.yaml" -ForegroundColor Gray
 if (-not (Test-Path $userDataDir)) {
     New-Item -ItemType Directory -Path $userDataDir -Force | Out-Null
 }
+# Deploy full default.custom.yaml from rime-wubi source
+Copy-Item "$rimeWubiDir\default.custom.yaml" "$userDataDir\default.custom.yaml" -Force
 Write-Host "  User data: $userDataDir" -ForegroundColor Gray
 
 Write-Host "Step 5: Registering COM DLL (no profile)..." -ForegroundColor Yellow

@@ -129,45 +129,48 @@ pub fn render(settings: Entity<SettingsState>, cx: &mut Context<SettingsApp>) ->
             .child("正在加载方案配置...")
             .into_any_element()
     };
-
     div()
-        .flex()
-        .flex_col()
-        .gap(px(16.0))
-        .p(px(16.0))
-        .w_full()
-        .child(
-            div()
-                .text_size(px(20.0))
-                .font_weight(FontWeight::BOLD)
-                .text_color(colors.foreground)
-                .child("输入方案"),
-        )
         .child(
             div()
                 .flex()
                 .flex_col()
-                .gap(px(12.0))
+                .gap(px(16.0))
                 .p(px(16.0))
-                .rounded(px(12.0))
-                .bg(colors.surface)
-                .border_1()
-                .border_color(colors.border)
+                .w_full()
                 .child(
                     div()
-                        .text_size(px(14.0))
-                        .text_color(colors.foreground_muted)
-                        .child("选择默认输入方案"),
+                        .text_size(px(20.0))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(colors.foreground)
+                        .child("输入方案"),
                 )
-                .when(schemas.is_empty(), |this| {
-                    this.child(
-                        div()
-                            .text_size(px(14.0))
-                            .text_color(colors.foreground_muted)
-                            .child("未找到输入方案，请先部署"),
-                    )
-                })
-                .when(!schemas.is_empty(), |this| this.children(schema_items)),
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(12.0))
+                        .p(px(16.0))
+                        .rounded(px(12.0))
+                        .bg(colors.surface)
+                        .border_1()
+                        .border_color(colors.border)
+                        .child(
+                            div()
+                                .text_size(px(14.0))
+                                .text_color(colors.foreground_muted)
+                                .child("选择默认输入方案"),
+                        )
+                        .when(schemas.is_empty(), |this| {
+                            this.child(
+                                div()
+                                    .text_size(px(14.0))
+                                    .text_color(colors.foreground_muted)
+                                    .child("未找到输入方案，请先部署"),
+                            )
+                        })
+                        .when(!schemas.is_empty(), |this| this.children(schema_items)),
+                )
+                .into_any_element(),
         )
         .when(!schemas.is_empty() && selected < schemas.len(), |this| {
             this.child(config_section)

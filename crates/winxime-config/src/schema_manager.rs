@@ -1,6 +1,52 @@
 use crate::rime_deploy::{get_data_dirs, init_rime_deployer, SchemaInfo};
 use std::collections::HashSet;
 
+fn replace_schema_list(content: &str, new_list: &str) -> String {
+    if content.is_empty() {
+        let mut result = String::from("patch:\n  schema_list:\n");
+        for item in new_list.lines() {
+            result.push_str(&format!("    {}\n", item.trim()));
+        }
+        return result;
+    }
+
+    let mut result = String::new();
+    let mut i = 0;
+    let lines: Vec<&str> = content.lines().collect();
+    let mut found = false;
+
+    while i < lines.len() {
+        let line = lines[i];
+
+        if line.trim() == "schema_list:" {
+            found = true;
+            i += 1;
+            while i < lines.len() && lines[i].trim_start().starts_with('-') && lines[i].starts_with("    ") {
+                i += 1;
+            }
+            result.push_str("  schema_list:\n");
+            for item in new_list.lines() {
+                result.push_str(&format!("    {}\n", item.trim()));
+            }
+            continue;
+        }
+
+        result.push_str(line);
+        result.push('\n');
+        i += 1;
+    }
+
+    if !found {
+        result.push_str("\npatch:\n  schema_list:\n");
+        for item in new_list.lines() {
+            result.push_str(&format!("    {}\n", item.trim()));
+        }
+        result.push('\n');
+    }
+
+    result
+}
+
 pub struct SchemaManager {
     user_dir: std::path::PathBuf,
 }
@@ -67,25 +113,29 @@ impl SchemaManager {
     pub fn set_schema_list(&self, schema_ids: &[&str]) -> Result<(), String> {
         let default_custom = self.user_dir.join("default.custom.yaml");
 
-        let schema_list_yaml = schema_ids
+        let new_list = schema_ids
             .iter()
-            .map(|id| format!("    - schema: {}", id))
+            .map(|id| format!("- schema: {}", id))
             .collect::<Vec<_>>()
             .join("\n");
 
-        let content = format!(
-            r#"customization:
-  distribution_code_name: Xime
-  distribution_version: 1.0
+        let content = if default_custom.exists() {
+            std::fs::read_to_string(&default_custom)
+                .map_err(|e| format!("Failed to read default.custom.yaml: {}", e))?
+        } else {
+            let (shared_dir, _) = get_data_dirs();
+            let source = shared_dir.join("default.custom.yaml");
+            if source.exists() {
+                std::fs::read_to_string(&source)
+                    .map_err(|e| format!("Failed to read default.custom.yaml: {}", e))?
+            } else {
+                String::new()
+            }
+        };
 
-patch:
-  schema_list:
-{}
-"#,
-            schema_list_yaml
-        );
+        let updated = replace_schema_list(&content, &new_list);
 
-        std::fs::write(&default_custom, content)
+        std::fs::write(&default_custom, updated)
             .map_err(|e| format!("Failed to write default.custom.yaml: {}", e))?;
 
         Ok(())

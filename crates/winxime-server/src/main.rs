@@ -63,7 +63,7 @@ fn main() {
     }
 
     let _ = std::fs::create_dir_all(&user_data_dir);
-    ensure_user_config_files(&user_data_dir);
+    ensure_user_config_files(&shared_data_dir, &user_data_dir);
 
     let config = XimeConfig::load();
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
@@ -133,14 +133,14 @@ fn get_config_source_dir() -> std::path::PathBuf {
     }
 }
 
-fn ensure_user_config_files(user_data_dir: &std::path::Path) {
-    if !user_data_dir.exists() {
-        std::fs::create_dir_all(user_data_dir).ok();
+fn ensure_user_config_files(shared_data_dir: &std::path::Path, _user_data_dir: &std::path::Path) {
+    if !shared_data_dir.exists() {
+        std::fs::create_dir_all(shared_data_dir).ok();
     }
 
     let config_source_dir = get_config_source_dir();
 
-    let xime_yaml = user_data_dir.join("xime.yaml");
+    let xime_yaml = shared_data_dir.join("xime.yaml");
     if !xime_yaml.exists() {
         let source = config_source_dir.join("xime.yaml");
         if source.exists() {

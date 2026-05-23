@@ -12,7 +12,7 @@ pub fn init_rime_deployer() -> Result<(), String> {
     RIME_INIT.call_once(|| {
         let (shared_data_dir, user_data_dir) = get_data_dirs();
 
-        ensure_user_config_files(&user_data_dir);
+        ensure_user_config_files(&shared_data_dir, &user_data_dir);
         ensure_schemas_in_user_dir(&shared_data_dir, &user_data_dir);
 
         let mut traits = Traits::new();
@@ -54,14 +54,14 @@ pub fn init_rime_deployer() -> Result<(), String> {
     Ok(())
 }
 
-fn ensure_user_config_files(user_data_dir: &std::path::Path) {
-    if !user_data_dir.exists() {
-        std::fs::create_dir_all(user_data_dir).ok();
+fn ensure_user_config_files(shared_data_dir: &std::path::Path, _user_data_dir: &std::path::Path) {
+    if !shared_data_dir.exists() {
+        std::fs::create_dir_all(shared_data_dir).ok();
     }
 
     let config_source_dir = get_config_source_dir();
 
-    let xime_yaml = user_data_dir.join("xime.yaml");
+    let xime_yaml = shared_data_dir.join("xime.yaml");
     if !xime_yaml.exists() {
         let source = config_source_dir.join("xime.yaml");
         if source.exists() {
@@ -73,45 +73,10 @@ fn ensure_user_config_files(user_data_dir: &std::path::Path) {
 fn ensure_schemas_in_user_dir(shared_data_dir: &std::path::Path, user_data_dir: &std::path::Path) {
     let default_custom = user_data_dir.join("default.custom.yaml");
     if !default_custom.exists() {
-        let schema_list = if let Ok(entries) = std::fs::read_dir(shared_data_dir) {
-            let schemas: Vec<String> = entries
-                .filter_map(|e| e.ok())
-                .filter_map(|e| {
-                    let name = e.file_name().to_string_lossy().to_string();
-                    if name.ends_with(".schema.yaml") {
-                        Some(name.replace(".schema.yaml", ""))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            if schemas.is_empty() {
-                "    - schema: wubi86\n".to_string()
-            } else {
-                schemas
-                    .iter()
-                    .map(|s| format!("    - schema: {}\n", s))
-                    .collect::<Vec<_>>()
-                    .join("")
-            }
-        } else {
-            "    - schema: wubi86\n".to_string()
-        };
-
-        let content = format!(
-            r#"customization:
-  distribution_code_name: Xime
-  distribution_version: 1.0
-
-patch:
-  schema_list:
-{}
-"#,
-            schema_list
-        );
-
-        std::fs::write(&default_custom, content).ok();
+        let source = shared_data_dir.join("default.custom.yaml");
+        if source.exists() {
+            std::fs::copy(&source, &default_custom).ok();
+        }
     }
 }
 

@@ -417,8 +417,28 @@ impl XimeConfig {
             }
         }
 
-        // 4. Highest: xime.custom.yaml (Rime patch format)
+        // 4. User xime.custom.yaml (Rime patch format)
         config = Self::apply_custom_config(config, &user_data_dir);
+
+        #[cfg(debug_assertions)]
+        {
+            let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
+            let dev_custom = workspace_dir.join("rime-wubi").join("xime.custom.yaml");
+            if dev_custom.exists() {
+                if let Ok(content) = std::fs::read_to_string(&dev_custom) {
+                    if let Ok(value) = serde_saphyr::from_str::<serde_json::Value>(&content) {
+                        if let Some(patch_value) = value.get("patch") {
+                            if let Ok(custom) =
+                                serde_json::from_value::<XimeConfig>(patch_value.clone())
+                            {
+                                config = Self::merge_configs(config, custom);
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         config
     }
@@ -438,21 +458,9 @@ impl XimeConfig {
             Ok(c) => c,
             Err(_) => return config,
         };
-
-        // Try Rime patch format (patch: {...})
-        if let Ok(value) = serde_saphyr::from_str::<serde_json::Value>(&content) {
-            if let Some(patch_value) = value.get("patch") {
-                if let Ok(custom) = serde_json::from_value::<XimeConfig>(patch_value.clone()) {
-                    return Self::merge_configs(config, custom);
-                }
-            }
-        }
-
-        // Fallback: direct XimeConfig format
-        if let Some(custom) = Self::parse_yaml(&content) {
+        if let Some(custom) = Self::read_config(&content) {
             return Self::merge_configs(config, custom);
         }
-
         config
     }
 
@@ -508,7 +516,35 @@ impl XimeConfig {
     }
 
     pub fn config_path() -> PathBuf {
-        Self::rime_user_data_dir().join("xime.yaml")
+        #[cfg(debug_assertions)]
+        {
+            let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
+            workspace_dir.join("rime-wubi").join("xime.custom.yaml")
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            Self::rime_user_data_dir().join("xime.custom.yaml")
+        }
+    }
+
+    fn serialize_config(config: &XimeConfig) -> Result<String, String> {
+        let value = serde_json::to_value(config)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?;
+        let root = serde_json::json!({"patch": value});
+        serde_saphyr::to_string(&root)
+            .map_err(|e| format!("Failed to serialize custom yaml: {}", e))
+    }
+
+    fn read_config(content: &str) -> Option<XimeConfig> {
+        if let Ok(value) = serde_saphyr::from_str::<serde_json::Value>(content) {
+            if let Some(patch_value) = value.get("patch") {
+                if let Ok(config) = serde_json::from_value::<XimeConfig>(patch_value.clone()) {
+                    return Some(config);
+                }
+            }
+        }
+        Self::parse_yaml(content)
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -519,8 +555,7 @@ impl XimeConfig {
                 .map_err(|e| format!("Failed to create config dir: {}", e))?;
         }
 
-        let content = serde_saphyr::to_string(self)
-            .map_err(|e| format!("Failed to serialize config: {}", e))?;
+        let content = Self::serialize_config(self)?;
 
         fs::write(&config_path, content).map_err(|e| format!("Failed to write config: {}", e))?;
 
@@ -533,7 +568,7 @@ impl XimeConfig {
         let existing: XimeConfig = if config_path.exists() {
             fs::read_to_string(&config_path)
                 .ok()
-                .and_then(|c| Self::parse_yaml(&c))
+                .and_then(|c| Self::read_config(&c))
                 .unwrap_or_default()
         } else {
             XimeConfig::default()
