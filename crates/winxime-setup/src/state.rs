@@ -389,22 +389,22 @@ pub struct PairDeviceInfo {
 #[derive(Clone)]
 pub struct PairState {
     pub server_running: bool,
-    pub code: String,
-    pub editing: bool,
+    pub local_code: String,
+    pub showing_code: bool,
     pub devices: Vec<PairDeviceInfo>,
     pub status_message: String,
-    pub loading: bool,
+    pub loaded: bool,
 }
 
 impl Default for PairState {
     fn default() -> Self {
         Self {
             server_running: false,
-            code: String::new(),
-            editing: false,
+            local_code: String::new(),
+            showing_code: false,
             devices: Vec::new(),
             status_message: String::new(),
-            loading: false,
+            loaded: false,
         }
     }
 }
@@ -412,6 +412,34 @@ impl Default for PairState {
 const XIMED_PORT: u16 = 8370;
 
 impl PairState {
+    pub fn request_pair_code(&mut self) -> Result<(), String> {
+        if !self.server_running {
+            return Err("服务器未运行".to_string());
+        }
+        let device_name =
+            std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows 设备".to_string());
+        let device_id = format!("windows-{}", device_name);
+        let url = format!("http://127.0.0.1:{}/pair/request", XIMED_PORT);
+        let body = serde_json::json!({
+            "device_name": device_name,
+            "device_id": device_id,
+        });
+        let body_str = serde_json::to_string(&body).map_err(|e| format!("序列化失败: {}", e))?;
+        let resp = ureq::post(&url)
+            .header("Content-Type", "application/json")
+            .send(&body_str)
+            .map_err(|e| format!("请求失败: {}", e))?;
+        let text = resp
+            .into_body()
+            .read_to_string()
+            .map_err(|e| format!("读取响应失败: {}", e))?;
+        let value: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("解析失败: {}", e))?;
+        self.local_code = value["code"].as_str().unwrap_or("??????").to_string();
+        self.status_message = String::new();
+        Ok(())
+    }
+
     pub fn refresh(&mut self) {
         self.server_running = Self::check_health();
         if self.server_running {
@@ -455,24 +483,6 @@ impl PairState {
             })
             .unwrap_or_default();
         Ok(devices)
-    }
-
-    pub fn confirm_code(code: &str) -> Result<String, String> {
-        let url = format!("http://127.0.0.1:{}/pair/confirm", XIMED_PORT);
-        let body = serde_json::json!({
-            "code": code,
-            "approve": true,
-        });
-        let body_str = serde_json::to_string(&body).map_err(|e| format!("序列化失败: {}", e))?;
-        let resp = ureq::post(&url)
-            .send(&body_str)
-            .map_err(|e| format!("确认失败: {}", e))?;
-        if resp.status() == 200 {
-            Ok("配对成功".to_string())
-        } else {
-            let status = resp.status();
-            Err(format!("配对失败 (HTTP {})", status))
-        }
     }
 
     pub fn remove_device(device_id: &str) -> Result<(), String> {
