@@ -119,6 +119,9 @@ pub struct XimeConfig {
     pub color_schemes: HashMap<String, ColorScheme>,
     #[serde(default)]
     pub smart_suggestion: SmartSuggestionConfig,
+    /// 设备配对的 HMAC 密钥，持久化后重启服务 token 不失效
+    #[serde(default)]
+    pub pair_secret: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
@@ -352,6 +355,9 @@ impl XimeConfig {
                 "smart_suggestion" => {
                     config.smart_suggestion = serde_json::from_value(v.clone()).ok()?;
                 }
+                "pair_secret" => {
+                    config.pair_secret = v.as_str().unwrap_or_default().to_string();
+                }
                 _ => {}
             }
         }
@@ -509,6 +515,11 @@ impl XimeConfig {
                     },
                 },
             },
+            pair_secret: if over.pair_secret.is_empty() {
+                base.pair_secret
+            } else {
+                over.pair_secret
+            },
         }
     }
 
@@ -581,6 +592,7 @@ impl XimeConfig {
             style: existing.style,
             color_schemes: existing.color_schemes,
             smart_suggestion: self.smart_suggestion.clone(),
+            pair_secret: existing.pair_secret,
         };
 
         merged.save()

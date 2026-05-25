@@ -165,6 +165,7 @@ impl SettingsState {
             },
             color_schemes: config.color_schemes,
             smart_suggestion: config.smart_suggestion,
+            pair_secret: config.pair_secret,
         };
         updated.save()
     }
@@ -183,6 +184,7 @@ impl SettingsState {
             },
             color_schemes: config.color_schemes,
             smart_suggestion: config.smart_suggestion,
+            pair_secret: config.pair_secret,
         };
         updated.save()?;
 
@@ -295,6 +297,7 @@ impl SettingsState {
                     files: vec![],
                 },
             },
+            pair_secret: config.pair_secret,
         };
 
         updated.save()
@@ -389,8 +392,11 @@ pub struct PairDeviceInfo {
 #[derive(Clone)]
 pub struct PairState {
     pub server_running: bool,
+    pub device_id: String,
     pub local_code: String,
+    pub token: String,
     pub showing_code: bool,
+    pub polling: bool,
     pub devices: Vec<PairDeviceInfo>,
     pub status_message: String,
     pub loaded: bool,
@@ -400,8 +406,11 @@ impl Default for PairState {
     fn default() -> Self {
         Self {
             server_running: false,
+            device_id: String::new(),
             local_code: String::new(),
+            token: String::new(),
             showing_code: false,
+            polling: false,
             devices: Vec::new(),
             status_message: String::new(),
             loaded: false,
@@ -418,11 +427,9 @@ impl PairState {
         }
         let device_name =
             std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows 设备".to_string());
-        let device_id = format!("windows-{}", device_name);
         let url = format!("http://127.0.0.1:{}/pair/request", XIMED_PORT);
         let body = serde_json::json!({
             "device_name": device_name,
-            "device_id": device_id,
         });
         let body_str = serde_json::to_string(&body).map_err(|e| format!("序列化失败: {}", e))?;
         let resp = ureq::post(&url)
@@ -435,15 +442,52 @@ impl PairState {
             .map_err(|e| format!("读取响应失败: {}", e))?;
         let value: serde_json::Value =
             serde_json::from_str(&text).map_err(|e| format!("解析失败: {}", e))?;
+        self.device_id = value["device_id"].as_str().unwrap_or("").to_string();
         self.local_code = value["code"].as_str().unwrap_or("??????").to_string();
         self.status_message = String::new();
         Ok(())
     }
 
+    /// 轮询配对状态，确认后获取 token
+    pub fn poll_pair_status(&mut self) -> Result<bool, String> {
+        if self.local_code.is_empty() {
+            return Err("没有待确认的配对码".to_string());
+        }
+        let url = format!(
+            "http://127.0.0.1:{}/pair/status?code={}",
+            XIMED_PORT, self.local_code
+        );
+        let resp = ureq::get(&url)
+            .call()
+            .map_err(|e| format!("请求失败: {}", e))?;
+
+        if resp.status() == 404 {
+            // 配对码过期或未找到
+            return Ok(false);
+        }
+
+        let text = resp
+            .into_body()
+            .read_to_string()
+            .map_err(|e| format!("读取响应失败: {}", e))?;
+        let value: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("解析失败: {}", e))?;
+
+        let status = value["status"].as_str().unwrap_or("Pending");
+        if status == "Confirmed" {
+            if let Some(token) = value["token"].as_str() {
+                self.token = token.to_string();
+            }
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     pub fn refresh(&mut self) {
         self.server_running = Self::check_health();
         if self.server_running {
-            self.devices = Self::fetch_devices().unwrap_or_default();
+            self.devices = self.fetch_devices().unwrap_or_default();
         } else {
             self.devices.clear();
         }
@@ -457,11 +501,19 @@ impl PairState {
         }
     }
 
-    fn fetch_devices() -> Result<Vec<PairDeviceInfo>, String> {
+    fn fetch_devices(&self) -> Result<Vec<PairDeviceInfo>, String> {
+        // 未配对时没有 token，跳过 API 调用
+        if self.token.is_empty() {
+            return Ok(Vec::new());
+        }
         let url = format!("http://127.0.0.1:{}/pair/list", XIMED_PORT);
         let resp = ureq::get(&url)
+            .header("Authorization", &format!("Bearer {}", self.token))
             .call()
             .map_err(|e| format!("请求失败: {}", e))?;
+        if resp.status() == 401 {
+            return Ok(Vec::new());
+        }
         let text = resp
             .into_body()
             .read_to_string()
@@ -485,13 +537,17 @@ impl PairState {
         Ok(devices)
     }
 
-    pub fn remove_device(device_id: &str) -> Result<(), String> {
+    pub fn remove_device(&self, device_id: &str) -> Result<(), String> {
+        if self.token.is_empty() {
+            return Err("未配对，无法移除设备".to_string());
+        }
         let url = format!(
             "http://127.0.0.1:{}/pair/remove/{}",
             XIMED_PORT,
             urlencoding(device_id)
         );
         ureq::post(&url)
+            .header("Authorization", &format!("Bearer {}", self.token))
             .send_empty()
             .map_err(|e| format!("删除失败: {}", e))?;
         Ok(())
