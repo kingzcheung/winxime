@@ -1,6 +1,6 @@
-# Xime 五笔输入法 (Windows)
+# Xime 输入法 (Windows)
 
-基于 RIME 引擎的 Windows 五笔输入法，使用 Rust + TSF 构建。
+基于 RIME 引擎的 Windows 输入法，使用 Rust + TSF 构建。
 
 > ⚠️注意： 本项目还在开发中，请勿使用。
 
