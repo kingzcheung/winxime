@@ -149,50 +149,40 @@ fn render_add_device(
                             s.pair.showing_code = true;
                             s.pair.polling = true;
                             // 在 Context<SettingsState> 中 spawn 异步轮询任务
-                            cx.spawn(async move |_weak, cx| {
-                                loop {
-                                    smol::Timer::after(
-                                        std::time::Duration::from_secs(2),
-                                    )
-                                    .await;
+                            cx.spawn(async move |_weak, cx| loop {
+                                smol::Timer::after(std::time::Duration::from_secs(2)).await;
 
-                                    let should_stop = cx.update(|cx| {
-                                        poll_settings.update(
-                                            cx,
-                                            |s: &mut SettingsState, cx| {
-                                                if !s.pair.showing_code
-                                                    || s.pair.local_code.is_empty()
-                                                {
-                                                    s.pair.polling = false;
-                                                    cx.notify();
-                                                    return true;
-                                                }
+                                let should_stop = cx.update(|cx| {
+                                    poll_settings.update(cx, |s: &mut SettingsState, cx| {
+                                        if !s.pair.showing_code || s.pair.local_code.is_empty() {
+                                            s.pair.polling = false;
+                                            cx.notify();
+                                            return true;
+                                        }
 
-                                                match s.pair.poll_pair_status() {
-                                                    Ok(true) => {
-                                                        s.pair.showing_code = false;
-                                                        s.pair.polling = false;
-                                                        s.pair.status_message =
-                                                            "设备配对成功！".to_string();
-                                                        s.pair.refresh();
-                                                        cx.notify();
-                                                        true
-                                                    }
-                                                    Ok(false) => false,
-                                                    Err(e) => {
-                                                        s.pair.polling = false;
-                                                        s.pair.status_message = e;
-                                                        cx.notify();
-                                                        true
-                                                    }
-                                                }
-                                            },
-                                        )
-                                    });
+                                        match s.pair.poll_pair_status() {
+                                            Ok(true) => {
+                                                s.pair.showing_code = false;
+                                                s.pair.polling = false;
+                                                s.pair.status_message =
+                                                    "设备配对成功！".to_string();
+                                                s.pair.refresh();
+                                                cx.notify();
+                                                true
+                                            }
+                                            Ok(false) => false,
+                                            Err(e) => {
+                                                s.pair.polling = false;
+                                                s.pair.status_message = e;
+                                                cx.notify();
+                                                true
+                                            }
+                                        }
+                                    })
+                                });
 
-                                    if should_stop {
-                                        break;
-                                    }
+                                if should_stop {
+                                    break;
                                 }
                             })
                             .detach();
@@ -216,8 +206,8 @@ fn render_device_list(
     settings: Entity<SettingsState>,
 ) -> SettingsGroup {
     let settings_btn = settings.clone();
-    let mut group = SettingsGroup::new("已配对设备", colors.clone()).items(vec![
-        SettingsItem::new(
+    let mut group =
+        SettingsGroup::new("已配对设备", colors.clone()).items(vec![SettingsItem::new(
             format!("共 {} 台设备", state.devices.len()),
             SettingsControl::button_with("刷新", move |_window, cx| {
                 settings_btn.update(cx, |s: &mut SettingsState, cx| {
@@ -225,8 +215,7 @@ fn render_device_list(
                     cx.notify();
                 });
             }),
-        ),
-    ]);
+        )]);
 
     if state.devices.is_empty() {
         group = group.custom_item(
