@@ -7856,6 +7856,7 @@ dependencies = [
 name = "winxime-server"
 version = "0.2.0"
 dependencies = [
+ "base64",
  "interprocess",
  "librime",
  "librime-sys2",
@@ -7863,6 +7864,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "uuid",
  "widestring",
  "windows 0.62.2",
  "windows-core 0.62.2",

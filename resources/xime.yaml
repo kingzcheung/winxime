@@ -5,7 +5,7 @@ customization:
   modified_time: "2021-07-26"
   rime_version: 0.14.3
 
-pair_secret: "YOUR_BASE64_SECRET_HERE"
+pair_secret: ""
 
 wubi_radicals:
   # 字根快捷键配置
