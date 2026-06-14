@@ -13,7 +13,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     name: Build
     env:
       BOOST_ROOT: ${{ github.workspace }}\librime\deps\boost-1.89.0
