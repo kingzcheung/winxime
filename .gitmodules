@@ -5,3 +5,9 @@
 	path = rime-wubi
 	url = https://github.com/kingzcheung/rime-wubi.git
 	branch = main
+[submodule "plugins/librime-octagram"]
+	path = plugins/librime-octagram
+	url = https://github.com/lotem/librime-octagram.git
+[submodule "plugins/librime-lua"]
+	path = plugins/librime-lua
+	url = https://github.com/hchunhui/librime-lua.git

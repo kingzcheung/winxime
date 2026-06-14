@@ -7,7 +7,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
-use tracing::{debug, info};
+use tracing::info;
 use widestring::u16cstr;
 use winxime_config::XimeConfig;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
@@ -170,7 +170,7 @@ fn process_request(
     context: &Arc<SharedInputContext>,
     window: &Arc<CandidateWindow>,
     ascii_mode: &Arc<AtomicBool>,
-    predictor: &Option<Arc<Mutex<Predictor>>>,
+    _predictor: &Option<Arc<Mutex<Predictor>>>,
 ) -> IpcResponse {
     let mut eng = match engine.try_lock() {
         Ok(g) => g,
@@ -379,82 +379,18 @@ fn process_request(
             if let Some(ref commit_text) = commit {
                 tracing::info!(">>> COMMIT_TO_SCREEN: '{}'", commit_text);
 
-                if predictor.is_some() {
-                    let config = XimeConfig::load();
-                    if config.smart_suggestion.enabled.unwrap_or(false) {
-                        tracing::info!("  -> smart suggestion enabled, predicting...");
-                        let suggestions = get_smart_suggestions(
-                            &predictor,
-                            commit_text,
-                            config.smart_suggestion.suggestion_count,
-                        );
-                        if !suggestions.is_empty() {
-                            tracing::info!("  -> suggestions: {:?}", suggestions);
-                            let suggestion_texts: Vec<String> =
-                                suggestions.iter().map(|(t, _)| t.clone()).collect();
-                            context.update(|ctx| {
-                                ctx.suggestion_state = Some(crate::context::SuggestionState {
-                                    suggestions: suggestion_texts.clone(),
-                                    highlighted: 0,
-                                    prefix_text: commit_text.clone(),
-                                });
-                            });
-                            let suggestion_ctx =
-                                create_suggestion_context(&suggestions, commit_text);
-                            let pos = context.read(|c| (c.caret_x, c.caret_y));
-                            tracing::info!("  -> show at ({}, {})", pos.0, pos.1);
-                            window.show(pos.0, pos.1);
-                            window.update(&suggestion_ctx);
-
-                            return IpcResponse {
-                                success: handled,
-                                session_id: request.session_id,
-                                context: Some(suggestion_ctx),
-                                status: Some(get_ipc_status(&eng)),
-                                schema_list: None,
-                            };
-                        } else {
-                            tracing::info!("  -> no suggestions, hide");
-                            context.update(|ctx| {
-                                ctx.suggestion_state = None;
-                            });
-                            window.hide();
-                            return IpcResponse {
-                                success: handled,
-                                session_id: request.session_id,
-                                context: ipc_ctx,
-                                status: Some(get_ipc_status(&eng)),
-                                schema_list: None,
-                            };
-                        }
-                    } else {
-                        tracing::info!("  -> hide (commit)");
-                        context.update(|ctx| {
-                            ctx.suggestion_state = None;
-                        });
-                        window.hide();
-                        return IpcResponse {
-                            success: handled,
-                            session_id: request.session_id,
-                            context: ipc_ctx,
-                            status: Some(get_ipc_status(&eng)),
-                            schema_list: None,
-                        };
-                    }
-                } else {
-                    tracing::info!("  -> hide (commit, no predictor)");
-                    context.update(|ctx| {
-                        ctx.suggestion_state = None;
-                    });
-                    window.hide();
-                    return IpcResponse {
-                        success: handled,
-                        session_id: request.session_id,
-                        context: ipc_ctx,
-                        status: Some(get_ipc_status(&eng)),
-                        schema_list: None,
-                    };
-                }
+                tracing::info!("  -> hide (commit)");
+                context.update(|ctx| {
+                    ctx.suggestion_state = None;
+                });
+                window.hide();
+                return IpcResponse {
+                    success: handled,
+                    session_id: request.session_id,
+                    context: ipc_ctx,
+                    status: Some(get_ipc_status(&eng)),
+                    schema_list: None,
+                };
             } else if !eng.is_composing() {
                 tracing::info!("  -> hide (not composing)");
                 context.update(|ctx| {
@@ -933,43 +869,4 @@ fn get_ipc_context(eng: &RimeEngine, commit: &Option<String>) -> Option<winxime_
     })
 }
 
-fn get_smart_suggestions(
-    predictor: &Option<Arc<Mutex<Predictor>>>,
-    text: &str,
-    top_k: i32,
-) -> Vec<(String, f32)> {
-    if let Some(p) = predictor {
-        if let Ok(mut pred) = p.lock() {
-            pred.predict(text, top_k as usize).ok().unwrap_or_default()
-        } else {
-            Vec::new()
-        }
-    } else {
-        Vec::new()
-    }
-}
 
-fn create_suggestion_context(
-    suggestions: &[(String, f32)],
-    commit_text: &str,
-) -> winxime_ipc::Context {
-    winxime_ipc::Context {
-        preedit: winxime_ipc::Text { str: String::new() },
-        commit: Some(commit_text.to_string()),
-        candidates: winxime_ipc::CandidateInfo {
-            current_page: 0,
-            total_pages: 1,
-            highlighted: 0,
-            is_last_page: true,
-            candies: suggestions
-                .iter()
-                .map(|(text, _)| winxime_ipc::Text { str: text.clone() })
-                .collect(),
-            comments: suggestions
-                .iter()
-                .map(|(_, _)| winxime_ipc::Text { str: "".into() })
-                .collect(),
-            labels: Vec::new(),
-        },
-    }
-}
