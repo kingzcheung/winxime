@@ -190,8 +190,15 @@ msiexec /i target\wix\winxime-server-0.1.0-x86_64.msi
      - [x] key_binder: 分号选词、方括号/Tab翻页
      - [x] ascii_composer: commit_code 行为 (切换时提交编码)
      - [x] switcher: IPC 命令 (GetSchemaList, SelectSchema)
-  - - [ ] 下一步
-     - [ ] switcher: Ctrl+0 弹出方案选择菜单 (需要 UI)
-     - [ ] punctuator 标点符号映射
-     - [ ] recognizer 英文识别模式
-     - [ ] menu.page_size 配置读取
+   - - [ ] 下一步
+      - [ ] switcher: Ctrl+0 弹出方案选择菜单 (需要 UI)
+      - [ ] punctuator 标点符号映射
+      - [ ] recognizer 英文识别模式
+      - [ ] menu.page_size 配置读取
+
+### 2026-06-14 新增
+- [x] **引入 librime-octagram / librime-lua / librime-lua-deps 插件**
+   - 添加 `plugins/librime-octagram` 和 `plugins/librime-lua` 为 git submodule
+   - `build.rs` 构建前自动复制插件到 `librime/plugins/` 并安装 Lua 5.4 第三方依赖
+   - CI workflow 同步更新：插件缓存及构建步骤
+   - `find_vswhere()` 改为通过 PATH 或候选路径查找，不再硬编码

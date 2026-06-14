@@ -48,10 +48,33 @@ fn main() {
     copy_rime_data(&workspace_dir, &librime_dir);
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=../plugins/librime-octagram");
+    println!("cargo:rerun-if-changed=../plugins/librime-lua");
 }
 
 fn copy_rime_data(_workspace_dir: &Path, _librime_dir: &Path) {
     // opencc is not needed - rime works without it
+}
+
+fn find_vswhere() -> PathBuf {
+    if let Ok(output) = Command::new("where").arg("vswhere").output() {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return PathBuf::from(path);
+            }
+        }
+    }
+    for candidate in [
+        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
+        r"C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe",
+    ] {
+        let p = PathBuf::from(candidate);
+        if p.exists() {
+            return p;
+        }
+    }
+    panic!("vswhere not found. Install Visual Studio 2022 or add vswhere.exe to PATH.");
 }
 
 fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
@@ -59,11 +82,7 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         "cargo:warning=Building librime from source (this may take 10+ minutes on first build)..."
     );
 
-    let vswhere =
-        PathBuf::from("C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe");
-    if !vswhere.exists() {
-        panic!("Visual Studio Installer not found at {}", vswhere.display());
-    }
+    let vswhere = find_vswhere();
 
     let vs_install: String = match Command::new(&vswhere)
         .args(["-latest", "-property", "installationPath"])
@@ -107,6 +126,49 @@ fn build_librime(librime_dir: &PathBuf, workspace_dir: &Path) {
         )
         .unwrap();
         writeln!(file, "cd /d \"{}\"", librime_dir.display()).unwrap();
+
+        // Copy plugin sources into librime/plugins/ before building
+        let plugin_pairs = [
+            ("plugins\\librime-octagram", "plugins\\octagram"),
+            ("plugins\\librime-lua", "plugins\\lua"),
+        ];
+        for (src_rel, dst_rel) in &plugin_pairs {
+            let src = workspace_dir.join(src_rel);
+            let dst = librime_dir.join(dst_rel);
+            if src.exists() {
+                writeln!(
+                    file,
+                    "if not exist \"{}\" xcopy /e /i /q \"{}\" \"{}\"",
+                    dst.display(),
+                    src.display(),
+                    dst.display()
+                )
+                .unwrap();
+            }
+        }
+
+        // Set up Lua thirdparty dependency
+        writeln!(
+            file,
+            "if not exist \"{}\\plugins\\lua\\thirdparty\\lua5.4\\lua.h\" (",
+            librime_dir.display()
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "  if exist \"{}\\plugins\\lua\\action-install.bat\" (",
+            librime_dir.display()
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "    pushd \"{}\\plugins\\lua\" && call action-install.bat && popd",
+            librime_dir.display()
+        )
+        .unwrap();
+        writeln!(file, "  )").unwrap();
+        writeln!(file, ")").unwrap();
+
         writeln!(
             file,
             "if not exist \"{0}\\deps\\boost-1.89.0\\boost\" call install-boost.bat",
