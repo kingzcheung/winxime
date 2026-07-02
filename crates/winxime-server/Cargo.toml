@@ -11,12 +11,11 @@ path = "src/main.rs"
 
 [dependencies]
 winxime-ipc = { path = "../winxime-ipc" }
-winxime-rime = { path = "../winxime-rime" }
-winxime-config = { path = "../winxime-config" }
-winxime-predict = { path = "../winxime-predict" }
+xime-rime.workspace = true
+xime-config.workspace = true
 librime.workspace = true
-librime-sys2 = { path = "../librime-sys" }
-ximed = {version = "0.1.0", git = "https://github.com/ximeiorg/ximed", default-features = false, features = ["windows", "arboard"]}
+librime-sys2.workspace = true
+ximed.workspace = true
 tokio = { version = "1", features = ["rt"] }
 serde.workspace = true
 serde_json.workspace = true

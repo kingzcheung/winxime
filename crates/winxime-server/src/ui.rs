@@ -52,8 +52,8 @@ use windows::Win32::{
 use windows_core::{w, Interface, HSTRING, PCWSTR};
 use windows_numerics::Vector2;
 
-use crate::config::{get_colors, hex_to_rgb};
-use winxime_config::XimeConfig;
+use crate::config::get_colors;
+use xime_config::XimeConfig;
 use winxime_ipc::Context;
 
 pub const WM_SHOW_CANDIDATE: u32 = WM_USER + 1;
@@ -124,7 +124,9 @@ impl From<(char, String)> for RootModel {
         } else {
             HSTRING::from(config.style.font_family.as_str())
         };
-        let (_, _, _, selkey_color, _, _, _) = get_colors(config.get_primary_color_u32());
+        let (r, g, b) = config.get_primary_color();
+        let color_u32 = (r as u32) << 16 | (g as u32) << 8 | b as u32;
+        let (_, _, _, selkey_color, _, _, _) = get_colors(color_u32);
 
         Self {
             letter,
@@ -156,6 +158,8 @@ impl From<&Context> for CandidateModel {
         } else {
             HSTRING::from(config.style.font_family.as_str())
         };
+        let (r8, g8, b8) = config.get_primary_color();
+        let color_u32 = (r8 as u32) << 16 | (g8 as u32) << 8 | b8 as u32;
         let (
             bg_color,
             border_color,
@@ -164,7 +168,7 @@ impl From<&Context> for CandidateModel {
             comment_color,
             highlight_bg_color,
             highlight_fg_color,
-        ) = get_colors(config.get_primary_color_u32());
+        ) = get_colors(color_u32);
 
         let cand_per_row = if config.style.horizontal {
             config.style.candidate_count as u32

@@ -1,5 +1,0 @@
-[alias]
-xtask = "run --package xtask --"
-b = "build"
-run-srv = "run -p winxime-server"
-run-host = "run -p winxime-tsf"
