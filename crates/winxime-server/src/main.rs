@@ -7,14 +7,13 @@ mod tray;
 mod ui;
 mod ximed_server;
 
-use crate::config::get_colors;
 use crate::context::SharedInputContext;
 use std::sync::{atomic::AtomicBool, Arc};
 use tracing::info;
 use windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext;
-use winxime_config::{init_logging_with_console, XimeConfig};
 use winxime_ipc::{check_server_running, IpcClient};
-use winxime_rime::RimeEngine;
+use xime_config::{init_logging_with_console, XimeConfig};
+use xime_rime::RimeEngine;
 
 fn main() {
     unsafe {

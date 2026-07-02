@@ -19,10 +19,6 @@ pub fn set_instance(hinst: HINSTANCE) {
     }
 }
 
-pub fn get_instance() -> HINSTANCE {
-    unsafe { HINSTANCE(G_HINST as *mut _) }
-}
-
 pub type SharedAsciiMode = Arc<AtomicBool>;
 pub type LangBarSinkRef = Arc<Mutex<Option<ITfLangBarItemSink>>>;
 

@@ -592,20 +592,18 @@ fn main() -> Result<()> {
                     errors.push("Install directory still exists");
                 }
 
-                unsafe {
-                    let hklm = HKEY_LOCAL_MACHINE;
-                    let clsid_key = w!("CLSID\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
-                    let mut result_key: HKEY = HKEY::default();
-                    if RegOpenKeyW(hklm, clsid_key, &mut result_key).is_ok() {
-                        errors.push("CLSID registry key still exists");
-                    }
+                let hklm = HKEY_LOCAL_MACHINE;
+                let clsid_key = w!("CLSID\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
+                let mut result_key: HKEY = HKEY::default();
+                if RegOpenKeyW(hklm, clsid_key, &mut result_key).is_ok() {
+                    errors.push("CLSID registry key still exists");
+                }
 
-                    let tip_key =
-                        w!("SOFTWARE\\Microsoft\\CTF\\TIP\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
-                    let mut result_key: HKEY = HKEY::default();
-                    if RegOpenKeyW(hklm, tip_key, &mut result_key).is_ok() {
-                        errors.push("TIP registry key still exists");
-                    }
+                let tip_key =
+                    w!("SOFTWARE\\Microsoft\\CTF\\TIP\\{5C1E4D8A-F3B2-4A7E-9CD1-2A3B4C5D6E7F}");
+                let mut result_key: HKEY = HKEY::default();
+                if RegOpenKeyW(hklm, tip_key, &mut result_key).is_ok() {
+                    errors.push("TIP registry key still exists");
                 }
 
                 if errors.is_empty() {

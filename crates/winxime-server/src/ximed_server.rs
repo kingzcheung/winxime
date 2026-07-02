@@ -1,7 +1,7 @@
 use base64::Engine;
 use std::thread;
 use tracing::{info, warn};
-use winxime_config::XimeConfig;
+use xime_config::XimeConfig;
 
 const DEFAULT_PORT: u16 = 8370;
 

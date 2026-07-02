@@ -6,3 +6,5 @@ Cargo.lock
 /installer
 /*.zip
 rime-data
+# local cargo config
+.cargo/config.toml

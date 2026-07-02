@@ -5,14 +5,13 @@ use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc,
 };
 use tracing::info;
 use widestring::u16cstr;
-use winxime_config::XimeConfig;
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
-use winxime_predict::{check_model_exists, Predictor};
-use winxime_rime::RimeEngine;
+use xime_config::XimeConfig;
+use xime_rime::RimeEngine;
 
 const MAX_BUFFER_SIZE: usize = 1024 * 1024;
 
@@ -24,25 +23,6 @@ pub fn run_ipc_server(
 ) {
     let pipe_path = get_pipe_path();
     tracing::info!("Winxime Server: creating named pipe at {}", pipe_path);
-
-    let predictor: Option<Arc<Mutex<Predictor>>> = {
-        let config = XimeConfig::load();
-        if config.smart_suggestion.enabled.unwrap_or(false)
-            && check_model_exists(Some(&config.smart_suggestion.model.name))
-        {
-            tracing::info!("Smart suggestion enabled, loading predictor...");
-            Predictor::new(Some(&config.smart_suggestion.model.name))
-                .map(|p| Arc::new(Mutex::new(p)))
-                .map_err(|e| {
-                    tracing::error!("Failed to load predictor: {}", e);
-                    e
-                })
-                .ok()
-        } else {
-            tracing::info!("Smart suggestion disabled or model not found");
-            None
-        }
-    };
 
     let sd = SecurityDescriptor::deserialize(u16cstr!("D:(A;;GA;;;WD)"))
         .expect("Failed to create security descriptor");
@@ -70,7 +50,6 @@ pub fn run_ipc_server(
                 let context_clone = context.clone();
                 let window_clone = window.clone();
                 let ascii_mode_clone = ascii_mode.clone();
-                let predictor_clone = predictor.clone();
                 std::thread::spawn(move || {
                     handle_connection(
                         p,
@@ -78,7 +57,6 @@ pub fn run_ipc_server(
                         context_clone,
                         window_clone,
                         ascii_mode_clone,
-                        predictor_clone,
                     );
                 });
             }
@@ -95,7 +73,6 @@ fn handle_connection(
     context: Arc<SharedInputContext>,
     window: Arc<CandidateWindow>,
     ascii_mode: Arc<AtomicBool>,
-    predictor: Option<Arc<Mutex<Predictor>>>,
 ) {
     let (recv, send) = pipe.split();
     let mut reader = BufReader::new(recv);
@@ -144,7 +121,6 @@ fn handle_connection(
             &context,
             &window,
             &ascii_mode,
-            &predictor,
         );
 
         let json = match serde_json::to_vec(&response) {
@@ -170,7 +146,6 @@ fn process_request(
     context: &Arc<SharedInputContext>,
     window: &Arc<CandidateWindow>,
     ascii_mode: &Arc<AtomicBool>,
-    _predictor: &Option<Arc<Mutex<Predictor>>>,
 ) -> IpcResponse {
     let mut eng = match engine.try_lock() {
         Ok(g) => g,
