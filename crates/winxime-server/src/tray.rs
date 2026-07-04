@@ -13,11 +13,11 @@ use windows::Win32::{
         },
         WindowsAndMessaging::{
             AppendMenuW, CreateIconFromResource, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
-            DestroyMenu, GetCursorPos, LoadCursorW, LoadIconW, PostMessageW, PostQuitMessage,
-            RegisterClassW, SetForegroundWindow, TrackPopupMenu, CW_USEDEFAULT, HICON, HMENU,
-            IDC_ARROW, IDI_APPLICATION, MF_SEPARATOR, MF_STRING, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
-            WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_USER,
-            WNDCLASSW, WS_POPUP,
+            DestroyMenu, DestroyWindow, GetCursorPos, LoadCursorW, LoadIconW, PostMessageW,
+            PostQuitMessage, RegisterClassW, SetForegroundWindow, TrackPopupMenu, CW_USEDEFAULT,
+            HICON, HMENU, IDC_ARROW, IDI_APPLICATION, MF_SEPARATOR, MF_STRING,
+            TPM_BOTTOMALIGN, TPM_LEFTALIGN, WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP,
+            WM_SETTINGCHANGE, WM_USER, WNDCLASSW, WS_POPUP,
         },
     },
 };
@@ -371,6 +371,27 @@ fn do_hide_icon() {
             nid.dwStateMask = NIS_HIDDEN;
             let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
         }
+    }
+}
+
+/// 清理托盘图标和窗口（消息循环退出后调用）
+pub fn cleanup() {
+    unsafe {
+        if let Some(hwnd) = TRAY_HWND {
+            let mut nid = NOTIFYICONDATAW::default();
+            nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+            nid.hWnd = hwnd;
+            nid.uID = TRAY_ID;
+            let _ = Shell_NotifyIconW(NIM_DELETE, &nid);
+
+            let _ = DestroyWindow(hwnd);
+            TRAY_HWND = None;
+        }
+        if let Some(menu) = TRAY_MENU {
+            let _ = DestroyMenu(menu);
+            TRAY_MENU = None;
+        }
+        TRAY_ON_ACTION = None;
     }
 }
 

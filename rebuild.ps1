@@ -6,7 +6,7 @@ $exeDir = "$PSScriptRoot\target\debug"
 $sharedDataDir = "$exeDir\data"
 $userDataDir = "$exeDir\user-data"
 $configSourceDir = "$exeDir\resources"
-$rimeMinimalDir = "$PSScriptRoot\librime\data\minimal"
+$rimeMinimalDir = "$PSScriptRoot\..\libximecore\librime\data\minimal"
 $rimeWubiDir = "$PSScriptRoot\rime-wubi"
 $resourcesDir = "$PSScriptRoot\resources"
 

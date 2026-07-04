@@ -5,7 +5,7 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::*;
 use windows::Win32::System::Threading::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
-use xime_setup_lib::{set_notify_deploy, set_notify_reload_style, Assets, SettingsApp};
+use xime_setup_lib::{Assets, SettingsApp};
 
 fn main() {
     const MUTEX_NAME: &str = "XimeSetupSingleInstanceMutex";
@@ -64,7 +64,7 @@ fn main() {
                     )),
                     titlebar: Some(TitlebarOptions {
                         title: Some("Xime 设置".into()),
-                        appears_transparent: true,
+                        appears_transparent: false,
                         traffic_light_position: None,
                     }),
                     ..Default::default()

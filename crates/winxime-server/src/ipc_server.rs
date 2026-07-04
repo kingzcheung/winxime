@@ -9,6 +9,8 @@ use std::sync::{
 };
 use tracing::info;
 use widestring::u16cstr;
+use windows::Win32::Foundation::{LPARAM, WPARAM};
+use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_QUIT};
 use winxime_ipc::{get_pipe_path, IpcCommand, IpcRequest, IpcRequestData, IpcResponse};
 use xime_config::XimeConfig;
 use xime_rime::RimeEngine;
@@ -20,6 +22,7 @@ pub fn run_ipc_server(
     context: Arc<SharedInputContext>,
     window: Arc<CandidateWindow>,
     ascii_mode: Arc<AtomicBool>,
+    main_thread_id: u32,
 ) {
     let pipe_path = get_pipe_path();
     tracing::info!("Winxime Server: creating named pipe at {}", pipe_path);
@@ -50,6 +53,7 @@ pub fn run_ipc_server(
                 let context_clone = context.clone();
                 let window_clone = window.clone();
                 let ascii_mode_clone = ascii_mode.clone();
+                let tid = main_thread_id;
                 std::thread::spawn(move || {
                     handle_connection(
                         p,
@@ -57,6 +61,7 @@ pub fn run_ipc_server(
                         context_clone,
                         window_clone,
                         ascii_mode_clone,
+                        tid,
                     );
                 });
             }
@@ -73,6 +78,7 @@ fn handle_connection(
     context: Arc<SharedInputContext>,
     window: Arc<CandidateWindow>,
     ascii_mode: Arc<AtomicBool>,
+    main_thread_id: u32,
 ) {
     let (recv, send) = pipe.split();
     let mut reader = BufReader::new(recv);
@@ -121,6 +127,7 @@ fn handle_connection(
             &context,
             &window,
             &ascii_mode,
+            main_thread_id,
         );
 
         let json = match serde_json::to_vec(&response) {
@@ -146,6 +153,7 @@ fn process_request(
     context: &Arc<SharedInputContext>,
     window: &Arc<CandidateWindow>,
     ascii_mode: &Arc<AtomicBool>,
+    main_thread_id: u32,
 ) -> IpcResponse {
     let mut eng = match engine.try_lock() {
         Ok(g) => g,
@@ -432,8 +440,17 @@ fn process_request(
         }
 
         IpcCommand::ShutdownServer => {
-            tracing::info!("Shutdown requested");
-            std::process::exit(0);
+            tracing::info!("Shutdown requested, posting WM_QUIT to main thread");
+            unsafe {
+                let _ = PostThreadMessageW(main_thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+            }
+            IpcResponse {
+                success: true,
+                session_id: request.session_id,
+                context: None,
+                status: None,
+                schema_list: None,
+            }
         }
 
         IpcCommand::ToggleAsciiMode => {

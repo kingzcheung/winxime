@@ -8,7 +8,8 @@ mod ui;
 mod ximed_server;
 
 use crate::context::SharedInputContext;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tracing::info;
 use windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext;
 use winxime_ipc::{check_server_running, IpcClient};
@@ -153,6 +154,7 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
     info!("run_server: starting");
     let context = Arc::new(SharedInputContext::new());
     let ascii_mode = Arc::new(AtomicBool::new(false));
+    let main_thread_id = unsafe { windows::Win32::System::Threading::GetCurrentThreadId() };
 
     info!("Creating UI window...");
     let window = ui::CandidateWindow::new();
@@ -164,7 +166,13 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
     let window_clone = window.clone();
     let ascii_mode_clone = ascii_mode.clone();
     std::thread::spawn(move || {
-        ipc_server::run_ipc_server(engine_clone, context_clone, window_clone, ascii_mode_clone);
+        ipc_server::run_ipc_server(
+            engine_clone,
+            context_clone,
+            window_clone,
+            ascii_mode_clone,
+            main_thread_id,
+        );
     });
     info!("IPC thread started");
 
@@ -238,5 +246,8 @@ fn run_server(engine: Arc<std::sync::Mutex<RimeEngine>>) {
             windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
         }
     }
-    info!("Message loop exited");
+    info!("Message loop exited, cleaning up");
+
+    tray::cleanup();
+    info!("Server shutdown complete");
 }
