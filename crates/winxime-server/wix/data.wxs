@@ -1,7 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Fragment>
-        <DirectoryRef Id="DataFolder" />
+        <DirectoryRef Id="DataFolder">
+            <Directory Id="dirFBD3FB4F222246CC12450DCF8246437D" Name="build" />
+        </DirectoryRef>
     </Fragment>
     <Fragment>
         <ComponentGroup Id="DataFiles">
@@ -19,6 +21,9 @@
             </Component>
             <Component Id="cmpAFE55EF47E9E7846E6EA9AD6AE6D89F1" Directory="DataFolder" Guid="*">
                 <File Id="filAC56CAD55002C57BE7F387B7CE51EF35" KeyPath="yes" Source="$(var.DataDir)\essay.txt" />
+            </Component>
+            <Component Id="cmp75CC1348FEC509ACA9DCDD11BBFE1F6A" Directory="DataFolder" Guid="*">
+                <File Id="filB85E4E859947D28BCA44E0E72261F80C" KeyPath="yes" Source="$(var.DataDir)\installation.yaml" />
             </Component>
             <Component Id="cmpE0ABC2ED196421F03DD15019BAF86A58" Directory="DataFolder" Guid="*">
                 <File Id="filC2A8084974AEB5D7B3C96B6C375BDC37" KeyPath="yes" Source="$(var.DataDir)\luna_pinyin.dict.yaml" />
@@ -40,6 +45,9 @@
             </Component>
             <Component Id="cmpDF69A01DDAD3644061A97C62E354F9D6" Directory="DataFolder" Guid="*">
                 <File Id="fil8B03148D486F7393FC39628DFF6A60AA" KeyPath="yes" Source="$(var.DataDir)\symbols.yaml" />
+            </Component>
+            <Component Id="cmpEAA37E76E0B156B8546A7C2AA26A218D" Directory="DataFolder" Guid="*">
+                <File Id="fil69FA70141FB5716DDE8BCE2A16850FDA" KeyPath="yes" Source="$(var.DataDir)\user.yaml" />
             </Component>
             <Component Id="cmp633E272D4764678C0A6A0186548D88D7" Directory="DataFolder" Guid="*">
                 <File Id="filBB0C5C8DDB55BF3D9EB49625829D487B" KeyPath="yes" Source="$(var.DataDir)\wubi86.dict.yaml" />
@@ -70,6 +78,51 @@
             </Component>
             <Component Id="cmp88B70484D12F6102598DEC2201E15B38" Directory="DataFolder" Guid="*">
                 <File Id="fil76B09CF2F0329A2CC15527E6B87A55BE" KeyPath="yes" Source="$(var.DataDir)\xime.custom.yaml" />
+            </Component>
+            <Component Id="cmp4CBA29225ADD963EA104239325E14FDF" Directory="DataFolder" Guid="*">
+                <File Id="fil6B0AB6DE5E04A948D2E696221F8E1A27" KeyPath="yes" Source="$(var.DataDir)\xime.yaml" />
+            </Component>
+            <Component Id="cmpADA026A186118B5CD4909D6148335B7F" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="filB4EF5BFA20199F54BE4DD48F6BAA3BED" KeyPath="yes" Source="$(var.DataDir)\build\default.yaml" />
+            </Component>
+            <Component Id="cmp73195D67445774B902F7F61EF1DE4053" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil202E28E7967CF39EDF9F974042635B52" KeyPath="yes" Source="$(var.DataDir)\build\numbers.schema.yaml" />
+            </Component>
+            <Component Id="cmp042BC83967AD7514A3F9CE96A4AF3AA7" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil5E10A766A319CBC23452A86BE8311366" KeyPath="yes" Source="$(var.DataDir)\build\pinyin_simp.prism.bin" />
+            </Component>
+            <Component Id="cmp0A5969CEF88515CE9347688BA4779A09" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil46B6E0AB3721E56650B4A06EA0C90823" KeyPath="yes" Source="$(var.DataDir)\build\pinyin_simp.reverse.bin" />
+            </Component>
+            <Component Id="cmp28A8A7D556424485C94BD22ADA83E2B7" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="filC0615227D04EBF229A5C9F96D422B9DC" KeyPath="yes" Source="$(var.DataDir)\build\pinyin_simp.schema.yaml" />
+            </Component>
+            <Component Id="cmp761E45F6A604B3F63EA67C57E97C7A7B" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil88CF585FB468F57518CCACBCB40CB19F" KeyPath="yes" Source="$(var.DataDir)\build\pinyin_simp.table.bin" />
+            </Component>
+            <Component Id="cmpD2C0508534C4789326CAF1C45596664B" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil07617CACA96AC95E0D4A0745E15BC9D2" KeyPath="yes" Source="$(var.DataDir)\build\wubi86.prism.bin" />
+            </Component>
+            <Component Id="cmpE89747FC7CD79FEB542DF7D33F30F2EA" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil41A5D19B9983277EA42754CDA7D53CDD" KeyPath="yes" Source="$(var.DataDir)\build\wubi86.reverse.bin" />
+            </Component>
+            <Component Id="cmp6BBDB79F336FF24134D11C9A7E51CF73" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil72F627C40BFC8F3FC86AE2A5A98914FC" KeyPath="yes" Source="$(var.DataDir)\build\wubi86.schema.yaml" />
+            </Component>
+            <Component Id="cmp51F87E2010B970306F67FF435CB442F8" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="filD3499BF2B4F8C922135C95E918B6C59D" KeyPath="yes" Source="$(var.DataDir)\build\wubi86.table.bin" />
+            </Component>
+            <Component Id="cmp5214C4A4FFF0927F9095349557C8C936" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil73F104333870595764247257E1C2ECF5" KeyPath="yes" Source="$(var.DataDir)\build\wubi86_pinyin.schema.yaml" />
+            </Component>
+            <Component Id="cmp9A016076DE27A55E1C20EC03635941FC" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil548BFEC271D5F65074572BC8F29108F7" KeyPath="yes" Source="$(var.DataDir)\build\wubi86_trad.schema.yaml" />
+            </Component>
+            <Component Id="cmp3F7740B94E026365A9E64A861D387C6C" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil45D3ACFD13366704A5CF6AE84C808362" KeyPath="yes" Source="$(var.DataDir)\build\wubi86_trad_pinyin.schema.yaml" />
+            </Component>
+            <Component Id="cmp75CC1C1FA0FE7AF71BC284F1F4D6F603" Directory="dirFBD3FB4F222246CC12450DCF8246437D" Guid="*">
+                <File Id="fil5F8421AB47F62BDF6FEB946B522C47E3" KeyPath="yes" Source="$(var.DataDir)\build\xime.yaml" />
             </Component>
         </ComponentGroup>
     </Fragment>

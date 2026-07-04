@@ -9,6 +9,23 @@ $ErrorActionPreference = "Stop"
 # Add WiX v3.14 to PATH
 $env:PATH += ";C:\Program Files (x86)\WiX Toolset v3.14\bin"
 
+function Find-LibrimeRoot {
+    $json = cargo metadata --format-version 1 | ConvertFrom-Json
+    $pkg = $json.packages | Where-Object { $_.name -eq 'librime-sys2' }
+    if (-not $pkg) {
+        Write-Error "librime-sys2 not found in cargo metadata"
+        exit 1
+    }
+    $manifestPath = $pkg.manifest_path
+    $libximecoreRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $manifestPath))
+    $librimeRoot = Join-Path $libximecoreRoot "librime"
+    if (-not (Test-Path $librimeRoot)) {
+        Write-Host "librime directory not found at $librimeRoot"
+        return $null
+    }
+    return $librimeRoot
+}
+
 # Auto-detect version from Cargo.toml
 if ($Version -eq "") {
     $cargoTomlContent = Get-Content "Cargo.toml" -Raw
@@ -29,6 +46,17 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# 1.5. Copy rime.dll from libximecore git dep to target\release
+Write-Host "Step 1.5: Copying rime.dll..." -ForegroundColor Yellow
+$librimeRoot = Find-LibrimeRoot
+$rimeDll = Join-Path $librimeRoot "dist\lib\rime.dll"
+if (Test-Path $rimeDll) {
+    Copy-Item $rimeDll "target\release\rime.dll" -Force
+    Write-Host "  rime.dll copied"
+} else {
+    Write-Warning "rime.dll not found at $rimeDll"
+}
+
 # 2. Copy data files
 Write-Host "Step 2: Copying data files..." -ForegroundColor Yellow
 if (Test-Path "target\release\data") {
@@ -36,7 +64,13 @@ if (Test-Path "target\release\data") {
 }
 New-Item "target\release\data" -ItemType Directory -Force | Out-Null
 
-Copy-Item "librime\data\minimal\*" "target\release\data" -Recurse -Force
+$librimeRoot = Find-LibrimeRoot
+$rimeDataDir = Join-Path $librimeRoot "data\minimal"
+if (Test-Path $rimeDataDir) {
+    Copy-Item "$rimeDataDir\*" "target\release\data" -Recurse -Force
+} else {
+    Write-Warning "rime data not found at $rimeDataDir, skipping"
+}
 
 $files = Get-ChildItem -Path "rime-wubi" -Recurse -File | Where-Object {
     $dir = $_.DirectoryName

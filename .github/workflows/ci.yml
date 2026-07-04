@@ -15,8 +15,6 @@ jobs:
   build:
     runs-on: windows-2022
     name: Build
-    env:
-      BOOST_ROOT: ${{ github.workspace }}\librime\deps\boost-1.89.0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,45 +23,33 @@ jobs:
       - name: Init nested submodules
         run: git submodule update --init --recursive
 
-      - name: Cache librime build
-        id: cache-librime
-        uses: actions/cache@v4
-        with:
-          path: |
-            librime/dist
-            librime/deps/boost-*
-          key: librime-${{ hashFiles('librime/src/**', 'librime/CMakeLists.txt', 'librime/build.bat', 'librime/deps/**/CMakeLists.txt', 'crates/librime-sys/build.rs', 'plugins/librime-octagram/**', 'plugins/librime-lua/**') }}
-
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Install build tools
-        if: steps.cache-librime.outputs.cache-hit != 'true'
-        run: choco install aria2 7zip -y
-
-      - name: Build librime
-        if: steps.cache-librime.outputs.cache-hit != 'true'
-        shell: cmd
-        working-directory: librime
-        run: |
-          copy env.vs2022.bat env.bat
-          echo set ARCH=x64 >> env.bat
-          call install-boost.bat
-          if not exist "plugins\lua" xcopy /e /i /q "%CD%\..\plugins\librime-lua" "plugins\lua"
-          if not exist "plugins\octagram" xcopy /e /i /q "%CD%\..\plugins\librime-octagram" "plugins\octagram"
-          if not exist "plugins\lua\thirdparty\lua5.4\lua.h" (
-            if exist "plugins\lua\action-install.bat" (
-              pushd plugins\lua && call action-install.bat && popd
-            )
-          )
-          build.bat deps
-          build.bat librime shared
-          if not exist "%CD%\dist\lib\rime.dll" (echo ERROR: rime.dll not created && dir "%CD%\dist\lib" && exit /b 1)
 
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release
         run: cargo build --release --quiet
+
+      - name: Copy rime.dll from libximecore git dep
+        shell: pwsh
+        run: |
+          $json = cargo metadata --format-version 1 | ConvertFrom-Json
+          $pkg = $json.packages | Where-Object { $_.name -eq 'librime-sys2' }
+          if (-not $pkg) {
+            Write-Error "librime-sys2 not found in cargo metadata"
+            exit 1
+          }
+          $manifestPath = $pkg.manifest_path
+          # manifest_path: <libximecore_root>/crates/librime-sys2/Cargo.toml
+          $libximecoreRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $manifestPath))
+          $rimeDll = Join-Path $libximecoreRoot "librime\dist\lib\rime.dll"
+          if (-not (Test-Path $rimeDll)) {
+            Write-Error "rime.dll not found at $rimeDll"
+            exit 1
+          }
+          Copy-Item $rimeDll "target\release\rime.dll" -Force
+          Write-Host "Copied rime.dll to target\release\"
 
       - name: Prepare config files
         shell: cmd

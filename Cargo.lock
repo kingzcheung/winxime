@@ -9014,7 +9014,7 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "winxime-ipc"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "interprocess",
  "serde",
@@ -9023,7 +9023,7 @@ dependencies = [
 
 [[package]]
 name = "winxime-server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "interprocess",
@@ -9046,7 +9046,7 @@ dependencies = [
 
 [[package]]
 name = "winxime-setup"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "gpui 0.2.2 (git+https://github.com/zed-industries/zed?rev=53e4d34a71f61f13572919c04335e9da838623e6)",
  "gpui_platform",
@@ -9058,7 +9058,7 @@ dependencies = [
 
 [[package]]
 name = "winxime-tsf"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "librime",
@@ -9072,7 +9072,7 @@ dependencies = [
 
 [[package]]
 name = "winxime-tsf-register"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "windows 0.62.2",
  "windows-core 0.62.2",
