@@ -744,6 +744,20 @@ impl XimeEditSession_Impl {
 }
 
 impl XimeTextService_Impl {
+    fn show_tray_icon_guarded(&self) {
+        if !self.tray_visible.get() {
+            self.tray_visible.set(true);
+            self.ipc.show_tray_icon();
+        }
+    }
+
+    fn hide_tray_icon_guarded(&self) {
+        if self.tray_visible.get() {
+            self.tray_visible.set(false);
+            self.ipc.hide_tray_icon();
+        }
+    }
+
     fn is_composing(&self) -> bool {
         self.composing.get()
     }
@@ -1143,17 +1157,10 @@ impl XimeTextService_Impl {
 }
 
 impl ITfKeyEventSink_Impl for XimeTextService_Impl {
-    fn OnSetFocus(&self, fforeground: BOOL) -> Result<()> {
-        if fforeground.as_bool() {
-            if self.ipc.is_connected() {
-                self.ipc.focus_in();
-            }
-        } else {
-            if self.ipc.is_connected() {
-                self.ipc.focus_out();
-            }
-            self.abort_composition();
-        }
+    fn OnSetFocus(&self, _fforeground: BOOL) -> Result<()> {
+        // Focus handling is done in ITfThreadMgrEventSink::OnSetFocus
+        // to avoid redundant IPC calls from multiple TSF sinks.
+        debug!("ITfKeyEventSink::OnSetFocus - ignored (handled by ThreadMgrEventSink)");
         Ok(())
     }
 
@@ -1328,6 +1335,8 @@ pub struct XimeTextService {
     thread_mgr_event_sink_cookie: std::cell::Cell<u32>,
     last_input_key: std::cell::Cell<Option<char>>,
     ctrl_root_visible: std::cell::Cell<bool>,
+    processing_focus: std::cell::Cell<bool>,
+    tray_visible: std::cell::Cell<bool>,
 }
 
 pub const GUID_LANG_BAR_ITEM: GUID = GUID_LBI_INPUTMODE;
@@ -1356,6 +1365,8 @@ impl XimeTextService {
             thread_mgr_event_sink_cookie: std::cell::Cell::new(TF_INVALID_COOKIE),
             last_input_key: std::cell::Cell::new(None),
             ctrl_root_visible: std::cell::Cell::new(false),
+            processing_focus: std::cell::Cell::new(false),
+            tray_visible: std::cell::Cell::new(false),
         }
     }
 
@@ -1402,13 +1413,7 @@ impl XimeTextService_Impl {
         match self.ensure_ipc() {
             Ok(()) => {
                 debug!("IPC connected successfully");
-                self.ipc.show_tray_icon();
-                if let Some(response) = self.ipc.start_session().1 {
-                    if let Some(status) = response.status {
-                        self.ascii_mode
-                            .store(status.ascii_mode, std::sync::atomic::Ordering::Release);
-                    }
-                }
+                self.show_tray_icon_guarded();
             }
             Err(e) => debug!("IPC connection failed: {:?}", e),
         }
@@ -1521,7 +1526,7 @@ impl XimeTextService_Impl {
 
     fn deactivate_impl(&self) -> Result<()> {
         debug!("Deactivate called");
-        self.ipc.hide_tray_icon();
+        self.hide_tray_icon_guarded();
 
         // Unregister profile sink
         if self.profile_sink_cookie.get() != TF_INVALID_COOKIE {
@@ -1655,11 +1660,11 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
                 }
             }
 
-            self.ipc.show_tray_icon();
+            self.show_tray_icon_guarded();
         } else {
             debug!("  -> Our TIP is being deactivated");
             self.ipc.hide_candidates();
-            self.ipc.hide_tray_icon();
+            self.hide_tray_icon_guarded();
         }
 
         Ok(())
@@ -1668,49 +1673,14 @@ impl ITfActiveLanguageProfileNotifySink_Impl for XimeTextService_Impl {
 
 impl ITfThreadFocusSink_Impl for XimeTextService_Impl {
     fn OnSetThreadFocus(&self) -> Result<()> {
-        debug!("ITfThreadFocusSink::OnSetThreadFocus");
-
-        // Ensure IPC connected
-        if !self.ipc.is_connected() {
-            debug!("  -> IPC not connected, attempting reconnect...");
-            if self.ipc.connect().is_err() {
-                debug!("  -> Reconnect failed");
-                return Ok(());
-            }
-            debug!("  -> Reconnected!");
-        }
-
-        // Sync status with server
-        if let Some(response) = self.ipc.start_session().1 {
-            if let Some(status) = response.status {
-                debug!("  -> ascii_mode from server: {}", status.ascii_mode);
-                self.ascii_mode
-                    .store(status.ascii_mode, std::sync::atomic::Ordering::Release);
-
-                let sink = match self.lang_bar_sink_ref.try_lock() {
-                    Ok(g) => g,
-                    Err(_) => return Ok(()),
-                };
-                if let Some(ref sink) = *sink {
-                    unsafe {
-                        let _ = sink.OnUpdate(TF_LBI_STATUS | TF_LBI_ICON | TF_LBI_TEXT);
-                    }
-                }
-            }
-        }
-
-        // Show tray icon
-        self.ipc.show_tray_icon();
-
+        // Focus handling is done in ITfThreadMgrEventSink::OnSetFocus
+        debug!("ITfThreadFocusSink::OnSetThreadFocus - ignored");
         Ok(())
     }
 
     fn OnKillThreadFocus(&self) -> Result<()> {
-        debug!("ITfThreadFocusSink::OnKillThreadFocus");
-
-        // Hide UI when thread loses focus
-        self.ipc.hide_tray_icon();
-
+        // Focus handling is done in ITfThreadMgrEventSink::OnSetFocus
+        debug!("ITfThreadFocusSink::OnKillThreadFocus - ignored");
         Ok(())
     }
 }
@@ -1730,9 +1700,17 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
         _pdimprevfocus: Ref<'_, ITfDocumentMgr>,
     ) -> Result<()> {
         debug!(
-            "ITfThreadMgrEventSink::OnSetFocus (pdimfocus.is_null={})",
-            pdimfocus.is_null()
+            "ITfThreadMgrEventSink::OnSetFocus (pdimfocus.is_null={}, processing_focus={})",
+            pdimfocus.is_null(),
+            self.processing_focus.get()
         );
+
+        // Re-entrancy guard: prevent focus event nesting from STA message pumping
+        if self.processing_focus.get() {
+            debug!("  -> re-entrant: skipping");
+            return Ok(());
+        }
+        self.processing_focus.set(true);
 
         if pdimfocus.is_null() {
             debug!("  -> Focus lost (pdimfocus is null)");
@@ -1740,6 +1718,8 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
                 self.ipc.focus_out();
             }
             self.abort_composition();
+            self.hide_tray_icon_guarded();
+            self.processing_focus.set(false);
             return Ok(());
         }
 
@@ -1749,11 +1729,14 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
             debug!("  -> IPC not connected, attempting reconnect...");
             if self.ipc.connect().is_err() {
                 debug!("  -> Reconnect failed");
+                self.processing_focus.set(false);
                 return Ok(());
             }
             debug!("  -> Reconnected!");
+            // start_session is already called inside connect() -> ensure_ipc
         }
 
+        // Sync ascii_mode from server status
         if let Some(response) = self.ipc.start_session().1 {
             if let Some(status) = response.status {
                 debug!("  -> ascii_mode from server: {}", status.ascii_mode);
@@ -1762,7 +1745,10 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
 
                 let sink = match self.lang_bar_sink_ref.try_lock() {
                     Ok(g) => g,
-                    Err(_) => return Ok(()),
+                    Err(_) => {
+                        self.processing_focus.set(false);
+                        return Ok(());
+                    }
                 };
                 if let Some(ref sink) = *sink {
                     unsafe {
@@ -1771,10 +1757,10 @@ impl ITfThreadMgrEventSink_Impl for XimeTextService_Impl {
                 }
             }
         }
-
-        self.ipc.show_tray_icon();
         self.ipc.focus_in();
+        self.show_tray_icon_guarded();
 
+        self.processing_focus.set(false);
         Ok(())
     }
 

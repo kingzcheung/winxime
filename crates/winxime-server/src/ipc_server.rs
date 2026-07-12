@@ -213,7 +213,8 @@ fn process_request(
         }
 
         IpcCommand::FocusOut => {
-            tracing::info!("FocusOut -> hide");
+            tracing::info!("FocusOut -> hide composition");
+            eng.clear_composition();
             window.hide();
             IpcResponse {
                 success: true,

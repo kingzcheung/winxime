@@ -57,8 +57,8 @@ if (Test-Path $rimeDll) {
     Write-Warning "rime.dll not found at $rimeDll"
 }
 
-# 2. Copy data files
-Write-Host "Step 2: Copying data files..." -ForegroundColor Yellow
+# 2. Copy rime base data (to data/)
+Write-Host "Step 2: Copying rime base data..." -ForegroundColor Yellow
 if (Test-Path "target\release\data") {
     Remove-Item "target\release\data" -Recurse -Force
 }
@@ -70,6 +70,12 @@ if (Test-Path $rimeDataDir) {
     Copy-Item "$rimeDataDir\*" "target\release\data" -Recurse -Force
 } else {
     Write-Warning "rime data not found at $rimeDataDir, skipping"
+}
+
+# 2.5. Copy user schema files (to user-data/, deployed to %APPDATA% on first run)
+Write-Host "Step 2.5: Copying user schema files..." -ForegroundColor Yellow
+if (Test-Path "target\release\user-data") {
+    Remove-Item "target\release\user-data" -Recurse -Force
 }
 
 $files = Get-ChildItem -Path "rime-wubi" -Recurse -File | Where-Object {
@@ -89,7 +95,7 @@ $files = Get-ChildItem -Path "rime-wubi" -Recurse -File | Where-Object {
 
 foreach ($file in $files) {
     $relativePath = $file.FullName.Substring($PWD.Path.Length + "rime-wubi".Length + 2)
-    $destPath = "target\release\data\$relativePath"
+    $destPath = "target\release\user-data\$relativePath"
     $destDir = Split-Path -Parent $destPath
     if (-not (Test-Path $destDir)) {
         New-Item $destDir -ItemType Directory -Force | Out-Null
@@ -104,9 +110,10 @@ if (Test-Path "target\release\resources") {
 }
 Copy-Item "resources" "target\release\resources" -Recurse
 
-# 4. Harvest data and resources
+# 4. Harvest data, user-data, and resources
 Write-Host "Step 4: Harvesting data and resources..." -ForegroundColor Yellow
 heat dir "target\release\data" -o "crates\winxime-server\wix\data.wxs" -dr DataFolder -cg DataFiles -var var.DataDir -sreg -srd -ag
+heat dir "target\release\user-data" -o "crates\winxime-server\wix\userdata.wxs" -dr UserDataFolder -cg UserDataFiles -var var.UserDataDir -sreg -srd -ag
 heat dir "target\release\resources" -o "crates\winxime-server\wix\resources.wxs" -dr ResourcesFolder -cg ResourcesFiles -var var.ResourcesDir -sreg -srd -ag
 
 # 5. Compile with candle
@@ -115,10 +122,11 @@ if (-not (Test-Path "target\wix")) {
     New-Item "target\wix" -ItemType Directory -Force | Out-Null
 }
 
-candle -arch x64 "crates\winxime-server\wix\main.wxs" "crates\winxime-server\wix\data.wxs" "crates\winxime-server\wix\resources.wxs" `
+candle -arch x64 "crates\winxime-server\wix\main.wxs" "crates\winxime-server\wix\data.wxs" "crates\winxime-server\wix\userdata.wxs" "crates\winxime-server\wix\resources.wxs" `
     -ext WixUIExtension -ext WixUtilExtension `
     "-dCargoTargetBinDir=target\release" `
     "-dDataDir=target\release\data" `
+    "-dUserDataDir=target\release\user-data" `
     "-dResourcesDir=target\release\resources" `
     "-dVersion=$Version" `
     -out "target\wix\"
@@ -130,7 +138,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # 6. Link with light
 Write-Host "Step 6: Linking MSI..." -ForegroundColor Yellow
-light "target\wix\main.wixobj" "target\wix\data.wixobj" "target\wix\resources.wixobj" `
+light "target\wix\main.wixobj" "target\wix\data.wixobj" "target\wix\userdata.wixobj" "target\wix\resources.wixobj" `
     -ext WixUIExtension -ext WixUtilExtension `
     -cultures:zh-CN `
     -loc "crates\winxime-server\wix\zh-cn.wxl" `

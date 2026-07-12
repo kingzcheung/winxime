@@ -190,11 +190,21 @@ msiexec /i target\wix\winxime-server-0.1.0-x86_64.msi
      - [x] key_binder: 分号选词、方括号/Tab翻页
      - [x] ascii_composer: commit_code 行为 (切换时提交编码)
      - [x] switcher: IPC 命令 (GetSchemaList, SelectSchema)
-   - - [ ] 下一步
+    - - [ ] 下一步
       - [ ] switcher: Ctrl+0 弹出方案选择菜单 (需要 UI)
       - [ ] punctuator 标点符号映射
       - [ ] recognizer 英文识别模式
       - [ ] menu.page_size 配置读取
+
+### 2026-07-12 修复
+- [x] **修复焦点事件风暴导致无法输入中文 (P0)**
+   - 问题：三个 TSF sink (`ITfKeyEventSink`、`ITfThreadFocusSink`、`ITfThreadMgrEventSink`) 在同一个焦点转换时分别独立触发 IPC 调用
+   - 同步 IPC 在 STA 线程阻塞时引发消息泵送 → 重入的 FocusOut → `abort_composition()` 清除输入状态
+   - 解决：
+     - 合并 focus 处理到 `ITfThreadMgrEventSink::OnSetFocus`，其他两个 sink 改为 no-op
+     - 添加 `processing_focus` 重入保护
+     - `show_tray_icon`/`hide_tray_icon` 添加幂等保护（`tray_visible` 标志）
+     - 移除 `activate_impl` 中的冗余 `start_session()` 调用
 
 ### 2026-06-14 新增
 - [x] **引入 librime-octagram / librime-lua / librime-lua-deps 插件**
