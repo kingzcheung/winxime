@@ -46,7 +46,16 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host "Step 4.5: Setting up data directories..." -ForegroundColor Yellow
+Write-Host "Step 4.5: Copying rime.dll..." -ForegroundColor Yellow
+$rimeDllSource = "$PSScriptRoot\..\libximecore\librime\dist\lib\rime.dll"
+if (Test-Path $rimeDllSource) {
+    Copy-Item $rimeDllSource "$exeDir\rime.dll" -Force
+    Write-Host "  rime.dll copied to $exeDir" -ForegroundColor Gray
+} else {
+    Write-Host "  WARNING: rime.dll not found at $rimeDllSource" -ForegroundColor Red
+}
+
+Write-Host "Step 5: Setting up data directories..." -ForegroundColor Yellow
 
 # Shared data (RIME schemas) — fresh each build
 if (Test-Path $sharedDataDir) {
@@ -84,19 +93,19 @@ if (-not (Test-Path $userDataDir)) {
 Copy-Item "$rimeWubiDir\default.custom.yaml" "$userDataDir\default.custom.yaml" -Force
 Write-Host "  User data: $userDataDir" -ForegroundColor Gray
 
-Write-Host "Step 5: Registering COM DLL (no profile)..." -ForegroundColor Yellow
+Write-Host "Step 6: Registering COM DLL (no profile)..." -ForegroundColor Yellow
 Start-Process -Verb RunAs -Wait -FilePath "regsvr32.exe" -ArgumentList "/s", "$PSScriptRoot\target\debug\winxime_tsf.dll"
 Start-Sleep -Seconds 3
 
-Write-Host "Step 6: Registering profile with icon..." -ForegroundColor Yellow
+Write-Host "Step 7: Registering profile with icon..." -ForegroundColor Yellow
 Start-Process -Verb RunAs -Wait -FilePath $registerExe -ArgumentList "-r", $iconPath
 Start-Sleep -Seconds 3
 
-Write-Host "Step 7: Enabling..." -ForegroundColor Yellow
+Write-Host "Step 8: Enabling..." -ForegroundColor Yellow
 Start-Process -Verb RunAs -Wait -FilePath $registerExe -ArgumentList "-i"
 Start-Sleep -Seconds 2
 
-Write-Host "Step 8: Starting server (debug mode)..." -ForegroundColor Yellow
+Write-Host "Step 9: Starting server (debug mode)..." -ForegroundColor Yellow
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cargo run -p winxime-server" -WindowStyle Normal
 Start-Sleep -Seconds 5
 

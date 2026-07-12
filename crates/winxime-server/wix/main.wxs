@@ -111,8 +111,11 @@
                             Name='XimeServer' Type='string' Value='[APPLICATIONFOLDER]winxime-server.exe' KeyPath='yes'/>
                     </Component>
                     
-                    <!-- Data folder (harvested by heat) -->
+                    <!-- Data folder: rime base data (harvested by heat) -->
                     <Directory Id='DataFolder' Name='data'/>
+                    
+                    <!-- User-data folder: schema files for first-run deploy (harvested by heat) -->
+                    <Directory Id='UserDataFolder' Name='user-data'/>
                     
                     <!-- Resources folder (harvested by heat) -->
                     <Directory Id='ResourcesFolder' Name='resources'/>
@@ -184,6 +187,9 @@
         <!-- Include harvested data and resources -->
         <Feature Id='DataFiles' Level='1'>
             <ComponentGroupRef Id='DataFiles'/>
+        </Feature>
+        <Feature Id='UserDataFiles' Level='1'>
+            <ComponentGroupRef Id='UserDataFiles'/>
         </Feature>
         <Feature Id='ResourcesFiles' Level='1'>
             <ComponentGroupRef Id='ResourcesFiles'/>

@@ -17,20 +17,25 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Download Unsigned Installer
+      - name: Download MSI
         uses: actions/download-artifact@v4
         with:
-          name: Unsigned Installer
+          name: Unsigned Installer (MSI)
           path: dist
-      - name: Rename and Calculate Checksum
+      - name: Download MSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: MSIX Package
+          path: dist
+      - name: Calculate Checksums
         run: |
-          mv dist/winxime-server-0.1.0-x86_64.msi dist/winxime.msi || true
-          sha256sum dist/winxime.msi > dist/winxime.msi.sha256
+          cd dist
+          for f in *.msi *.msix; do
+            [ -f "$f" ] && sha256sum "$f" > "$f.sha256"
+          done
       - name: GH Release
         uses: softprops/action-gh-release@v2
         with:
           name: Xime ${{ github.ref_name }}
           draft: true
-          files: |
-            dist/winxime.msi
-            dist/winxime.msi.sha256
+          files: dist/*

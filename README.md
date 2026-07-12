@@ -1,90 +1,117 @@
 # Xime 输入法 (Windows)
 
-基于 RIME 引擎的 Windows 输入法，使用 Rust + TSF 构建。
+基于 RIME 引擎的 Windows 五笔输入法，使用 Rust + TSF 构建。
 
-> ⚠️注意： 本项目还在开发中，请勿使用。
+> ⚠️ 注意：本项目还在开发中，请勿用于生产环境。
 
 ## 快速开始
 
-- **开发构建**：`.\rebuild.ps1` (构建+注册+启动服务器)
-- **打包 MSI**：`.\msi-build.ps1` (生成安装包)
-- **卸载 MSI**：`.\uninstall-msi.ps1` (完整卸载安装)
+```powershell
+# 开发构建（构建+注册+启动服务器）
+.\rebuild.ps1
+
+# 打包 MSI 安装包
+.\msi-build.ps1
+
+# 打包 MSIX 应用包
+.\msix-bundle.ps1
+
+# 打包并测试安装（无需签名）
+.\msix-bundle.ps1 -InstallUnsigned
+```
 
 ## 安装
 
-下载 MSI 安装包并运行：
+### MSI 安装（管理员权限）
 
 ```powershell
-# 安装 MSI（需管理员权限）
-msiexec /i xime-0.1.0.msi
-
-# 或双击 MSI 文件安装
+msiexec /i target\wix\xime-{version}.msi
 ```
 
-安装后：
-1. 按 `Win+Space` 切换到 Xime 输入法
-2. 开始菜单 → Xime → Xime 设置（打开设置界面）
+### MSIX 安装
+
+```powershell
+# 打包并直接安装（开发测试，无需签名）
+.\msix-bundle.ps1 -InstallUnsigned
+
+# 打包、签名并安装
+.\msix-bundle.ps1 -Sign
+
+# 生成未签名 MSIX（用于商店提交）
+.\msix-bundle.ps1
+```
+
+安装后按 `Win+Space` 切换到 Xime 输入法。
 
 ## 开发构建
 
 ### 前置要求
 
-- Rust 工具链（stable）
+- Rust 工具链（nightly，项目自带 `rust-toolchain.toml`）
 - Visual Studio 构建工具（C++ 支持）
 - CMake
 - WiX Toolset v3.14（用于 MSI 打包）
+- Windows SDK（用于 MSIX 打包）
 
-### 开发循环
+### 数据目录结构
 
-```powershell
-# 重新构建并测试
-.\rebuild.ps1
 ```
+Program Files\Xime\
+├── winxime-server.exe        # IPC 服务器进程
+├── winxime-setup.exe         # 设置界面
+├── winxime_tsf.dll           # TSF 输入法 DLL
+├── winxime-tsf-register.exe  # TSF 注册工具
+├── rime.dll                  # RIME 引擎
+├── data/                     # RIME 基础数据（key_bindings 等）
+├── user-data/                # 方案文件（首次启动部署到 %APPDATA%）
+└── resources/                # 应用资源
 
-### 手动步骤
-
-```powershell
-# 1. 构建
-cargo build --quiet
-
-# 2. 注册 TSF DLL（首次或重新构建 DLL 后，必须提权）
-powershell -Command "Start-Process -Verb RunAs -Wait -FilePath 'regsvr32.exe' -ArgumentList '/s target\debug\winxime_tsf.dll'"
-
-# 3. 启动服务器
-target\debug\winxime-server.exe
-
-# 4. 按 Win+Space 切换到 Xime 输入法
-```
-
-## MSI 打包
-
-```powershell
-# 构建 MSI
-.\msi-build.ps1
-
-# 输出位置
-target\wix\xime-0.1.0.msi
+%APPDATA%\Xime\rime\          # 用户数据目录（方案文件、用户配置）
 ```
 
 ## 项目结构
 
-- `crates/winxime-server/` — IPC 服务器（候选栏渲染 + RIME 引擎）
-- `crates/winxime-setup/` — 设置界面（GPUI）
-- `crates/winxime-tsf/` — TSF 输入法 DLL
-- `crates/winxime-tsf-register/` — TSF 注册工具
-- `crates/winxime-ipc/` — 命名管道 IPC
-- `crates/winxime-core/` — 共享数据结构
-- `crates/winxime-rime/` — RIME 引擎绑定
-- `crates/winxime-config/` — 配置管理
-- `crates/librime-sys/` — librime 原生绑定
-- `librime/` — RIME 引擎子模块
+| 目录 | 说明 |
+|------|------|
+| `crates/winxime-server/` | IPC 服务器（候选栏渲染 + RIME 引擎 + 托盘图标） |
+| `crates/winxime-setup/` | 设置界面（GPUI） |
+| `crates/winxime-tsf/` | TSF 输入法 DLL |
+| `crates/winxime-tsf-register/` | TSF 注册/卸载工具 |
+| `crates/winxime-ipc/` | 命名管道 IPC 协议 |
+| `rime-wubi/` | 五笔方案文件（.schema.yaml, .dict.yaml 等） |
 
-## TODO
-- [x] 候选栏 + ctrl 显示五笔字根
-- [x] 设置页面主题色全局
-- [ ] 剪切板跨平台复制粘贴
-- [x] 智能联想
-- [ ] 词库管理器
+外部依赖：
+| 仓库 | 用途 |
+|------|------|
+| `libximecore/` | RIME 引擎绑定 + 配置管理 + 共享库 |
+| `librime/` | RIME 引擎 C 库（子模块，只读） |
+
+## 打包
+
+### MSI
+
+```powershell
+.\msi-build.ps1
+# 输出: target\wix\xime-{version}.msi
+```
+
+### MSIX
+
+```powershell
+# 开发测试（直接注册）
+.\msix-bundle.ps1 -Register
+
+# 生成未签名包（商店提交）
+.\msix-bundle.ps1
+
+# 生成并安装未签名包
+.\msix-bundle.ps1 -InstallUnsigned
+
+# 签名包（自签名证书自动安装到受信任根）
+.\msix-bundle.ps1 -Sign
+
+# 输出: target\wix\xime-{version}-x86_64.msix
+```
 
 ## 许可证
 

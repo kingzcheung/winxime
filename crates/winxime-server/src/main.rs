@@ -3,6 +3,7 @@
 mod config;
 mod context;
 mod ipc_server;
+mod register;
 mod tray;
 mod ui;
 mod ximed_server;
@@ -51,7 +52,7 @@ fn main() {
         info!("Existing server stopped");
     }
 
-    let (shared_data_dir, user_data_dir) = get_data_dirs();
+    let (shared_data_dir, user_data_dir, install_user_data_dir) = get_data_dirs();
     info!(
         "Data dirs: shared={}, user={}",
         shared_data_dir.display(),
@@ -64,7 +65,9 @@ fn main() {
     }
 
     let _ = std::fs::create_dir_all(&user_data_dir);
-    ensure_user_config_files(&shared_data_dir, &user_data_dir);
+    ensure_user_config_files(&shared_data_dir, &user_data_dir, &install_user_data_dir);
+
+    register::ensure_registered();
 
     let config = XimeConfig::load();
     let engine = match RimeEngine::new(&shared_data_dir, &user_data_dir, "Xime") {
@@ -74,6 +77,40 @@ fn main() {
                 "Rime initialized successfully with horizontal={}",
                 config.style.horizontal
             );
+
+            info!("Running rime deployment...");
+            if e.deploy() {
+                info!("Rime deployment completed successfully");
+            } else {
+                info!("Rime deployment failed (may already be deployed)");
+            }
+
+            if let Some(status) = e.get_status() {
+                info!(
+                    "Active schema: {} ({})",
+                    status.schema_id, status.schema_name
+                );
+            }
+
+            // Copy compiled dictionary files from shared to user data dir
+            // Rime's deploy may skip compiling files whose sources haven't changed,
+            // leaving some .table.bin / .reverse.bin files missing in user data dir.
+            let shared_build = shared_data_dir.join("build");
+            let user_build = user_data_dir.join("build");
+            if let Ok(entries) = std::fs::read_dir(&shared_build) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    let name_str = name.to_string_lossy();
+                    if name_str.ends_with(".table.bin") || name_str.ends_with(".reverse.bin") {
+                        let user_path = user_build.join(&name);
+                        if !user_path.exists() {
+                            info!("Copying missing dictionary: {}", name_str);
+                            let _ = std::fs::copy(entry.path(), &user_path);
+                        }
+                    }
+                }
+            }
+
             Arc::new(std::sync::Mutex::new(e))
         }
         Err(e) => {
@@ -85,7 +122,7 @@ fn main() {
     run_server(engine);
 }
 
-fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
+fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
     #[cfg(debug_assertions)]
     {
         let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -93,6 +130,7 @@ fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
         (
             workspace_dir.join("rime-wubi"),
             workspace_dir.join("target").join("debug").join("user-data"),
+            workspace_dir.join("rime-wubi"),
         )
     }
 
@@ -110,42 +148,61 @@ fn get_data_dirs() -> (std::path::PathBuf, std::path::PathBuf) {
             .map(|p| std::path::PathBuf::from(p).join("Xime").join("rime"))
             .unwrap_or_else(|| exe_dir.join("user-data"));
 
-        (exe_dir.join("data"), user_data_dir)
+        (exe_dir.join("data"), user_data_dir, exe_dir.join("user-data"))
     }
 }
 
-fn get_config_source_dir() -> std::path::PathBuf {
-    #[cfg(debug_assertions)]
-    {
-        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
-        workspace_dir.join("resources")
+fn ensure_user_config_files(shared_data_dir: &std::path::Path, user_data_dir: &std::path::Path, install_user_data_dir: &std::path::Path) {
+    if !install_user_data_dir.exists() || !shared_data_dir.exists() {
+        return;
     }
 
-    #[cfg(not(debug_assertions))]
-    {
-        let exe_path = std::env::current_exe().ok().unwrap_or_else(|| {
-            std::path::PathBuf::from("C:\\Program Files\\Xime\\winxime-server.exe")
-        });
-        exe_path
-            .parent()
-            .unwrap_or_else(|| std::path::Path::new("C:\\Program Files\\Xime"))
-            .join("resources")
+    let _ = std::fs::create_dir_all(user_data_dir);
+
+    let has_yaml = std::fs::read_dir(user_data_dir)
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                e.path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map_or(false, |ext| ext == "yaml")
+            })
+        })
+        .unwrap_or(false);
+
+    if !has_yaml {
+        tracing::info!("Deploying schema files from {:?} to {:?} and {:?}", install_user_data_dir, shared_data_dir, user_data_dir);
+        copy_dir_contents(install_user_data_dir, shared_data_dir);
+        copy_dir_contents(install_user_data_dir, user_data_dir);
     }
 }
 
-fn ensure_user_config_files(shared_data_dir: &std::path::Path, _user_data_dir: &std::path::Path) {
-    if !shared_data_dir.exists() {
-        std::fs::create_dir_all(shared_data_dir).ok();
+fn copy_dir_contents(src: &std::path::Path, dst: &std::path::Path) {
+    if let Ok(entries) = std::fs::read_dir(src) {
+        for entry in entries.flatten() {
+            let ft = entry.file_type().ok();
+            let dest = dst.join(entry.file_name());
+            if ft.map_or(false, |t| t.is_dir()) {
+                let _ = std::fs::create_dir_all(&dest);
+                copy_dir_recursive(&entry.path(), &dest);
+            } else {
+                let _ = std::fs::copy(entry.path(), &dest);
+            }
+        }
     }
+}
 
-    let config_source_dir = get_config_source_dir();
-
-    let xime_yaml = shared_data_dir.join("xime.yaml");
-    if !xime_yaml.exists() {
-        let source = config_source_dir.join("xime.yaml");
-        if source.exists() {
-            std::fs::copy(&source, &xime_yaml).ok();
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) {
+    if let Ok(entries) = std::fs::read_dir(src) {
+        for entry in entries.flatten() {
+            let ft = entry.file_type().ok();
+            let dest = dst.join(entry.file_name());
+            if ft.map_or(false, |t| t.is_dir()) {
+                let _ = std::fs::create_dir_all(&dest);
+                copy_dir_recursive(&entry.path(), &dest);
+            } else {
+                let _ = std::fs::copy(entry.path(), &dest);
+            }
         }
     }
 }

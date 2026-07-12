@@ -7,14 +7,20 @@ on:
     branches: ["main"]
   workflow_call:
     outputs:
-      unsigned-artifact-id:
-        description: "Unsigned Installer"
-        value: ${{ jobs.package.outputs.unsigned-artifact-id }}
+      unsigned-msi-id:
+        description: "Unsigned MSI artifact ID"
+        value: ${{ jobs.build.outputs.unsigned-msi-id }}
+      unsigned-msix-id:
+        description: "Unsigned MSIX artifact ID"
+        value: ${{ jobs.build.outputs.unsigned-msix-id }}
 
 jobs:
   build:
     runs-on: windows-2022
     name: Build
+    outputs:
+      unsigned-msi-id: ${{ steps.upload-msi.outputs.artifact-id }}
+      unsigned-msix-id: ${{ steps.upload-msix.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,6 +37,17 @@ jobs:
       - name: Build release
         run: cargo build --release --quiet
 
+      - name: Detect version
+        id: version
+        shell: pwsh
+        run: |
+          $content = Get-Content "Cargo.toml" -Raw
+          if ($content -match 'version\s*=\s*"([^"]+)"') {
+            $ver = $matches[1]
+          } else { $ver = "0.1.0" }
+          Write-Host "version=$ver"
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Copy rime.dll from libximecore git dep
         shell: pwsh
         run: |
@@ -41,7 +58,6 @@ jobs:
             exit 1
           }
           $manifestPath = $pkg.manifest_path
-          # manifest_path: <libximecore_root>/crates/librime-sys2/Cargo.toml
           $libximecoreRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $manifestPath))
           $rimeDll = Join-Path $libximecoreRoot "librime\dist\lib\rime.dll"
           if (-not (Test-Path $rimeDll)) {
@@ -51,22 +67,94 @@ jobs:
           Copy-Item $rimeDll "target\release\rime.dll" -Force
           Write-Host "Copied rime.dll to target\release\"
 
-      - name: Prepare config files
-        shell: cmd
+      - name: Prepare data & resources for MSI/MSIX
+        shell: pwsh
         run: |
-          if exist target\release\config (
-            echo config already exists
-          ) else (
-            xcopy /E /I /Y rime-wubi target\release\config
-          )
+          $json = cargo metadata --format-version 1 | ConvertFrom-Json
+          $pkg = $json.packages | Where-Object { $_.name -eq 'librime-sys2' }
+          $manifestPath = $pkg.manifest_path
+          $libximecoreRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $manifestPath))
+          $librimeRoot = Join-Path $libximecoreRoot "librime"
 
-      - uses: actions/upload-artifact@v4
+          # data
+          if (Test-Path "target\release\data") { Remove-Item "target\release\data" -Recurse -Force }
+          New-Item "target\release\data" -ItemType Directory -Force | Out-Null
+          $rimeData = Join-Path $librimeRoot "data\minimal"
+          if (Test-Path $rimeData) { Copy-Item "$rimeData\*" "target\release\data" -Recurse -Force }
+
+          $files = Get-ChildItem -Path "rime-wubi" -Recurse -File | Where-Object {
+            $d = $_.DirectoryName; $n = $_.Name
+            -not ($d -like "*\.git*") -and -not ($d -like "*\.github*") -and -not ($d -like "*imgs*") -and
+            -not ($n -like "*.md") -and -not ($n -like ".gitignore") -and -not ($n -like "macOS-*") -and
+            -not ($n -like "*.command") -and -not ($n -like "LICENSE") -and
+            -not ($n -like "squirrel.custom.yaml") -and -not ($n -like "trime.custom.yaml")
+          }
+          foreach ($f in $files) {
+            $rel = $f.FullName.Substring($PWD.Path.Length + "rime-wubi".Length + 2)
+            $dest = "target\release\data\$rel"
+            $dd = Split-Path -Parent $dest
+            if (-not (Test-Path $dd)) { New-Item $dd -ItemType Directory -Force | Out-Null }
+            Copy-Item $f.FullName $dest -Force
+          }
+
+          # resources
+          if (Test-Path "target\release\resources") { Remove-Item "target\release\resources" -Recurse -Force }
+          Copy-Item "resources" "target\release\resources" -Recurse
+
+      - name: Build MSI
+        shell: cmd
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set PATH=%PATH%;"C:\Program Files (x86)\WiX Toolset v3.14\bin"
+          if not exist "target\wix" mkdir "target\wix"
+          heat dir "target\release\data" -o "crates\winxime-server\wix\data.wxs" -dr DataFolder -cg DataFiles -var var.DataDir -sreg -srd -ag
+          heat dir "target\release\resources" -o "crates\winxime-server\wix\resources.wxs" -dr ResourcesFolder -cg ResourcesFiles -var var.ResourcesDir -sreg -srd -ag
+          candle -arch x64 "crates\winxime-server\wix\main.wxs" "crates\winxime-server\wix\data.wxs" "crates\winxime-server\wix\resources.wxs" -ext WixUIExtension -ext WixUtilExtension "-dCargoTargetBinDir=target\release" "-dDataDir=target\release\data" "-dResourcesDir=target\release\resources" "-dVersion=%VERSION%" -out "target\wix\" 2>&1
+          light "target\wix\main.wixobj" "target\wix\data.wixobj" "target\wix\resources.wixobj" -ext WixUIExtension -ext WixUtilExtension -cultures:zh-CN -loc "crates\winxime-server\wix\zh-cn.wxl" -out "target\wix\xime-%VERSION%.msi" 2>&1
+
+      - name: Build MSIX
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.version.outputs.version }}"
+          $parts = $ver.Split('.')
+          $msixVersion = "$($parts[0]).$($parts[1]).$($parts[2]).0"
+
+          $packageDir = "target\msix-pkg"
+          if (Test-Path $packageDir) { Remove-Item $packageDir -Recurse -Force }
+          New-Item "$packageDir\assets", "$packageDir\data", "$packageDir\resources" -ItemType Directory -Force | Out-Null
+
+          # binaries
+          Copy-Item "target\release\winxime-server.exe", "target\release\winxime_tsf.dll", "target\release\winxime-setup.exe", "target\release\winxime-tsf-register.exe", "target\release\rime.dll" $packageDir
+
+          # data & resources
+          Copy-Item "target\release\data\*" "$packageDir\data" -Recurse -Force
+          Copy-Item "target\release\resources\*" "$packageDir\resources" -Recurse -Force
+
+          # logos & manifest
+          Copy-Item "crates\winxime-server\msix\assets\*" "$packageDir\assets"
+          $manifest = Get-Content "crates\winxime-server\msix\AppxManifest.xml" -Raw
+          $manifest = $manifest.Replace('{{VERSION}}', $msixVersion)
+          Set-Content "$packageDir\AppxManifest.xml" $manifest
+
+          $kitRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+          $makeAppx = Get-ChildItem "$kitRoot\*\x64\MakeAppx.exe" | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $makeAppx) { Write-Error "MakeAppx.exe not found"; exit 1 }
+
+          if (-not (Test-Path "target\wix")) { New-Item "target\wix" -ItemType Directory -Force | Out-Null }
+          & $makeAppx pack /d $packageDir /p "target\wix\xime-$ver-x86_64.msix" /l
+          Remove-Item $packageDir -Recurse -Force
+
+      - name: Upload MSI (Unsigned)
+        id: upload-msi
+        uses: actions/upload-artifact@v4
         with:
-          name: Release Binaries
-          path: |
-            target/release/winxime-server.exe
-            target/release/winxime_tsf.dll
-            target/release/winxime-setup.exe
-            target/release/winxime-tsf-register.exe
-            target/release/rime.dll
-            target/release/config
+          name: Unsigned Installer (MSI)
+          path: target/wix/xime-*.msi
+
+      - name: Upload MSIX (Unsigned)
+        id: upload-msix
+        uses: actions/upload-artifact@v4
+        with:
+          name: MSIX Package
+          path: target/wix/xime-*.msix
